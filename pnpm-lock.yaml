@@ -26,6 +26,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.0
         version: 4.0.1(supports-color@7.1.0)
+      undici:
+        specifier: ^6.28.0
+        version: 6.28.0
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

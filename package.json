@@ -22,7 +22,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.0.0",
-    "remark-gfm": "^4.0.0"
+    "remark-gfm": "^4.0.0",
+    "undici": "^6.28.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -41,14 +42,17 @@
     "appId": "com.chatboxlite.desktop",
     "productName": "ChatBox Lite",
     "asar": true,
+    "icon": "build/icon.png",
     "directories": {
       "output": "release"
     },
     "files": [
       "out/**/*",
-      "package.json"
+      "package.json",
+      "build/icon.png"
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": [
         "nsis",
         "portable"

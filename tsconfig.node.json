@@ -10,6 +10,8 @@
     "electron.vite.config.ts",
     "src/electron/**/*.ts",
     "src/renderer/src/token-step.ts",
+    "src/renderer/src/context-projection.ts",
+    "src/renderer/src/title.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]

@@ -8,7 +8,7 @@ import type {
   SettingsSection,
   WebSearchMode
 } from '../types'
-import type { RemoteModel } from '../../../shared/types'
+import type { ProviderRouting, RemoteModel } from '../../../shared/types'
 import { API_FORMAT_LABELS } from '../types'
 import { stepTokenValue } from '../token-step'
 import { isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../web-search'
@@ -29,6 +29,7 @@ interface SettingsDialogProps {
   preferences: AppPreferences
   providers: ProviderConfig[]
   onClose: () => void
+  onClearData?: () => Promise<void>
   onDiscoverModels?: (providerId: string) => Promise<RemoteModel[]>
   onSave: (payload: SettingsSavePayload) => void | Promise<void>
   onTestProvider?: (provider: ProviderConfig, apiKeyInput: string, clearApiKey: boolean) => Promise<boolean>
@@ -61,6 +62,16 @@ function isLoopbackUrl(value: string): boolean {
 
 function isProviderKeyOptional(provider: ProviderConfig): boolean {
   return provider.kind === 'cliproxy' && isLoopbackUrl(provider.baseUrl)
+}
+
+/**
+ * Secure-by-default OpenRouter routing for newly created models: refuse
+ * endpoints that retain user data and require Zero Data Retention endpoints.
+ * Only takes effect on OpenRouter connections (other providers ignore the
+ * `provider` field at send time), but is stored uniformly.
+ */
+function secureDefaultRouting(_providerId: string): ProviderRouting {
+  return { dataCollection: 'deny', zdr: true }
 }
 
 function SettingsToggle({
@@ -185,6 +196,7 @@ export function SettingsDialog({
   preferences,
   providers,
   onClose,
+  onClearData,
   onDiscoverModels,
   onSave,
   onTestProvider
@@ -204,6 +216,24 @@ export function SettingsDialog({
   const [discovering, setDiscovering] = useState(false)
   const [remoteModels, setRemoteModels] = useState<RemoteModel[] | null>(null)
   const [modelsNeedingCalibration, setModelsNeedingCalibration] = useState<string[]>([])
+  const [clearConfirming, setClearConfirming] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [clearError, setClearError] = useState('')
+
+  const confirmClearData = async (): Promise<void> => {
+    if (!onClearData) return
+    setClearing(true)
+    setClearError('')
+    try {
+      await onClearData()
+      setClearConfirming(false)
+      closeDialog()
+    } catch (error) {
+      setClearError(error instanceof Error ? error.message : '清除失败，请重试。')
+    } finally {
+      setClearing(false)
+    }
+  }
 
   const closeDialog = useCallback((): void => {
     setApiKeyInputs({})
@@ -296,6 +326,7 @@ export function SettingsDialog({
         defaultReasoningEffort: preferenceDraft.defaultReasoningEffort,
         defaultWebSearchMode: 'off',
         anthropicThinkingMode: 'adaptive',
+        providerRouting: secureDefaultRouting(providerDrafts[0]?.id ?? ''),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -341,6 +372,7 @@ export function SettingsDialog({
         defaultReasoningEffort: preferenceDraft.defaultReasoningEffort,
         defaultWebSearchMode: 'off',
         anthropicThinkingMode: 'adaptive',
+        providerRouting: secureDefaultRouting(selectedModelProvider?.id ?? providerDrafts[0]?.id ?? ''),
         createdAt: now,
         updatedAt: now
       }
@@ -595,6 +627,51 @@ export function SettingsDialog({
                     </button>
                   </div>
                 </section>
+                <section className="settings-card context-policy-card">
+                  <h3>网络代理</h3>
+                  <div className="context-policy-options">
+                    <button
+                      className={preferenceDraft.proxy.mode === 'off' ? 'is-active' : ''}
+                      onClick={() => setPreferenceDraft((current) => ({
+                        ...current,
+                        proxy: { ...current.proxy, mode: 'off' }
+                      }))}
+                    >
+                      <span className="policy-radio"><i /></span>
+                      <span>
+                        <strong>关闭 <em>默认</em></strong>
+                        <small>直连所有供应商，不经过代理。</small>
+                      </span>
+                    </button>
+                    <button
+                      className={preferenceDraft.proxy.mode === 'custom' ? 'is-active' : ''}
+                      onClick={() => setPreferenceDraft((current) => ({
+                        ...current,
+                        proxy: { ...current.proxy, mode: 'custom' }
+                      }))}
+                    >
+                      <span className="policy-radio"><i /></span>
+                      <span>
+                        <strong>自定义代理</strong>
+                        <small>转发所有模型请求；本地代理可用 http，远程代理请使用 https。</small>
+                      </span>
+                    </button>
+                  </div>
+                  {preferenceDraft.proxy.mode === 'custom' && (
+                    <label className="system-prompt-field">
+                      <FieldLabel hint="支持 http://（仅本机）与 https://，可在地址中包含用户名密码">代理地址</FieldLabel>
+                      <input
+                        className="mono-input"
+                        placeholder="例如：http://127.0.0.1:7890"
+                        value={preferenceDraft.proxy.url}
+                        onChange={(event) => setPreferenceDraft((current) => ({
+                          ...current,
+                          proxy: { ...current.proxy, url: event.target.value }
+                        }))}
+                      />
+                    </label>
+                  )}
+                </section>
               </div>
             )}
 
@@ -765,7 +842,7 @@ export function SettingsDialog({
                           <label>
                             <FieldLabel>数据收集策略</FieldLabel>
                             <select
-                              value={selectedModel.providerRouting?.dataCollection ?? 'allow'}
+                              value={selectedModel.providerRouting?.dataCollection ?? 'deny'}
                               onChange={(event) => updateModel({
                                 providerRouting: {
                                   ...selectedModel.providerRouting,
@@ -787,7 +864,7 @@ export function SettingsDialog({
                             })}
                           /></div>
                           <div><span><strong>仅使用零数据保留端点</strong><small>要求上游声明 ZDR 支持</small></span><SettingsToggle
-                            checked={selectedModel.providerRouting?.zdr ?? false}
+                            checked={selectedModel.providerRouting?.zdr ?? true}
                             label="仅使用 ZDR 端点"
                             onChange={(zdr) => updateModel({
                               providerRouting: { ...selectedModel.providerRouting, zdr }
@@ -1031,6 +1108,45 @@ export function SettingsDialog({
                 <section className="settings-card export-card">
                   <div><Icon name="archive" size={20} /><span><strong>导出加密备份</strong><small>创建包含设置和会话的便携备份</small></span></div>
                   <button disabled>即将支持</button>
+                </section>
+                <section className="settings-card danger-card">
+                  <div className="danger-card-head">
+                    <Icon name="trash" size={20} />
+                    <span>
+                      <strong>清除全部会话数据</strong>
+                      <small>删除所有对话与消息，重新加密本地数据。不会清除已配置的供应商与模型。</small>
+                    </span>
+                  </div>
+                  {clearError && <p className="danger-card-error">{clearError}</p>}
+                  {clearConfirming ? (
+                    <div className="danger-card-confirm">
+                      <p>将永久删除全部会话，此操作无法撤销。确定继续吗？</p>
+                      <div className="danger-card-actions">
+                        <button
+                          className="secondary-button"
+                          disabled={clearing}
+                          onClick={() => { setClearConfirming(false); setClearError('') }}
+                        >
+                          取消
+                        </button>
+                        <button
+                          className="danger-button"
+                          disabled={clearing}
+                          onClick={() => void confirmClearData()}
+                        >
+                          {clearing ? '清除中…' : '确认清除'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="danger-button"
+                      disabled={!onClearData}
+                      onClick={() => setClearConfirming(true)}
+                    >
+                      <Icon name="trash" size={14} /> 清除全部会话数据
+                    </button>
+                  )}
                 </section>
               </div>
             )}

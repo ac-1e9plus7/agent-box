@@ -26,6 +26,13 @@ import type {
   WebSearchMode
 } from './types'
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
+import { projectContext } from './context-projection'
+import {
+  TITLE_SYSTEM_PROMPT,
+  cleanGeneratedTitle,
+  cleanManualTitle,
+  firstUserQuestion,
+} from './title'
 
 const emptySettings: AppSettings = {
   theme: 'system',
@@ -33,7 +40,8 @@ const emptySettings: AppSettings = {
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   contextManagementMode: 'manual',
-  systemPrompt: ''
+  systemPrompt: '',
+  proxy: { mode: 'off', url: '' }
 }
 
 interface ActiveStream {
@@ -80,117 +88,6 @@ function makeTitle(content: string): string {
   return normalized.length > 24 ? `${normalized.slice(0, 24)}…` : normalized || '新对话'
 }
 
-const MESSAGE_OVERHEAD = 8
-const REQUEST_OVERHEAD = 64
-const CONTEXT_SAFETY_TOKENS = 128
-
-interface ContextProjection {
-  estimatedInputTokens: number
-  inputBudget: number
-  blocked: boolean
-  canTrimOnce: boolean
-  trimTurnCount: number
-  tone: 'ok' | 'warning' | 'error'
-  message: string
-}
-
-function estimateTextTokens(text: string): number {
-  let wideCharacters = 0
-  let otherCharacters = 0
-  for (const character of text) {
-    if (/[^\u0000-\u024f]/u.test(character)) wideCharacters += 1
-    else otherCharacters += character.length
-  }
-  return wideCharacters + Math.ceil(otherCharacters / 4)
-}
-
-function estimateMessageTokens(content: string): number {
-  return MESSAGE_OVERHEAD + estimateTextTokens(content)
-}
-
-function projectContext(
-  messages: ChatMessage[],
-  pendingContent: string,
-  settings: AppSettings,
-  model: ModelConfig
-): ContextProjection {
-  const inputBudget = model.contextWindow - model.maxOutputTokens - CONTEXT_SAFETY_TOKENS
-  const configuredSystemPrompt = settings.systemPrompt.trim()
-  const systemMessages = messages.filter((message) => message.role === 'system')
-  const hasConfiguredPrompt = systemMessages.some((message) => message.content.trim() === configuredSystemPrompt)
-  const systemCost = systemMessages.reduce((sum, message) => sum + estimateMessageTokens(message.content), 0)
-    + (configuredSystemPrompt && !hasConfiguredPrompt ? estimateMessageTokens(configuredSystemPrompt) : 0)
-
-  const turns: ChatMessage[][] = []
-  for (const message of messages) {
-    if (message.role === 'system') continue
-    if (message.role === 'user') turns.push([message])
-    else if (turns.length > 0) turns.at(-1)?.push(message)
-  }
-  if (pendingContent.trim()) {
-    turns.push([{
-      id: 'context-preview',
-      role: 'user',
-      content: pendingContent.trim(),
-      createdAt: new Date(0).toISOString()
-    }])
-  }
-
-  const turnCosts = turns.map((turn) => turn.reduce(
-    (sum, message) => sum + estimateMessageTokens(message.content),
-    0
-  ))
-  const estimatedInputTokens = REQUEST_OVERHEAD + systemCost + turnCosts.reduce((sum, cost) => sum + cost, 0)
-  const latestTurnCost = turnCosts.at(-1) ?? 0
-  const minimumRequired = REQUEST_OVERHEAD + systemCost + latestTurnCost
-  const irreducibleOverflow = inputBudget <= REQUEST_OVERHEAD || minimumRequired > inputBudget
-
-  if (irreducibleOverflow) {
-    return {
-      estimatedInputTokens,
-      inputBudget: Math.max(inputBudget, 0),
-      blocked: true,
-      canTrimOnce: false,
-      trimTurnCount: 0,
-      tone: 'error',
-      message: '系统提示词与最新问题已超过可用上下文。请缩短内容，或提高模型上下文窗口。'
-    }
-  }
-
-  if (estimatedInputTokens <= inputBudget) {
-    return { estimatedInputTokens, inputBudget, blocked: false, canTrimOnce: false, trimTurnCount: 0, tone: 'ok', message: '' }
-  }
-
-  if (settings.contextManagementMode === 'manual') {
-    const overflow = estimatedInputTokens - inputBudget
-    return {
-      estimatedInputTokens,
-      inputBudget,
-      blocked: true,
-      canTrimOnce: true,
-      trimTurnCount: 0,
-      tone: 'error',
-      message: `已超出可用上下文约 ${overflow.toLocaleString('zh-CN')} tokens。手动模式不会自动删除历史；你可仅为本次请求按完整轮次裁剪。`
-    }
-  }
-
-  let retainedTokens = estimatedInputTokens
-  let trimTurnCount = 0
-  while (retainedTokens > inputBudget && trimTurnCount < Math.max(turnCosts.length - 1, 0)) {
-    retainedTokens -= turnCosts[trimTurnCount] ?? 0
-    trimTurnCount += 1
-  }
-  return {
-    estimatedInputTokens,
-    inputBudget,
-    blocked: false,
-    canTrimOnce: false,
-    trimTurnCount,
-    tone: 'warning',
-    message: `发送时将从最早记录开始，自动裁剪约 ${trimTurnCount} 个完整对话轮次；最新问题会保留。`
-  }
-}
-
 function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : '发生未知错误，请稍后重试。'
 }
@@ -234,6 +131,7 @@ export default function App(): JSX.Element {
   const conversationsRef = useRef<Conversation[]>([])
   const activeStreamRef = useRef<ActiveStream | null>(null)
   const toastTimerRef = useRef<number | undefined>(undefined)
+  const autoRenamingRef = useRef<Set<string>>(new Set())
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const activeModel = models.find((model) => model.id === activeModelId)
@@ -382,6 +280,79 @@ export default function App(): JSX.Element {
     window.clearTimeout(toastTimerRef.current)
   }, [])
 
+  const maybeGenerateTitle = useCallback(async (conversation: Conversation): Promise<void> => {
+    const model = models.find((item) => item.id === conversation.modelId)
+    if (!model) return
+    const question = firstUserQuestion(conversation.messages)
+    if (!question) return
+    // Guard against duplicate generation for the same conversation.
+    if (autoRenamingRef.current.has(conversation.id)) return
+    autoRenamingRef.current.add(conversation.id)
+
+    let unsubscribe: (() => void) | undefined
+    let collected = ''
+    let settled = false
+    const finish = (): void => {
+      if (settled) return
+      settled = true
+      unsubscribe?.()
+    }
+
+    try {
+      const { requestId } = await window.chatbox.chat.stream({
+        conversationId: conversation.id,
+        modelId: model.id,
+        messages: [
+          { id: 'title-system', role: 'system', content: TITLE_SYSTEM_PROMPT, createdAt: new Date(0).toISOString() },
+          { id: 'title-user', role: 'user', content: question, createdAt: new Date(0).toISOString() },
+        ],
+        reasoningEnabled: false,
+        webSearchMode: 'off',
+        maxOutputTokens: 32,
+      })
+      unsubscribe = window.chatbox.chat.onEvent((event) => {
+        if (event.requestId !== requestId) return
+        if (event.type === 'text-delta') {
+          collected += event.delta
+          return
+        }
+        if (event.type === 'done') {
+          finish()
+          const title = cleanGeneratedTitle(collected)
+          if (!title) return
+          const current = conversationsRef.current.find((item) => item.id === conversation.id)
+          // Only overwrite if the user has not renamed it in the meantime and
+          // it is still the default title.
+          if (current && current.title === '新对话') {
+            const renamed = { ...current, title, updatedAt: new Date().toISOString() }
+            replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
+            void persistConversation(renamed)
+          }
+          return
+        }
+        if (event.type === 'error') {
+          finish()
+        }
+      })
+      // Safety net: give up after 20s regardless of stream state.
+      window.setTimeout(() => finish(), 20_000)
+    } catch {
+      finish()
+    }
+  }, [models, persistConversation, replaceConversations])
+
+  const renameConversation = useCallback((conversationId: string, rawTitle: string): void => {
+    const title = cleanManualTitle(rawTitle)
+    if (!title) return
+    const current = conversationsRef.current.find((item) => item.id === conversationId)
+    if (!current || current.title === title) return
+    // A manual rename marks the conversation so auto-generation won't override it.
+    autoRenamingRef.current.add(conversationId)
+    const renamed = { ...current, title, updatedAt: new Date().toISOString() }
+    replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
+    void persistConversation(renamed)
+  }, [persistConversation, replaceConversations])
+
   const finishStream = useCallback((event: Extract<StreamEvent, { type: 'done' | 'error' }>): void => {
     const activeStream = activeStreamRef.current
     if (!activeStream || event.requestId !== activeStream.requestId) return
@@ -407,6 +378,18 @@ export default function App(): JSX.Element {
     if (event.type === 'error') showToast(event.error.message)
     activeStreamRef.current = null
     setStreaming(false)
+
+    // After the first successful user+assistant turn on a still-default-titled
+    // conversation, ask the current model for a concise generated title.
+    if (
+      event.type === 'done' &&
+      event.finishReason !== 'cancelled' &&
+      completedConversation &&
+      completedConversation.title === '新对话' &&
+      completedConversation.messages.filter((message) => message.role !== 'system').length === 2
+    ) {
+      void maybeGenerateTitle(completedConversation)
+    }
   }, [persistConversation, replaceConversations, showToast])
 
   useEffect(() => window.chatbox.chat.onEvent((event) => {
@@ -553,6 +536,28 @@ export default function App(): JSX.Element {
     }
   }
 
+  const guardWebSearchAvailable = useCallback((): boolean => {
+    if (webSearchMode === 'off' || webSearchAvailable) return true
+    setWebSearchMode('off')
+    if (activeConversation) {
+      const nextConversation = { ...activeConversation, webSearchMode: 'off' as const, updatedAt: new Date().toISOString() }
+      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      void persistConversation(nextConversation)
+    }
+    showToast('当前模型或 API 格式不支持联网搜索，已切换为关闭。')
+    return false
+  }, [activeConversation, persistConversation, replaceConversations, showToast, webSearchAvailable, webSearchMode])
+
+  const guardProviderKey = useCallback((): boolean => {
+    if (!activeProvider || (!activeProvider.hasApiKey && !activeProvider.apiKeyOptional)) {
+      setSettingsSection('providers')
+      setSettingsOpen(true)
+      showToast('请先为当前服务商配置 API 密钥。')
+      return false
+    }
+    return true
+  }, [activeProvider, showToast])
+
   const handleSend = async (allowContextTrimming = false): Promise<void> => {
     const content = draft.trim()
     if (!content || streaming || !activeModel) return
@@ -560,22 +565,8 @@ export default function App(): JSX.Element {
       showToast(contextProjection.message)
       return
     }
-    if (webSearchMode !== 'off' && !webSearchAvailable) {
-      setWebSearchMode('off')
-      if (activeConversation) {
-        const nextConversation = { ...activeConversation, webSearchMode: 'off' as const, updatedAt: new Date().toISOString() }
-        replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-        void persistConversation(nextConversation)
-      }
-      showToast('当前模型或 API 格式不支持联网搜索，已切换为关闭。')
-      return
-    }
-    if (!activeProvider || (!activeProvider.hasApiKey && !activeProvider.apiKeyOptional)) {
-      setSettingsSection('providers')
-      setSettingsOpen(true)
-      showToast('请先为当前服务商配置 API 密钥。')
-      return
-    }
+    if (!guardWebSearchAvailable()) return
+    if (!guardProviderKey()) return
 
     const conversation = activeConversation ?? await createConversation(activeModel.id, {
       reasoningEnabled,
@@ -668,6 +659,193 @@ export default function App(): JSX.Element {
       finishStream({ type: 'done', requestId: activeStream.requestId, finishReason: 'cancelled' })
     } catch (error) {
       showToast(`无法停止生成：${normalizeError(error)}`)
+    }
+  }
+
+  const handleRegenerate = async (allowContextTrimming = false): Promise<void> => {
+    if (streaming || !activeModel || !activeConversation) return
+    const messages = activeConversation.messages
+    let lastAssistantIndex = -1
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'assistant') {
+        lastAssistantIndex = index
+        break
+      }
+    }
+    if (lastAssistantIndex < 0) return
+    const history = messages.slice(0, lastAssistantIndex)
+    if (!history.some((message) => message.role === 'user')) return
+
+    const projection = projectContext(history, '', settings, activeModel)
+    if (projection.blocked && (!allowContextTrimming || !projection.canTrimOnce)) {
+      showToast(projection.message)
+      return
+    }
+    if (!guardWebSearchAvailable()) return
+    if (!guardProviderKey()) return
+
+    const timestamp = new Date().toISOString()
+    const assistantMessage: ChatMessage = {
+      id: createId('message'),
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      createdAt: timestamp,
+      modelId: activeModel.id,
+      status: 'streaming'
+    }
+    const nextConversation: Conversation = {
+      ...activeConversation,
+      modelId: activeModel.id,
+      reasoningEnabled,
+      webSearchMode,
+      messages: [...history, assistantMessage],
+      updatedAt: timestamp
+    }
+
+    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    setStreaming(true)
+    activeStreamRef.current = {
+      requestId: '',
+      conversationId: nextConversation.id,
+      assistantMessageId: assistantMessage.id
+    }
+
+    const requestMessages: Message[] = history.map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message)
+
+    const persisted = await persistConversation({
+      ...nextConversation,
+      messages: history
+    })
+    if (!persisted) {
+      replaceConversations((current) => current.map((item) => (
+        item.id === activeConversation.id ? activeConversation : item
+      )))
+      setStreaming(false)
+      activeStreamRef.current = null
+      return
+    }
+
+    try {
+      const { requestId } = await window.chatbox.chat.stream({
+        conversationId: nextConversation.id,
+        modelId: activeModel.id,
+        messages: requestMessages,
+        reasoningEnabled,
+        webSearchMode,
+        reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
+        maxOutputTokens: activeModel.maxOutputTokens,
+        allowContextTrimming: allowContextTrimming || undefined
+      })
+      if (activeStreamRef.current?.assistantMessageId === assistantMessage.id) {
+        activeStreamRef.current.requestId = requestId
+      }
+    } catch (error) {
+      const requestId = activeStreamRef.current?.requestId ?? ''
+      finishStream({
+        type: 'error',
+        requestId,
+        error: { message: normalizeError(error) }
+      })
+    }
+  }
+
+  const handleEditMessage = async (messageId: string, nextContent: string, regenerate: boolean): Promise<boolean> => {
+    const content = nextContent.trim()
+    if (!content || streaming || !activeModel || !activeConversation) return false
+    const messages = activeConversation.messages
+    const targetIndex = messages.findIndex((message) => message.id === messageId && message.role === 'user')
+    if (targetIndex < 0) return false
+
+    if (!regenerate) {
+      const timestamp = new Date().toISOString()
+      const nextConversation: Conversation = {
+        ...activeConversation,
+        messages: messages.map((message) => message.id === messageId ? { ...message, content } : message),
+        updatedAt: timestamp
+      }
+      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      void persistConversation(nextConversation)
+      return true
+    }
+
+    const editedHistory = messages.slice(0, targetIndex + 1).map((message, index) => (
+      index === targetIndex ? { ...message, content } : message
+    ))
+    if (!editedHistory.some((message) => message.role === 'user')) return false
+
+    const projection = projectContext(editedHistory, '', settings, activeModel)
+    if (projection.blocked) {
+      showToast(projection.message)
+      return false
+    }
+    if (!guardWebSearchAvailable()) return false
+    if (!guardProviderKey()) return false
+
+    const timestamp = new Date().toISOString()
+    const assistantMessage: ChatMessage = {
+      id: createId('message'),
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      createdAt: timestamp,
+      modelId: activeModel.id,
+      status: 'streaming'
+    }
+    const nextConversation: Conversation = {
+      ...activeConversation,
+      modelId: activeModel.id,
+      reasoningEnabled,
+      webSearchMode,
+      messages: [...editedHistory, assistantMessage],
+      updatedAt: timestamp
+    }
+
+    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    setStreaming(true)
+    activeStreamRef.current = {
+      requestId: '',
+      conversationId: nextConversation.id,
+      assistantMessageId: assistantMessage.id
+    }
+
+    const requestMessages: Message[] = editedHistory.map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message)
+
+    const persisted = await persistConversation({
+      ...nextConversation,
+      messages: editedHistory
+    })
+    if (!persisted) {
+      replaceConversations((current) => current.map((item) => (
+        item.id === activeConversation.id ? activeConversation : item
+      )))
+      setStreaming(false)
+      activeStreamRef.current = null
+      return false
+    }
+
+    try {
+      const { requestId } = await window.chatbox.chat.stream({
+        conversationId: nextConversation.id,
+        modelId: activeModel.id,
+        messages: requestMessages,
+        reasoningEnabled,
+        webSearchMode,
+        reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
+        maxOutputTokens: activeModel.maxOutputTokens
+      })
+      if (activeStreamRef.current?.assistantMessageId === assistantMessage.id) {
+        activeStreamRef.current.requestId = requestId
+      }
+      return true
+    } catch (error) {
+      const requestId = activeStreamRef.current?.requestId ?? ''
+      finishStream({
+        type: 'error',
+        requestId,
+        error: { message: normalizeError(error) }
+      })
+      return false
     }
   }
 
@@ -804,6 +982,30 @@ export default function App(): JSX.Element {
     setSettingsOpen(true)
   }
 
+  const handleClearAllData = async (): Promise<void> => {
+    if (activeStreamRef.current) {
+      await window.chatbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
+      activeStreamRef.current = null
+      setStreaming(false)
+    }
+    await window.chatbox.data.clearConversations()
+    conversationsRef.current = []
+    setConversations([])
+    setActiveConversationId('')
+    const fallbackModel = models.find((model) => model.id === settings.defaultModelId) ?? models[0]
+    setActiveModelId(fallbackModel?.id ?? '')
+    setReasoningEnabled(Boolean(fallbackModel?.supportsReasoning && (
+      fallbackModel.defaultReasoningEnabled || settings.defaultReasoningEnabled
+    )))
+    setWebSearchMode(effectiveWebSearchMode(
+      fallbackModel,
+      providers.find((provider) => provider.id === fallbackModel?.providerId),
+      fallbackModel?.defaultWebSearchMode,
+    ))
+    setDraft('')
+    showToast('已清除全部会话数据。')
+  }
+
   const discoverModels = async (providerId: string) => {
     try {
       const discovered = await window.chatbox.models.discover(providerId)
@@ -856,6 +1058,7 @@ export default function App(): JSX.Element {
         onDeleteConversation={(id) => void handleDeleteConversation(id)}
         onNewConversation={() => void createConversation(activeModelId)}
         onOpenSettings={() => openSettings('general')}
+        onRenameConversation={renameConversation}
         onQueryChange={setQuery}
         onSelectConversation={handleSelectConversation}
       />
@@ -871,6 +1074,7 @@ export default function App(): JSX.Element {
           onModelChange={(modelId) => void handleModelChange(modelId)}
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
           onOpenSettings={() => openSettings('models')}
+          onRenameConversation={(title) => activeConversation && renameConversation(activeConversation.id, title)}
           onRestoreSidebar={() => setSidebarCollapsed(false)}
           onToggleReasoning={handleToggleReasoning}
         />
@@ -879,7 +1083,10 @@ export default function App(): JSX.Element {
           <ChatContent
             messages={visibleMessages}
             models={models}
+            streaming={streaming}
             suggestions={promptSuggestions}
+            onEditMessage={(messageId, content, regenerate) => handleEditMessage(messageId, content, regenerate)}
+            onRegenerate={() => void handleRegenerate()}
             onSuggestion={setDraft}
           />
           <Composer
@@ -917,6 +1124,7 @@ export default function App(): JSX.Element {
         preferences={settings}
         providers={providers}
         onClose={() => setSettingsOpen(false)}
+        onClearData={handleClearAllData}
         onDiscoverModels={discoverModels}
         onSave={saveSettings}
         onTestProvider={testProvider}

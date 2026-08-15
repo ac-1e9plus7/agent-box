@@ -40,15 +40,7 @@ export function parseChatCompletionEvent(value: unknown): ParsedProtocolEvent {
         ? delta.reasoning_content
         : undefined
   if (!reasoning && Array.isArray(delta?.reasoning_details)) {
-    reasoning =
-      delta.reasoning_details
-        .map((detail) => {
-          if (!isRecord(detail)) return ''
-          if (typeof detail.text === 'string') return detail.text
-          if (typeof detail.summary === 'string') return detail.summary
-          return ''
-        })
-        .join('') || undefined
+    reasoning = reasoningDetailsToText(delta.reasoning_details)
   }
   const citations = extractWebCitations(
     delta?.annotations,
@@ -106,11 +98,12 @@ export function parseResponsesEvent(
   if (type === 'response.refusal.delta') {
     return { text: delta, citations: citations.length ? citations : undefined }
   }
-  if (
-    type === 'response.reasoning.delta' ||
-    type === 'response.reasoning_summary_text.delta' ||
-    type === 'response.reasoning_text.delta'
-  ) {
+  if (typeof type === 'string' && type.startsWith('response.reasoning') && delta) {
+    // Covers response.reasoning.delta, response.reasoning_text.delta,
+    // response.reasoning_summary_text.delta, and any future reasoning-part
+    // variants OpenRouter surfaces for Gemini/other models. Only emit when a
+    // text delta is present so terminal reasoning events (e.g. .done) don't
+    // surface empty reasoning.
     return { reasoning: delta, citations: citations.length ? citations : undefined }
   }
   if (
@@ -238,6 +231,26 @@ function extractChatDeltaText(value: unknown): string | undefined {
       if (isRecord(part) && part.type === 'text' && typeof part.text === 'string') {
         return part.text
       }
+      return ''
+    })
+    .join('')
+  return text || undefined
+}
+
+/**
+ * Concatenates OpenRouter `reasoning_details` entries into displayable
+ * thinking text. OpenRouter normalizes every provider (Anthropic, OpenAI, and
+ * Google Gemini's `google-gemini-v1` format) into entries typed
+ * `reasoning.text` (carrying `text`) or `reasoning.summary` (carrying
+ * `summary`). We read either field so thinking is shown regardless of which
+ * variant a model emits; entries with neither are ignored.
+ */
+function reasoningDetailsToText(details: unknown[]): string | undefined {
+  const text = details
+    .map((detail) => {
+      if (!isRecord(detail)) return ''
+      if (typeof detail.text === 'string') return detail.text
+      if (typeof detail.summary === 'string') return detail.summary
       return ''
     })
     .join('')

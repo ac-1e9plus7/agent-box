@@ -19,6 +19,13 @@ export function createOpenRouterAutoModel(timestamp: string): ModelConfig {
     defaultReasoningEnabled: false,
     defaultReasoningEffort: 'medium',
     defaultWebSearchMode: 'off',
+    // Secure-by-default routing: refuse endpoints that retain user data, and
+    // require Zero Data Retention endpoints. Only applied to newly created
+    // vaults; existing models keep their stored configuration.
+    providerRouting: {
+      dataCollection: 'deny',
+      zdr: true,
+    },
     createdAt: timestamp,
     updatedAt: timestamp,
   }

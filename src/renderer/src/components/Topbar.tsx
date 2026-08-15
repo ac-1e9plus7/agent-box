@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { JSX } from 'react'
 import type { ModelConfig, ProviderConfig } from '../types'
 import { API_FORMAT_LABELS } from '../types'
@@ -13,6 +14,7 @@ interface TopbarProps {
   onModelChange: (modelId: string) => void
   onOpenMobileSidebar: () => void
   onOpenSettings: () => void
+  onRenameConversation: (title: string) => void
   onRestoreSidebar: () => void
   onToggleReasoning: () => void
 }
@@ -27,9 +29,12 @@ export function Topbar({
   onModelChange,
   onOpenMobileSidebar,
   onOpenSettings,
+  onRenameConversation,
   onRestoreSidebar,
   onToggleReasoning
 }: TopbarProps): JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
   const provider = providers.find((item) => item.id === activeModel?.providerId)
   const reasoningSupported = activeModel?.supportsReasoning ?? false
   const effectiveFormat = activeModel?.apiFormat ?? provider?.apiFormat
@@ -38,6 +43,18 @@ export function Topbar({
     : reasoningEnabled
       ? `思考 · ${activeModel?.defaultReasoningEffort.toUpperCase()}`
       : '思考关闭'
+
+  const startEdit = (): void => {
+    setDraft(activeTitle)
+    setEditing(true)
+  }
+  const commit = (): void => {
+    onRenameConversation(draft)
+    setEditing(false)
+  }
+  const cancel = (): void => {
+    setEditing(false)
+  }
 
   return (
     <header className="topbar">
@@ -52,7 +69,30 @@ export function Topbar({
           </button>
         )}
         <div className="conversation-heading">
-          <strong>{activeTitle}</strong>
+          {editing ? (
+            <input
+              autoFocus
+              aria-label="重命名会话"
+              className="topbar-title-input"
+              value={draft}
+              onBlur={commit}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  commit()
+                } else if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancel()
+                }
+              }}
+            />
+          ) : (
+            <button className="conversation-title-button" title="点击重命名" onClick={startEdit}>
+              <strong>{activeTitle}</strong>
+              <Icon name="edit" size={13} />
+            </button>
+          )}
           <span>{provider?.name ?? '未配置服务商'}</span>
         </div>
       </div>

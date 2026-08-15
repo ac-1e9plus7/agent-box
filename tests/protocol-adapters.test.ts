@@ -137,6 +137,60 @@ describe('OpenAI Chat Completions adapter', () => {
     ).toBeUndefined()
   })
 
+  it('parses Gemini reasoning_details with google-gemini-v1 format and thoughts usage', () => {
+    // OpenRouter surfaces Gemini thinking via reasoning_details chunks using
+    // type "reasoning.text" (with a "text" field) and "google-gemini-v1" format.
+    expect(
+      parseChatCompletionEvent({
+        choices: [
+          {
+            delta: {
+              reasoning_details: [
+                {
+                  type: 'reasoning.text',
+                  text: 'Let me break this down. ',
+                  signature: null,
+                  id: 'g-think-1',
+                  format: 'google-gemini-v1',
+                  index: 0,
+                },
+              ],
+            },
+          },
+        ],
+      }).reasoning,
+    ).toBe('Let me break this down. ')
+    // Gemini's thoughtsTokenCount is normalized by OpenRouter into
+    // completion_tokens_details.reasoning_tokens.
+    expect(
+      parseChatCompletionEvent({
+        choices: [{ delta: { content: 'answer' }, finish_reason: 'stop' }],
+        usage: {
+          prompt_tokens: 30,
+          completion_tokens: 50,
+          completion_tokens_details: { reasoning_tokens: 18 },
+        },
+      }).usage,
+    ).toMatchObject({ reasoningTokens: 18, outputTokens: 50 })
+  })
+
+  it('ignores reasoning_details entries without text or summary content', () => {
+    expect(
+      parseChatCompletionEvent({
+        choices: [
+          {
+            delta: {
+              reasoning_details: [
+                { type: 'reasoning.text', signature: 'abc', format: 'google-gemini-v1' },
+                { type: 'reasoning.text', text: 'visible' },
+              ],
+            },
+          },
+        ],
+      }).reasoning,
+    ).toBe('visible')
+  })
+
   it('parses nested citations from both streaming deltas and completed messages', () => {
     const annotation = {
       type: 'url_citation',
@@ -205,6 +259,37 @@ describe('OpenAI Responses adapter', () => {
     expect(parseResponsesEvent({ type, delta: { text: 'thought' } }).reasoning).toBe(
       'thought',
     )
+  })
+
+  it('parses Gemini reasoning via reasoning_summary_text and reasoning_text events', () => {
+    // Gemini through OpenRouter Responses format streams thinking as summary
+    // and text reasoning events.
+    expect(
+      parseResponsesEvent({
+        type: 'response.reasoning_summary_text.delta',
+        delta: { text: 'Summarizing my approach.' },
+      }).reasoning,
+    ).toBe('Summarizing my approach.')
+    expect(
+      parseResponsesEvent({
+        type: 'response.reasoning_text.delta',
+        delta: { text: 'Detailed thought.' },
+      }).reasoning,
+    ).toBe('Detailed thought.')
+  })
+
+  it('treats any response.reasoning* delta as reasoning but skips empty terminal events', () => {
+    // Future-proof: any reasoning-part variant carrying a text delta is shown.
+    expect(
+      parseResponsesEvent({
+        type: 'response.reasoning_summary_part.delta',
+        delta: { text: 'part thought' },
+      }).reasoning,
+    ).toBe('part thought')
+    // A terminal reasoning.done without a text delta must not emit reasoning.
+    expect(
+      parseResponsesEvent({ type: 'response.reasoning.done', delta: {} }).reasoning,
+    ).toBeUndefined()
   })
 
   it('parses response.done and response.completed usage', () => {

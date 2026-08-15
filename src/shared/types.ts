@@ -23,6 +23,19 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 export type ContextManagementMode = 'manual' | 'auto'
 export type WebSearchMode = 'off' | 'auto' | 'native'
 
+/** `off` connects directly; `custom` routes requests through the configured URL. */
+export type ProxyMode = 'off' | 'custom'
+
+export interface ProxyConfig {
+  mode: ProxyMode
+  /**
+   * Proxy URL used when `mode === 'custom'`. Supports `http://` (loopback only)
+   * and `https://` (any host); credentials may be embedded in the userinfo.
+   * Empty when disabled.
+   */
+  url: string
+}
+
 export interface AppSettings {
   theme: ThemeMode
   sendShortcut: 'enter' | 'mod-enter'
@@ -31,6 +44,7 @@ export interface AppSettings {
   defaultReasoningEnabled: boolean
   defaultReasoningEffort: Exclude<ReasoningEffort, 'none'>
   systemPrompt: string
+  proxy: ProxyConfig
 }
 
 /** A provider object that is safe to expose to the renderer. */
@@ -214,6 +228,13 @@ export interface ChatboxAPI {
     get(id: string): Promise<Conversation | undefined>
     save(conversation: Conversation): Promise<Conversation>
     remove(id: string): Promise<void>
+  }
+  data: {
+    /**
+     * Erases all conversations (chat history) while keeping provider, model and
+     * settings configuration. Cancels any in-flight streams first.
+     */
+    clearConversations(): Promise<void>
   }
   chat: {
     stream(request: ChatRequest): Promise<{ requestId: string }>

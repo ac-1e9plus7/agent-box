@@ -9,7 +9,10 @@ import { Icon } from './Icon'
 interface ChatContentProps {
   messages: ChatMessage[]
   models: ModelConfig[]
+  streaming: boolean
   suggestions: PromptSuggestion[]
+  onEditMessage: (messageId: string, content: string, regenerate: boolean) => Promise<boolean>
+  onRegenerate: () => void
   onSuggestion: (prompt: string) => void
 }
 
@@ -147,13 +150,104 @@ function EmptyConversation({
   )
 }
 
-function AssistantMessage({ message, model }: { message: ChatMessage; model?: ModelConfig }): JSX.Element {
+function UserMessage({
+  message,
+  canEdit,
+  onEdit
+}: {
+  message: ChatMessage
+  canEdit: boolean
+  onEdit: (messageId: string, content: string, regenerate: boolean) => Promise<boolean>
+}): JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(message.content)
+
+  useEffect(() => {
+    if (!editing) setDraft(message.content)
+  }, [editing, message.content])
+
+  const startEdit = (): void => {
+    setDraft(message.content)
+    setEditing(true)
+  }
+  const cancelEdit = (): void => {
+    setDraft(message.content)
+    setEditing(false)
+  }
+  const commitEdit = async (regenerate: boolean): Promise<void> => {
+    const trimmed = draft.trim()
+    if (!trimmed) return
+    const ok = await onEdit(message.id, trimmed, regenerate)
+    if (ok) setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <article className="message-row user-message">
+        <div className="message-column">
+          <div className="user-bubble user-bubble-editing">
+            <textarea
+              className="user-edit-input"
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault()
+                  cancelEdit()
+                } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault()
+                  void commitEdit(true)
+                }
+              }}
+            />
+            <div className="user-edit-actions">
+              <button className="user-edit-cancel" onClick={cancelEdit}><Icon name="close" size={14} /> 取消</button>
+              <button onClick={() => void commitEdit(false)}><Icon name="check" size={14} /> 仅保存</button>
+              <button className="user-edit-regen" onClick={() => void commitEdit(true)}><Icon name="refresh" size={14} /> 保存并重新生成</button>
+            </div>
+          </div>
+          <div className="user-message-time">{formatTime(message.createdAt)}</div>
+        </div>
+        <div className="message-avatar user-avatar"><Icon name="user" size={17} /></div>
+      </article>
+    )
+  }
+
+  return (
+    <article className="message-row user-message">
+      <div className="message-column">
+        <div className="user-bubble"><MessageBody content={message.content} /></div>
+        {canEdit && (
+          <div className="user-message-tools">
+            <button onClick={startEdit}><Icon name="edit" size={14} /> 编辑</button>
+          </div>
+        )}
+        <div className="user-message-time">{formatTime(message.createdAt)}</div>
+      </div>
+      <div className="message-avatar user-avatar"><Icon name="user" size={17} /></div>
+    </article>
+  )
+}
+
+function AssistantMessage({
+  message,
+  model,
+  canRegenerate,
+  onRegenerate
+}: {
+  message: ChatMessage
+  model?: ModelConfig
+  canRegenerate: boolean
+  onRegenerate: () => void
+}): JSX.Element {
   const isStreaming = message.status === 'streaming'
   const reasoningUsage = reasoningUsageLabel(message.usage)
   const [reasoningOpen, setReasoningOpen] = useState(isStreaming)
+  const showRegenerate = canRegenerate && !isStreaming
 
   return (
-    <article className="message-row assistant-message">
+    <article className={`message-row assistant-message${isStreaming ? ' is-streaming' : ''}`}>
       <div className="message-avatar assistant-avatar"><Icon name="app" size={18} /></div>
       <div className="message-column">
         <div className="message-meta">
@@ -199,17 +293,27 @@ function AssistantMessage({ message, model }: { message: ChatMessage; model?: Mo
         {!isStreaming && message.status !== 'error' && Boolean(message.content.trim()) && (
           <div className="message-tools">
             <button onClick={() => navigator.clipboard?.writeText(message.content)}><Icon name="copy" size={14} /> 复制</button>
+            {showRegenerate && (
+              <button onClick={onRegenerate}><Icon name="refresh" size={14} /> 重新生成</button>
+            )}
           </div>
         )}
         {message.status === 'error' && (
-          <div className="message-error"><Icon name="info" size={15} /> {message.error || '请求失败，请检查服务商与模型配置。'}</div>
+          <div className="message-error">
+            <Icon name="info" size={15} /> {message.error || '请求失败，请检查服务商与模型配置。'}
+            {showRegenerate && (
+              <button className="message-error-retry" onClick={onRegenerate}>
+                <Icon name="refresh" size={14} /> 重试
+              </button>
+            )}
+          </div>
         )}
       </div>
     </article>
   )
 }
 
-export function ChatContent({ messages, models, suggestions, onSuggestion }: ChatContentProps): JSX.Element {
+export function ChatContent({ messages, models, streaming, suggestions, onEditMessage, onRegenerate, onSuggestion }: ChatContentProps): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -220,28 +324,40 @@ export function ChatContent({ messages, models, suggestions, onSuggestion }: Cha
     return <EmptyConversation suggestions={suggestions} onSuggestion={onSuggestion} />
   }
 
+  let lastAssistantId = ''
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'assistant') {
+      lastAssistantId = messages[index]?.id ?? ''
+      break
+    }
+  }
+
   return (
     <div className="chat-scroll-region">
       <div className="chat-thread">
         {messages.map((message) => {
           if (message.role === 'assistant') {
+            const canRegenerate = !streaming
+              && message.id === lastAssistantId
+              && (message.status === 'complete' || message.status === 'error')
             return (
               <AssistantMessage
                 key={message.id}
                 message={message}
                 model={models.find((model) => model.id === message.modelId)}
+                canRegenerate={canRegenerate}
+                onRegenerate={onRegenerate}
               />
             )
           }
 
           return (
-            <article className="message-row user-message" key={message.id}>
-              <div className="message-column">
-                <div className="user-bubble"><MessageBody content={message.content} /></div>
-                <div className="user-message-time">{formatTime(message.createdAt)}</div>
-              </div>
-              <div className="message-avatar user-avatar"><Icon name="user" size={17} /></div>
-            </article>
+            <UserMessage
+              key={message.id}
+              message={message}
+              canEdit={!streaming}
+              onEdit={onEditMessage}
+            />
           )
         })}
         <div ref={endRef} />

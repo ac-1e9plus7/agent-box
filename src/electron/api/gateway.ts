@@ -1,3 +1,4 @@
+import { ProxyAgent } from 'undici'
 import type {
   ApiFormat,
   ChatError,
@@ -53,8 +54,50 @@ class GatewayError extends Error {
 
 export class ChatGateway {
   private readonly controllers = new Map<string, AbortController>()
+  private proxyAgent: ProxyAgent | undefined
+  private proxyUrl: string | undefined
 
   constructor(private readonly repository: AppRepository) {}
+
+  /**
+   * Returns a cached undici `ProxyAgent` for the configured custom proxy, or
+   * `undefined` to connect directly. The agent is recreated when the stored
+   * URL changes; the previous one is closed best-effort to release sockets.
+   * Reads settings live so proxy changes take effect on the next request.
+   */
+  private resolveDispatcher(): ProxyAgent | undefined {
+    const { proxy } = this.repository.getSettings()
+    if (proxy.mode !== 'custom' || !proxy.url) {
+      if (this.proxyAgent) {
+        void this.proxyAgent.close().catch(() => undefined)
+        this.proxyAgent = undefined
+        this.proxyUrl = undefined
+      }
+      return undefined
+    }
+    if (this.proxyUrl !== proxy.url) {
+      if (this.proxyAgent) {
+        void this.proxyAgent.close().catch(() => undefined)
+      }
+      this.proxyAgent = new ProxyAgent(proxy.url)
+      this.proxyUrl = proxy.url
+    }
+    return this.proxyAgent
+  }
+
+  /**
+   * Merges a custom proxy `dispatcher` into fetch options. The standard
+   * `RequestInit` type does not declare `dispatcher`, but Node's undici-based
+   * `fetch` honors it at runtime; attaching it here keeps the call sites typed
+   * while routing through the configured proxy.
+   */
+  private withProxy(options: RequestInit): RequestInit {
+    const dispatcher = this.resolveDispatcher()
+    if (!dispatcher) return options
+    const merged: RequestInit = { ...options }
+    ;(merged as RequestInit & { dispatcher?: ProxyAgent }).dispatcher = dispatcher
+    return merged
+  }
 
   async stream(
     requestId: string,
@@ -98,22 +141,25 @@ export class ChatGateway {
         ),
       )
 
-      const response = await fetch(endpointFor(provider.baseUrl, format), {
-        method: 'POST',
-        headers: buildProviderHeaders(provider, format),
-        body: JSON.stringify(
-          buildRequestBody(
-            format,
-            provider,
-            model,
-            prepared.messages,
-            request,
-            maxOutputTokens,
+      const response = await fetch(
+        endpointFor(provider.baseUrl, format),
+        this.withProxy({
+          method: 'POST',
+          headers: buildProviderHeaders(provider, format),
+          body: JSON.stringify(
+            buildRequestBody(
+              format,
+              provider,
+              model,
+              prepared.messages,
+              request,
+              maxOutputTokens,
+            ),
           ),
-        ),
-        signal: controller.signal,
-        redirect: 'error',
-      })
+          signal: controller.signal,
+          redirect: 'error',
+        }),
+      )
 
       if (!response.ok) throw await httpError(response)
       if (!response.body) throw new GatewayError('供应商没有返回响应流。', 'empty_response')
@@ -162,17 +208,20 @@ export class ChatGateway {
     }
     let response: Response
     try {
-      response = await fetch(endpointFor(provider.baseUrl, 'models'), {
-        headers: buildProviderHeaders(
-          provider,
-          provider.kind === 'cliproxy'
-            ? 'openai-chat-completions'
-            : provider.apiFormat,
-          false,
-        ),
-        redirect: 'error',
-        signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
-      })
+      response = await fetch(
+        endpointFor(provider.baseUrl, 'models'),
+        this.withProxy({
+          headers: buildProviderHeaders(
+            provider,
+            provider.kind === 'cliproxy'
+              ? 'openai-chat-completions'
+              : provider.apiFormat,
+            false,
+          ),
+          redirect: 'error',
+          signal: AbortSignal.timeout(MODEL_DISCOVERY_TIMEOUT_MS),
+        }),
+      )
     } catch (error) {
       if (isTimeoutError(error)) {
         throw new GatewayError('获取模型列表超时。', 'request_timeout')

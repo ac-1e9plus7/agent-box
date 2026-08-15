@@ -165,6 +165,7 @@ select:disabled {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   width: 100%;
   height: 100%;
   background: var(--bg);
@@ -199,6 +200,7 @@ select:disabled {
   z-index: 20;
   display: flex;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   flex-direction: column;
   overflow: hidden;
@@ -423,9 +425,8 @@ select:disabled {
   white-space: nowrap;
 }
 
-.conversation-delete {
+.conversation-action {
   position: absolute;
-  right: 5px;
   display: grid;
   width: 26px;
   height: 26px;
@@ -438,14 +439,39 @@ select:disabled {
   transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
 }
 
-.conversation-item:hover .conversation-delete,
-.conversation-delete:focus-visible {
+.conversation-item:hover .conversation-action,
+.conversation-action:focus-visible {
   opacity: 1;
+}
+
+.conversation-delete {
+  right: 5px;
+}
+
+.conversation-rename {
+  right: 35px;
+}
+
+.conversation-rename:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .conversation-delete:hover {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+.conversation-rename-input {
+  width: 100%;
+  height: 27px;
+  margin: 4px 5px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
 }
 
 .sidebar-empty {
@@ -533,6 +559,7 @@ select:disabled {
 .chat-workspace {
   display: flex;
   min-width: 0;
+  min-height: 0;
   height: 100%;
   flex-direction: column;
   background: var(--surface);
@@ -572,14 +599,54 @@ select:disabled {
   gap: 1px;
 }
 
+.conversation-title-button {
+  display: flex;
+  max-width: min(34vw, 370px);
+  align-items: center;
+  gap: 6px;
+  padding: 2px 5px;
+  margin: -2px 0 0 -5px;
+  border-radius: 6px;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.conversation-title-button:hover {
+  background: var(--surface-hover);
+}
+
+.conversation-title-button svg {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.conversation-title-button:hover svg {
+  opacity: 1;
+}
+
 .conversation-heading strong {
   overflow: hidden;
-  max-width: min(34vw, 370px);
+  min-width: 0;
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -.1px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.topbar-title-input {
+  width: min(34vw, 360px);
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 .conversation-heading span {
@@ -832,7 +899,9 @@ select:disabled {
   color: var(--text);
   font-size: 14px;
   line-height: 1.78;
+  min-width: 0;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .message-body p {
@@ -976,10 +1045,20 @@ select:disabled {
 
 .code-block pre {
   margin: 0;
+  max-height: 28em;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 15px;
   font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   tab-size: 2;
+}
+
+/* While a message is streaming, let long content expand and follow the chat
+   region scroll instead of trapping the actively-generated lines under an
+   internal scroll cap. */
+.assistant-message.is-streaming .code-block pre,
+.assistant-message.is-streaming .reasoning-block > div {
+  max-height: none;
 }
 
 .reasoning-block {
@@ -1029,7 +1108,10 @@ select:disabled {
 }
 
 .reasoning-block > div {
+  max-height: 24em;
   padding: 10px 13px 2px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   font-size: 12px;
   line-height: 1.65;
   white-space: pre-wrap;
@@ -1237,6 +1319,105 @@ select:disabled {
   font-size: 9.5px;
 }
 
+.user-message-tools {
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.user-message:hover .user-message-tools,
+.user-message-tools:focus-within {
+  opacity: 1;
+}
+
+.user-message-tools button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  color: var(--text-tertiary);
+  background: transparent;
+  font-size: 10.5px;
+}
+
+.user-message-tools button:hover {
+  color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.user-bubble-editing {
+  padding: 0;
+  max-width: 650px;
+  border: 1px solid var(--border-strong);
+  border-radius: 15px 5px 15px 15px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 28px rgb(25 31 24 / 7%), 0 1px 3px rgb(25 31 24 / 5%);
+}
+
+.user-bubble-editing:focus-within {
+  outline: 0;
+}
+
+.user-edit-input {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  max-height: 220px;
+  padding: 12px 16px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.6;
+  resize: none;
+}
+
+.user-edit-input:focus-visible {
+  outline: 0;
+}
+
+.user-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 4px 10px 10px;
+}
+
+.user-edit-actions button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--surface-soft);
+  font-size: 11px;
+}
+
+.user-edit-actions button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.user-edit-regen {
+  border-color: color-mix(in srgb, var(--accent), transparent 50%);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 90%);
+}
+
+.user-edit-regen:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 78%);
+}
+
 .message-error {
   display: flex;
   width: max-content;
@@ -1249,6 +1430,24 @@ select:disabled {
   color: var(--danger);
   background: var(--danger-soft);
   font-size: 11.5px;
+}
+
+.message-error-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 4px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid var(--danger);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.message-error-retry:hover {
+  background: var(--danger-soft);
 }
 
 .message-empty-response {
@@ -3172,6 +3371,76 @@ select:disabled {
   color: var(--text-tertiary);
   background: var(--surface-soft);
   font-size: 9px;
+}
+
+.danger-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--danger), transparent 70%);
+}
+
+.danger-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--danger);
+}
+
+.danger-card-head span {
+  display: grid;
+  gap: 2px;
+}
+
+.danger-card-head strong {
+  color: var(--text);
+  font-size: 10.5px;
+}
+
+.danger-card-head small {
+  color: var(--text-tertiary);
+  font-size: 9px;
+}
+
+.danger-card-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.danger-card-confirm p {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.danger-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.danger-button {
+  display: flex;
+  height: 30px;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-end;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger), transparent 55%);
+  background: transparent;
+  font-size: 10px;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.danger-button:disabled {
+  opacity: .52;
 }
 
 .about-panel {

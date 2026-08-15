@@ -50,6 +50,9 @@ const chatboxApi: ChatboxAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.conversationsSave, conversation),
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.conversationsRemove, id),
   },
+  data: {
+    clearConversations: () => ipcRenderer.invoke(IPC_CHANNELS.dataClearConversations),
+  },
   chat: {
     stream: (request: ChatRequest) => ipcRenderer.invoke(IPC_CHANNELS.chatStart, request),
     cancel: (requestId: string) =>

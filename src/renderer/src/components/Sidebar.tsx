@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { JSX } from 'react'
 import type { Conversation } from '../types'
 import { Icon } from './Icon'
@@ -15,6 +15,7 @@ interface SidebarProps {
   onNewConversation: () => void
   onOpenSettings: () => void
   onQueryChange: (query: string) => void
+  onRenameConversation: (conversationId: string, title: string) => void
   onSelectConversation: (conversationId: string) => void
 }
 
@@ -45,8 +46,26 @@ export function Sidebar({
   onNewConversation,
   onOpenSettings,
   onQueryChange,
+  onRenameConversation,
   onSelectConversation
 }: SidebarProps): JSX.Element {
+  const [editingId, setEditingId] = useState('')
+  const [draftTitle, setDraftTitle] = useState('')
+
+  const startRename = (conversation: Conversation): void => {
+    setEditingId(conversation.id)
+    setDraftTitle(conversation.title)
+  }
+  const commitRename = (): void => {
+    if (editingId) onRenameConversation(editingId, draftTitle)
+    setEditingId('')
+    setDraftTitle('')
+  }
+  const cancelRename = (): void => {
+    setEditingId('')
+    setDraftTitle('')
+  }
+
   const groupedConversations = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
     const filtered = conversations.filter((conversation) =>
@@ -102,28 +121,60 @@ export function Sidebar({
             <section className="conversation-group" key={group.label}>
               <h2>{group.label}</h2>
               <div className="conversation-list">
-                {group.conversations.map((conversation) => (
-                  <div
-                    className={`conversation-item ${conversation.id === activeConversationId ? 'is-active' : ''}`}
-                    key={conversation.id}
-                  >
-                    <button
-                      className="conversation-select"
-                      onClick={() => onSelectConversation(conversation.id)}
-                      title={conversation.title}
+                {group.conversations.map((conversation) => {
+                  const isEditing = editingId === conversation.id
+                  return (
+                    <div
+                      className={`conversation-item ${conversation.id === activeConversationId ? 'is-active' : ''}`}
+                      key={conversation.id}
                     >
-                      <Icon name="message" size={15} />
-                      <span>{conversation.title}</span>
-                    </button>
-                    <button
-                      className="conversation-delete"
-                      aria-label={`删除会话：${conversation.title}`}
-                      onClick={() => onDeleteConversation(conversation.id)}
-                    >
-                      <Icon name="trash" size={14} />
-                    </button>
-                  </div>
-                ))}
+                      {isEditing ? (
+                        <input
+                          autoFocus
+                          aria-label="重命名会话"
+                          className="conversation-rename-input"
+                          value={draftTitle}
+                          onBlur={commitRename}
+                          onChange={(event) => setDraftTitle(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              commitRename()
+                            } else if (event.key === 'Escape') {
+                              event.preventDefault()
+                              cancelRename()
+                            }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          className="conversation-select"
+                          onClick={() => onSelectConversation(conversation.id)}
+                          title={conversation.title}
+                        >
+                          <Icon name="message" size={15} />
+                          <span>{conversation.title}</span>
+                        </button>
+                      )}
+                      {!isEditing && (
+                        <button
+                          className="conversation-action conversation-rename"
+                          aria-label={`重命名会话：${conversation.title}`}
+                          onClick={() => startRename(conversation)}
+                        >
+                          <Icon name="edit" size={13} />
+                        </button>
+                      )}
+                      <button
+                        className="conversation-action conversation-delete"
+                        aria-label={`删除会话：${conversation.title}`}
+                        onClick={() => onDeleteConversation(conversation.id)}
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
             </section>
           ))}

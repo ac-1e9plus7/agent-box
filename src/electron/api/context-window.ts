@@ -1,8 +1,14 @@
 import type { ContextManagementMode, Message } from '../../shared/types'
+import {
+  REQUEST_OVERHEAD,
+  RESERVED_SAFETY_TOKENS,
+  estimateMessageTokens,
+  estimateTextTokens,
+} from '../../shared/token-estimate'
 
-const PER_MESSAGE_OVERHEAD = 8
-const REQUEST_OVERHEAD = 64
-const RESERVED_SAFETY_TOKENS = 128
+// Re-exported so existing import sites keep working; the estimate now lives in
+// the shared module and is reused by the renderer context projection.
+export { estimateMessageTokens, estimateTextTokens }
 
 export class ContextWindowError extends Error {
   readonly code = 'context_window_exceeded'
@@ -11,23 +17,6 @@ export class ContextWindowError extends Error {
     super(message)
     this.name = 'ContextWindowError'
   }
-}
-
-/** A dependency-free, deliberately conservative token estimate. */
-export function estimateTextTokens(text: string): number {
-  let cjkAndWideCharacters = 0
-  let otherCharacters = 0
-
-  for (const character of text) {
-    if (/[^\u0000-\u024f]/u.test(character)) cjkAndWideCharacters += 1
-    else otherCharacters += character.length
-  }
-
-  return cjkAndWideCharacters + Math.ceil(otherCharacters / 4)
-}
-
-export function estimateMessageTokens(message: Message): number {
-  return PER_MESSAGE_OVERHEAD + estimateTextTokens(message.content)
 }
 
 export interface ContextPreparationResult {

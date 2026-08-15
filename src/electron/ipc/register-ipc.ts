@@ -78,6 +78,11 @@ export function registerIpcHandlers(
     return repository.removeConversation(id)
   })
 
+  register(IPC_CHANNELS.dataClearConversations, () => {
+    gateway.cancelAll()
+    return repository.clearConversations()
+  })
+
   register(IPC_CHANNELS.chatStart, (event, request: ChatRequest) => {
     assertRecord(request, '聊天请求')
     const requestId = randomUUID()

@@ -16,4 +16,9 @@ describe('new-vault model defaults', () => {
       updatedAt: timestamp,
     })
   })
+
+  it('applies secure-by-default routing: deny data collection and require ZDR', () => {
+    const model = createOpenRouterAutoModel('2026-08-15T00:00:00.000Z')
+    expect(model.providerRouting).toEqual({ dataCollection: 'deny', zdr: true })
+  })
 })

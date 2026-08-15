@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   systemPrompt: '',
+  proxy: { mode: 'off', url: '' },
 }
 
 export class AppRepository {
@@ -95,6 +96,7 @@ export class AppRepository {
         next.defaultReasoningEffort = patch.defaultReasoningEffort
       }
       if (patch.systemPrompt !== undefined) next.systemPrompt = patch.systemPrompt
+      if (patch.proxy !== undefined) next.proxy = patch.proxy
       draft.settings = normalizeAppSettings(next)
       return structuredClone(draft.settings)
     })
@@ -237,6 +239,18 @@ export class AppRepository {
       draft.conversations = draft.conversations.filter(
         (conversation) => conversation.id !== id,
       )
+    })
+  }
+
+  /**
+   * Clears all conversations (chat history) while keeping providers, models and
+   * settings intact. The vault is re-encrypted and rewritten in full so the
+   * active file no longer contains any chat content; the master key is
+   * preserved so the retained provider/model configuration stays readable.
+   */
+  async clearConversations(): Promise<void> {
+    return this.store.mutate((draft) => {
+      draft.conversations = []
     })
   }
 }
