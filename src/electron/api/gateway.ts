@@ -110,7 +110,17 @@ export class ChatGateway {
     this.controllers.set(requestId, controller)
     emit({ type: 'start', requestId })
 
+    let stallTimer: ReturnType<typeof setTimeout> | undefined
+    const resetStallTimer = () => {
+      clearTimeout(stallTimer)
+      stallTimer = setTimeout(
+        () => controller.abort(new GatewayError('请求流已停滞超过 120 秒，自动中断。', 'request_timeout')),
+        120_000,
+      )
+    }
+
     try {
+      resetStallTimer()
       const requestMessages = validateChatRequest(request)
       const model = this.repository.getModel(request.modelId)
       if (!model) throw new GatewayError('所选模型不存在。', 'model_not_found')
@@ -164,9 +174,33 @@ export class ChatGateway {
       if (!response.ok) throw await httpError(response)
       if (!response.body) throw new GatewayError('供应商没有返回响应流。', 'empty_response')
 
+      const wrappedBody = new ReadableStream<Uint8Array>({
+        async start(ctrl) {
+          const reader = response.body!.getReader()
+          try {
+            while (true) {
+              const { value, done } = await reader.read()
+              resetStallTimer()
+              if (done) {
+                ctrl.close()
+                break
+              }
+              ctrl.enqueue(value)
+            }
+          } catch (e) {
+            ctrl.error(e)
+          } finally {
+            reader.releaseLock()
+          }
+        },
+        cancel(reason) {
+          response.body!.cancel(reason).catch(() => {})
+        },
+      })
+
       const completed = await consumeStream(
         format,
-        response.body,
+        wrappedBody,
         requestId,
         emit,
       )
@@ -176,10 +210,11 @@ export class ChatGateway {
         emit({ type: 'done', requestId, finishReason: 'cancelled' })
       } else {
         const chatError = toChatError(error)
-        chatError.message = redactSecret(chatError.message, requestSecret)
+        chatError.message = redactSecret(chatError.message, requestSecret, this.proxyUrl)
         emit({ type: 'error', requestId, error: chatError })
       }
     } finally {
+      clearTimeout(stallTimer)
       this.controllers.delete(requestId)
     }
   }
@@ -198,7 +233,7 @@ export class ChatGateway {
     try {
       return await this.discoverModelsFromProvider(provider)
     } catch (error) {
-      throw redactError(error, provider.apiKey)
+      throw redactError(error, provider.apiKey, this.proxyUrl)
     }
   }
 
@@ -259,6 +294,7 @@ export class ChatGateway {
         message: redactSecret(
           error instanceof Error ? error.message : '连接失败',
           provider.apiKey,
+          this.proxyUrl,
         ),
       }
     }
@@ -575,22 +611,33 @@ function toChatError(error: unknown): ChatError {
   }
 }
 
-function redactError(error: unknown, secret?: string): Error {
+function redactError(error: unknown, secret?: string, proxyUrl?: string): Error {
   if (error instanceof GatewayError) {
     return new GatewayError(
-      redactSecret(error.message, secret),
+      redactSecret(error.message, secret, proxyUrl),
       error.code,
       error.status,
       error.retryAfterSeconds,
     )
   }
   return new Error(
-    redactSecret(error instanceof Error ? error.message : '发生未知错误。', secret),
+    redactSecret(error instanceof Error ? error.message : '发生未知错误。', secret, proxyUrl),
   )
 }
 
-function redactSecret(message: string, secret?: string): string {
-  return secret ? message.replaceAll(secret, '[REDACTED]') : message
+function redactSecret(message: string, secret?: string, proxyUrl?: string): string {
+  let redacted = message
+  if (secret) {
+    redacted = redacted.replaceAll(secret, '[REDACTED]')
+  }
+  if (proxyUrl) {
+    try {
+      const parsed = new URL(proxyUrl)
+      if (parsed.username) redacted = redacted.replaceAll(parsed.username, '[REDACTED]')
+      if (parsed.password) redacted = redacted.replaceAll(parsed.password, '[REDACTED]')
+    } catch {}
+  }
+  return redacted
 }
 
 function extractModelArray(value: unknown): unknown[] {

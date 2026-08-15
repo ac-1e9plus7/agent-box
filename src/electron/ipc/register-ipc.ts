@@ -30,10 +30,23 @@ export function registerIpcHandlers(
     })
   }
 
-  register(IPC_CHANNELS.settingsGet, () => repository.getSettings())
+  register(IPC_CHANNELS.settingsGet, () => {
+    const settings = repository.getSettings()
+    return {
+      ...settings,
+      proxy: { ...settings.proxy, url: maskProxyUrl(settings.proxy.url) }
+    }
+  })
   register(IPC_CHANNELS.settingsUpdate, (_event, patch: Partial<AppSettings>) => {
     assertRecord(patch, '设置')
-    return repository.updateSettings(patch)
+    const current = repository.getSettings()
+    if (patch.proxy !== undefined && patch.proxy.url !== undefined) {
+      patch.proxy.url = unmaskProxyUrl(patch.proxy.url, current.proxy.url)
+    }
+    return repository.updateSettings(patch).then((settings) => ({
+      ...settings,
+      proxy: { ...settings.proxy, url: maskProxyUrl(settings.proxy.url) },
+    }))
   })
 
   register(IPC_CHANNELS.providersList, () => repository.listProviders())
@@ -151,4 +164,22 @@ function assertRecord(value: unknown, label: string): asserts value is Record<st
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error(`${label}无效。`)
   }
+}
+
+function maskProxyUrl(url: string): string {
+  if (!url) return url
+  try {
+    const parsed = new URL(url)
+    if (parsed.username || parsed.password) {
+      if (parsed.username) parsed.username = '***'
+      if (parsed.password) parsed.password = '***'
+      return parsed.toString()
+    }
+  } catch {}
+  return url
+}
+
+function unmaskProxyUrl(newUrl: string, oldUrl: string): string {
+  if (newUrl === maskProxyUrl(oldUrl)) return oldUrl
+  return newUrl
 }
