@@ -1,0 +1,48 @@
+diff --git a/out/binDownload.js b/out/binDownload.js
+index 287e8735e53970c9787253e85b5980988719a668..d07243b97b2c711f75c751644b7ae9f50fca286c 100644
+--- a/out/binDownload.js
++++ b/out/binDownload.js
+@@ -19,12 +19,11 @@ async function download(url, output, checksum) {
+         // Callers should supply a checksum whenever possible.
+         builder_util_1.log.warn({ url }, "downloading without an integrity checksum — the download is not verified against a known-good hash");
+     }
+-    const { downloadArtifact, ElectronDownloadCacheMode } = await (0, dynamicImport_1.dynamicImport)("@electron/get");
++    const { downloadArtifact } = await (0, dynamicImport_1.dynamicImport)("@electron/get");
+     const downloadedFile = await downloadArtifact({
+         version: "9.9.9",
+         artifactName: filenameWithExt,
+         cacheRoot: path.resolve((0, electronGet_1.getCacheDirectory)({ allowEnvVarOverride: true }), "downloads"),
+-        cacheMode: ElectronDownloadCacheMode.ReadWrite,
+         ...(checksum != null ? { checksums: { [filenameWithExt]: checksum } } : { unsafelyDisableChecksums: true }),
+         mirrorOptions: { resolveAssetURL: async () => Promise.resolve(url) },
+         isGeneric: true,
+diff --git a/out/util/electronGet.js b/out/util/electronGet.js
+index db7c4e03a2191261de9e0eab9ac50cb268f8ee4b..f9247af2d22892f7c75366ba0c232bdfa4ae2134 100644
+--- a/out/util/electronGet.js
++++ b/out/util/electronGet.js
+@@ -60,15 +60,7 @@ function getCacheDirectory(options) {
+     return xdgCache && path.parse(xdgCache).root ? path.join(xdgCache, appName) : path.join(homeDir, ".cache", appName);
+ }
+ function resolveCacheMode() {
+-    var _a;
+-    const varName = "ELECTRON_DOWNLOAD_CACHE_MODE";
+-    const cacheOverride = (_a = process.env[varName]) === null || _a === void 0 ? void 0 : _a.trim();
+-    if (cacheOverride && Number(cacheOverride) in get_1.ElectronDownloadCacheMode) {
+-        const mode = Number(cacheOverride);
+-        builder_util_1.log.debug({ mode }, `cache mode overridden via env var ${varName}`);
+-        return mode;
+-    }
+-    return get_1.ElectronDownloadCacheMode.ReadWrite;
++    return undefined;
+ }
+ /**
+  * Returns true when `destPath` is safely contained within `dir` (direct child or deeper).
+@@ -347,7 +339,7 @@ async function downloadArtifactToFile(config, label) {
+         }
+         if (!(await (0, builder_util_1.exists)(filePath))) {
+             builder_util_1.log.warn({ filePath, label }, "cached artifact missing from disk; retrying with cache write");
+-            filePath = await get.downloadArtifact({ ...configWithProgress, cacheMode: get_1.ElectronDownloadCacheMode.WriteOnly });
++            filePath = await get.downloadArtifact({ ...configWithProgress, force: true });
+         }
+         if (!state.bar && lastLoggedMilestone === -1) {
+             builder_util_1.log.info({ label }, "using cached artifact");
