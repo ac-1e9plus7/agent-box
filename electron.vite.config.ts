@@ -19,7 +19,7 @@ const developmentCspPlugin: Plugin = {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ['undici'] })],
     build: {
       rollupOptions: {
         input: {
