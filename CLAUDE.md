@@ -40,18 +40,22 @@ pnpm dist
 ## 目录与职责
 
 ```text
-src/shared/                         跨进程类型与 IPC channel
+src/shared/                         跨进程类型、IPC channel 与共享纯函数
+src/shared/token-estimate.ts        token 估算常量与函数（main 与 renderer 共用，禁止再各自实现）
 src/electron/main.ts                Electron 生命周期、窗口与外链策略
 src/electron/preload.ts             最小化、冻结的 window.chatbox API
 src/electron/ipc/register-ipc.ts    IPC 注册与 sender 校验
-src/electron/api/gateway.ts         网络、超时、流式请求、取消
+src/electron/api/gateway.ts         网络、超时、流式请求、取消、代理 dispatcher
 src/electron/api/request-adapters.ts 三种请求格式的请求体构造
 src/electron/api/protocol-adapters.ts 三种 SSE/响应格式的统一解析
 src/electron/api/provider-policy.ts URL、鉴权和 provider 安全策略
-src/electron/api/context-window.ts  token 估算与完整轮次裁剪
+src/electron/api/context-window.ts  完整轮次裁剪（token 估算来自 shared/token-estimate）
 src/electron/storage/               加密 vault、schema、配额和仓库操作
 src/renderer/src/App.tsx            renderer 状态与业务编排
 src/renderer/src/components/        React UI
+src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、defaults
+scripts/                            零依赖图标再生命令（generate-icons.mjs、make-ico.mjs）
+build/                              应用图标资产（icon.svg/icon.png/icon.ico），package.json 已引用，必须随仓库提交
 tests/                              协议、schema、配额和纯函数测试
 ```
 
@@ -85,14 +89,28 @@ tests/                              协议、schema、配额和纯函数测试
 - 保持 `redirect: 'error'`、请求超时、响应体/SSE 大小限制和取消能力。
 - 错误回显必须脱敏；不要把上游任意大响应完整读入内存。
 
+### 网络代理
+
+- 代理由主进程经 undici `ProxyAgent` 的 `dispatcher` 作用于 gateway 的两处 `fetch`（流式请求与模型发现）；不要改用 `session.setProxy` 或命令行开关，它们不影响主进程 fetch。
+- 代理协议策略与 Base URL 一致：`http:` 仅限 loopback，远程代理必须 `https:`；凭据只能经代理 URL userinfo 传入，不得走自定义请求头（`proxy-authorization` 在禁用头之列）。
+- 代理配置存于 `AppSettings.proxy`，随 vault 加密保存；默认关闭，旧 vault 缺字段时按关闭处理。
+- 代理 URL 不得写入日志、错误消息或测试快照。
+
 ## 数据兼容规则
 
 - 当前 vault 为 schema v1，旧数据中的新增字段通常是 optional，并在读取时应用安全默认值。
 - 默认值调整只影响新建 vault，除非存在明确、可证明安全的迁移标记。不要根据模型 ID 或旧数值猜测并覆盖用户配置。
+- 新建模型与内置 OpenRouter Auto 默认安全路由 `data_collection: 'deny'` + `zdr: true`；已有模型的存储配置不得被覆盖。
 - 不要在 vault 加载路径新增会拒绝历史合法数据的全局硬限制。
 - aggregate 会话配额只在保存 mutation 时检查：旧数据若已超限，允许持平、缩小或删除，但不得继续增长。
 - 删除操作必须保持可用，以便用户从超限或异常状态恢复。
 - 对话保存失败时不得继续发起付费模型请求；应恢复输入和 UI 状态并提示用户。
+
+### 清除全部会话数据
+
+- 「清除全部会话数据」只清空 `conversations`，必须保留 providers、models、settings（含 API Key）。
+- 执行前必须先 `gateway.cancelAll()` 取消进行中的流式请求，再清空并重新加密落盘。
+- 主密钥必须保留（否则保留的配置无法解密）；旧密文扇区不在用户态物理擦除，彻底销毁由用户手动删除 `vault` 目录。README 已如实说明这一边界，改动删除逻辑时同步更新。
 
 ## API 与协议约束
 
@@ -111,6 +129,7 @@ tests/                              协议、schema、配额和纯函数测试
 - CLIProxyAPI 需要兼容其 Chat/Responses 推理字段转换。
 - Anthropic Messages 必须按模型配置使用 adaptive/manual thinking；关闭发送协议合法的 disabled 形状。
 - 同时解析 `reasoning`、`reasoning_content`、reasoning details、Responses reasoning 事件和 Anthropic thinking delta。
+- reasoning details 覆盖 Anthropic/OpenAI/Gemini（`google-gemini-v1` format）的 `reasoning.text`/`reasoning.summary` 条目；Responses reasoning 事件按 `response.reasoning*` 前缀匹配且只在有 text delta 时输出，不要改回精确类型匹配（会让 Gemini 思考链静默消失）。
 - 没有可见思考文本不代表没有推理；保留并展示 `reasoningTokens`。不得伪造或推断隐藏思维链。
 
 ### OpenRouter 联网搜索
@@ -123,6 +142,13 @@ tests/                              协议、schema、配额和纯函数测试
 - 完全重复的 citation 应抑制，同 URL 后续补充 title/content/range 时应允许富化。
 - DeepSeek 的公开模型 API 不提供通用原生网页搜索工具。DeepSeek 经 OpenRouter 搜索可能使用 Exa 等回退服务，不得标为“DeepSeek 原生搜索”。
 - 搜索执行但模型未返回正文时，保留来源并显示明确提示，不要编造答案。
+
+## 会话标题
+
+- 自动命名在首条 user+assistant 往返成功完成后触发，复用 `chat.stream` + `onEvent`（按 `requestId` 路由），**不得为此新增 IPC channel**。
+- 标题生成请求是低成本配置：强制 `reasoningEnabled: false`、`webSearchMode: 'off'`、`maxOutputTokens: 32`，沿用当前会话模型；请求本身不落库。
+- 标题清洗逻辑集中在 `src/renderer/src/title.ts`（去引号/换行/末尾标点、裁剪长度）。
+- 手动改名后（记入 `autoRenamingRef`）不再被自动命名覆盖；自动命名失败必须静默回退到截断标题，不得阻塞 UI 或丢对话。
 
 ## 上下文管理
 
@@ -161,7 +187,12 @@ tests/                              协议、schema、配额和纯函数测试
 - URL、鉴权、CLIProxy：`tests/provider-policy.test.ts`
 - 模型发现：`tests/model-catalog.test.ts`
 - 上下文裁剪：`tests/context-window.test.ts`
+- 渲染端上下文投影：`tests/context-projection.test.ts`
+- token 估算：`tests/token-estimate.test.ts`
+- 设置 schema（含代理校验）：`tests/settings-schema.test.ts`
 - vault 配额和旧数据兼容：`tests/vault-resource-limits.test.ts`
+- 清除会话数据：`tests/clear-conversations.test.ts`
+- 标题清洗：`tests/title-generation.test.ts`
 - 默认模型：`tests/default-models.test.ts`
 - token 步进：`tests/token-step.test.ts`
 
@@ -172,6 +203,8 @@ tests/                              协议、schema、配额和纯函数测试
 - `pnpm dev` 编译成功但新窗口立即退出时，先检查是否已有 ChatBox Lite/Electron 实例持有 single-instance lock。
 - 窗口空白且 `window.chatbox` 不存在时，检查 preload 是否仍输出并加载 `index.cjs`，不要关闭 sandbox。
 - 首次启动失败时检查 `safeStorage`/系统凭据后端，不要创建明文 fallback。
+- 修改应用图标后运行 `node scripts/generate-icons.mjs && node scripts/make-ico.mjs` 重新生成全套 PNG 与 ICO；`build/` 下的图标资产必须随仓库提交，否则打包缺图标。
+- 新增被测试引用的 renderer 纯函数模块时，必须同时加入 `tsconfig.node.json` 的 `include`（与 `token-step.ts`、`context-projection.ts`、`title.ts` 同模式），否则 typecheck 报 TS6307。
 - 使用真实 API 调试时，通过现有 IPC/主进程链路发请求；不要读取、打印或复制用户 Key。诊断会话应使用临时 ID、避免保存，并限制输出、工具调用和费用。
 
 ## 完成检查清单
