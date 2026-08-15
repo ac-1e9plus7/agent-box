@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+.idea
+.vscode
+
+# Build and package output
+dist/
+out/
+release/
+artifacts/
+*.app
+*.dmg
+*.exe
+*.AppImage
+*.deb
+*.rpm
+*.blockmap
+
+# Vite, TypeScript, tests
+.vite/
+*.tsbuildinfo
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.chatboxlite/
+
+# Editor and OS metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~

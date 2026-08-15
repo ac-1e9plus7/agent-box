@@ -1,0 +1,26 @@
+import type { ModelConfig, ProviderConfig, WebSearchMode } from './types'
+
+export const WEB_SEARCH_MODE_LABELS: Record<WebSearchMode, string> = {
+  off: '关闭',
+  auto: '自动搜索',
+  native: '原生优先'
+}
+
+export function isWebSearchAvailable(
+  model?: ModelConfig,
+  provider?: ProviderConfig
+): boolean {
+  if (!model || provider?.kind !== 'openrouter') return false
+  const format = model.apiFormat ?? provider.apiFormat
+  return format === 'openai-chat-completions'
+    || format === 'openai-responses'
+    || format === 'anthropic-messages'
+}
+
+export function effectiveWebSearchMode(
+  model: ModelConfig | undefined,
+  provider: ProviderConfig | undefined,
+  requested: WebSearchMode | undefined
+): WebSearchMode {
+  return isWebSearchAvailable(model, provider) ? requested ?? 'off' : 'off'
+}

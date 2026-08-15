@@ -1,0 +1,241 @@
+import type {
+  ApiFormat,
+  ChatRequest,
+  Message,
+  ModelConfig,
+  ProviderKind,
+  ProviderRouting,
+  ReasoningEffort,
+  WebSearchMode,
+} from '../../shared/types'
+
+export class RequestAdapterError extends Error {
+  constructor(message: string, readonly code: string) {
+    super(message)
+    this.name = 'RequestAdapterError'
+  }
+}
+
+export function buildRequestBody(
+  format: ApiFormat,
+  provider: { kind: ProviderKind },
+  model: ModelConfig,
+  messages: Message[],
+  request: ChatRequest,
+  maxOutputTokens: number,
+): Record<string, unknown> {
+  const effort = request.reasoningEffort ?? model.defaultReasoningEffort
+  const routing =
+    provider.kind === 'openrouter' ? toWireRouting(model.providerRouting) : undefined
+  const webSearchMode = resolveWebSearchMode(request, model)
+
+  if (format === 'openai-chat-completions') {
+    const body: Record<string, unknown> = {
+      model: model.remoteId,
+      messages: messages.map(({ role, content }) => ({ role, content })),
+      stream: true,
+      max_tokens: maxOutputTokens,
+    }
+    if (provider.kind !== 'custom') body.stream_options = { include_usage: true }
+    if (request.temperature !== undefined) body.temperature = request.temperature
+    if (routing) body.provider = routing
+    applyOpenAiReasoning(body, provider.kind, request.reasoningEnabled, effort)
+    applyOpenRouterWebSearch(body, provider.kind, webSearchMode)
+    return body
+  }
+
+  if (format === 'openai-responses') {
+    const { instructions, input } = toResponsesInput(messages)
+    const body: Record<string, unknown> = {
+      model: model.remoteId,
+      input,
+      stream: true,
+      max_output_tokens: maxOutputTokens,
+    }
+    if (instructions) body.instructions = instructions
+    if (request.temperature !== undefined) body.temperature = request.temperature
+    if (routing) body.provider = routing
+    if (request.reasoningEnabled) {
+      body.reasoning =
+        provider.kind === 'openrouter'
+          ? { enabled: true, effort, exclude: false }
+          : { effort }
+    }
+    else if (provider.kind === 'openrouter' || provider.kind === 'cliproxy') {
+      body.reasoning = { effort: 'none' }
+    }
+    applyOpenRouterWebSearch(body, provider.kind, webSearchMode)
+    return body
+  }
+
+  const { system, conversation } = toAnthropicMessages(messages)
+  const body: Record<string, unknown> = {
+    model: model.remoteId,
+    messages: conversation,
+    stream: true,
+    max_tokens: maxOutputTokens,
+  }
+  if (system) body.system = system
+  if (request.temperature !== undefined) body.temperature = request.temperature
+  if (routing) body.provider = routing
+  if (!request.reasoningEnabled) {
+    body.thinking = { type: 'disabled' }
+  } else if ((model.anthropicThinkingMode ?? 'adaptive') === 'adaptive') {
+    body.thinking = { type: 'adaptive' }
+    body.output_config = { effort: effort === 'minimal' ? 'low' : effort }
+  } else {
+    body.thinking = {
+      type: 'enabled',
+      budget_tokens: reasoningBudget(effort, maxOutputTokens),
+    }
+  }
+  applyOpenRouterWebSearch(body, provider.kind, webSearchMode)
+  return body
+}
+
+export function resolveWebSearchMode(
+  request: Pick<ChatRequest, 'webSearchMode'>,
+  model: Pick<ModelConfig, 'defaultWebSearchMode'>,
+): WebSearchMode {
+  return request.webSearchMode ?? model.defaultWebSearchMode ?? 'off'
+}
+
+export function toResponsesInput(messages: Message[]): {
+  instructions: string
+  input: Array<Record<string, unknown>>
+} {
+  const instructions = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n')
+  const input = messages
+    .filter((message) => message.role !== 'system')
+    .map((message) => {
+      if (message.role === 'assistant') {
+        return {
+          type: 'message',
+          id: toResponsesMessageId(message.id),
+          role: 'assistant',
+          status: 'completed',
+          content: [{ type: 'output_text', text: message.content, annotations: [] }],
+        }
+      }
+      return {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: message.content }],
+      }
+    })
+  return { instructions, input }
+}
+
+export function toWireRouting(
+  routing?: ProviderRouting,
+): Record<string, unknown> | undefined {
+  if (!routing) return undefined
+  return removeUndefined({
+    order: routing.order,
+    only: routing.only,
+    allow_fallbacks: routing.allowFallbacks,
+    require_parameters: routing.requireParameters,
+    data_collection: routing.dataCollection,
+    zdr: routing.zdr,
+    sort: routing.sort,
+  })
+}
+
+function applyOpenAiReasoning(
+  body: Record<string, unknown>,
+  providerKind: ProviderKind,
+  enabled: boolean,
+  effort: Exclude<ReasoningEffort, 'none'>,
+): void {
+  if (providerKind === 'openrouter') {
+    body.reasoning = enabled
+      ? { enabled: true, effort, exclude: false }
+      : { effort: 'none' }
+  } else if (providerKind === 'cliproxy') {
+    body.reasoning_effort = enabled ? effort : 'none'
+  } else if (enabled) {
+    body.reasoning_effort = effort
+  }
+}
+
+function applyOpenRouterWebSearch(
+  body: Record<string, unknown>,
+  providerKind: ProviderKind,
+  mode: WebSearchMode,
+): void {
+  if (mode === 'off') return
+  if (providerKind !== 'openrouter') {
+    throw new RequestAdapterError(
+      '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+      'web_search_not_supported',
+    )
+  }
+  body.tools = [
+    {
+      type: 'openrouter:web_search',
+      parameters: {
+        engine: mode,
+        max_results: 5,
+        max_uses: 2,
+        max_total_results: 8,
+      },
+    },
+  ]
+  body.max_tool_calls = 2
+}
+
+function reasoningBudget(
+  effort: Exclude<ReasoningEffort, 'none'>,
+  maxOutputTokens: number,
+): number {
+  if (maxOutputTokens <= 1_024) {
+    throw new RequestAdapterError(
+      'Anthropic 思考模式要求最大输出长度大于 1024 token。',
+      'invalid_reasoning_budget',
+    )
+  }
+  const ratios: Record<Exclude<ReasoningEffort, 'none'>, number> = {
+    minimal: 0.1,
+    low: 0.2,
+    medium: 0.5,
+    high: 0.8,
+    xhigh: 0.95,
+    max: 0.95,
+  }
+  return Math.min(
+    maxOutputTokens - 1,
+    Math.max(1_024, Math.floor(maxOutputTokens * ratios[effort])),
+  )
+}
+
+function toAnthropicMessages(messages: Message[]): {
+  system: string
+  conversation: Array<{ role: 'user' | 'assistant'; content: string }>
+} {
+  const system = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n')
+  const conversation: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  for (const message of messages) {
+    if (message.role === 'system') continue
+    const previous = conversation.at(-1)
+    if (previous?.role === message.role) previous.content += `\n\n${message.content}`
+    else conversation.push({ role: message.role, content: message.content })
+  }
+  return { system, conversation }
+}
+
+function toResponsesMessageId(id: string): string {
+  const safeId = id.replace(/[^0-9A-Za-z_-]/g, '').slice(0, 120)
+  return safeId.startsWith('msg_') ? safeId : `msg_${safeId || 'local'}`
+}
+
+function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined),
+  ) as Partial<T>
+}

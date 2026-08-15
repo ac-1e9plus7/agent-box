@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": ["node", "electron"]
+  },
+  "include": [
+    "electron.vite.config.ts",
+    "src/electron/**/*.ts",
+    "src/renderer/src/token-step.ts",
+    "src/shared/**/*.ts",
+    "tests/**/*.ts"
+  ]
+}

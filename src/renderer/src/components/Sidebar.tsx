@@ -1,0 +1,155 @@
+import { useMemo } from 'react'
+import type { JSX } from 'react'
+import type { Conversation } from '../types'
+import { Icon } from './Icon'
+
+interface SidebarProps {
+  activeConversationId: string
+  collapsed: boolean
+  conversations: Conversation[]
+  mobileOpen: boolean
+  query: string
+  onCloseMobile: () => void
+  onCollapse: () => void
+  onDeleteConversation: (conversationId: string) => void
+  onNewConversation: () => void
+  onOpenSettings: () => void
+  onQueryChange: (query: string) => void
+  onSelectConversation: (conversationId: string) => void
+}
+
+function getGroup(updatedAt: string): '今天' | '昨天' | '最近 7 天' | '更早' {
+  const now = new Date()
+  const date = new Date(updatedAt)
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+  const days = Math.floor((today - target) / 86_400_000)
+
+  if (days <= 0) return '今天'
+  if (days === 1) return '昨天'
+  if (days < 7) return '最近 7 天'
+  return '更早'
+}
+
+const groupOrder = ['今天', '昨天', '最近 7 天', '更早'] as const
+
+export function Sidebar({
+  activeConversationId,
+  collapsed,
+  conversations,
+  mobileOpen,
+  query,
+  onCloseMobile,
+  onCollapse,
+  onDeleteConversation,
+  onNewConversation,
+  onOpenSettings,
+  onQueryChange,
+  onSelectConversation
+}: SidebarProps): JSX.Element {
+  const groupedConversations = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase()
+    const filtered = conversations.filter((conversation) =>
+      conversation.title.toLocaleLowerCase().includes(normalizedQuery)
+    )
+
+    return groupOrder
+      .map((label) => ({
+        label,
+        conversations: filtered.filter((conversation) => getGroup(conversation.updatedAt) === label)
+      }))
+      .filter((group) => group.conversations.length > 0)
+  }, [conversations, query])
+
+  return (
+    <>
+      {mobileOpen && <button className="sidebar-scrim" aria-label="关闭侧边栏" onClick={onCloseMobile} />}
+      <aside
+        className={`sidebar ${collapsed ? 'is-collapsed' : ''} ${mobileOpen ? 'is-mobile-open' : ''}`}
+        aria-label="会话侧边栏"
+      >
+        <div className="sidebar-drag-region" />
+        <div className="sidebar-header">
+          <div className="brand" aria-label="ChatBox Lite">
+            <span className="brand-mark"><Icon name="app" size={22} /></span>
+            <span className="brand-name">ChatBox <em>Lite</em></span>
+          </div>
+          <button className="icon-button sidebar-collapse" aria-label="收起侧边栏" onClick={onCollapse}>
+            <Icon name="sidebar" />
+          </button>
+        </div>
+
+        <div className="sidebar-actions">
+          <button className="new-chat-button" onClick={onNewConversation}>
+            <Icon name="plus" size={17} />
+            <span>新建对话</span>
+            <kbd>⌘ N</kbd>
+          </button>
+          <label className="search-box">
+            <Icon name="search" size={16} />
+            <input
+              aria-label="搜索会话"
+              onChange={(event) => onQueryChange(event.target.value)}
+              placeholder="搜索会话"
+              type="search"
+              value={query}
+            />
+          </label>
+        </div>
+
+        <nav className="conversation-nav" aria-label="会话历史">
+          {groupedConversations.map((group) => (
+            <section className="conversation-group" key={group.label}>
+              <h2>{group.label}</h2>
+              <div className="conversation-list">
+                {group.conversations.map((conversation) => (
+                  <div
+                    className={`conversation-item ${conversation.id === activeConversationId ? 'is-active' : ''}`}
+                    key={conversation.id}
+                  >
+                    <button
+                      className="conversation-select"
+                      onClick={() => onSelectConversation(conversation.id)}
+                      title={conversation.title}
+                    >
+                      <Icon name="message" size={15} />
+                      <span>{conversation.title}</span>
+                    </button>
+                    <button
+                      className="conversation-delete"
+                      aria-label={`删除会话：${conversation.title}`}
+                      onClick={() => onDeleteConversation(conversation.id)}
+                    >
+                      <Icon name="trash" size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+          {groupedConversations.length === 0 && (
+            <div className="sidebar-empty">
+              <Icon name="search" size={22} />
+              <p>没有找到相关会话</p>
+            </div>
+          )}
+        </nav>
+
+        <footer className="sidebar-footer">
+          <button className="sidebar-footer-button" onClick={onOpenSettings}>
+            <span className="sidebar-footer-icon"><Icon name="settings" size={17} /></span>
+            <span className="sidebar-footer-copy">
+              <strong>设置</strong>
+              <small>模型、服务商与数据</small>
+            </span>
+            <Icon name="chevron-right" size={15} />
+          </button>
+          <div className="local-data-note">
+            <Icon name="lock" size={13} />
+            <span>数据已在本机加密</span>
+          </div>
+        </footer>
+      </aside>
+    </>
+  )
+}

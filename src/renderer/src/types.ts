@@ -1,0 +1,101 @@
+import type {
+  ApiFormat as SharedApiFormat,
+  AppSettings,
+  Conversation as StoredConversation,
+  Message as StoredMessage,
+  ModelConfig as StoredModelConfig,
+  ProviderView,
+  WebSearchMode as SharedWebSearchMode
+} from '../../shared/types'
+
+export type ApiFormat = SharedApiFormat
+export type WebSearchMode = SharedWebSearchMode
+
+export type SettingsSection = 'general' | 'models' | 'providers' | 'security' | 'about'
+
+export type MessageStatus = 'complete' | 'streaming' | 'error'
+
+export interface ProviderConfig extends ProviderView {
+  isBuiltIn?: boolean
+}
+
+export interface ProviderDraft extends ProviderConfig {
+  apiKeyInput: string
+}
+
+export type ModelConfig = StoredModelConfig
+
+export interface ChatMessage extends StoredMessage {
+  error?: string
+  modelId?: string
+  status?: MessageStatus
+}
+
+export interface Conversation extends Omit<StoredConversation, 'messages'> {
+  messages: ChatMessage[]
+  pinned?: boolean
+}
+
+export type AppPreferences = AppSettings
+
+export interface AppStateSnapshot {
+  providers: ProviderConfig[]
+  models: ModelConfig[]
+  conversations: Conversation[]
+  activeConversationId: string
+  activeModelId: string
+  reasoningEnabled: boolean
+  webSearchMode: WebSearchMode
+  preferences: AppPreferences
+}
+
+export interface PromptSuggestion {
+  title: string
+  description: string
+  prompt: string
+  icon: IconName
+}
+
+export type IconName =
+  | 'app'
+  | 'archive'
+  | 'arrow-up'
+  | 'brain'
+  | 'check'
+  | 'chevron-down'
+  | 'chevron-left'
+  | 'chevron-right'
+  | 'close'
+  | 'code'
+  | 'copy'
+  | 'database'
+  | 'edit'
+  | 'external'
+  | 'file'
+  | 'globe'
+  | 'image'
+  | 'info'
+  | 'key'
+  | 'lock'
+  | 'menu'
+  | 'message'
+  | 'minus'
+  | 'more'
+  | 'paperclip'
+  | 'plus'
+  | 'refresh'
+  | 'search'
+  | 'send'
+  | 'settings'
+  | 'shield'
+  | 'sidebar'
+  | 'sparkles'
+  | 'sun'
+  | 'trash'
+  | 'user'
+
+export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
+  'openai-chat-completions': 'OpenAI Chat Completions',
+  'openai-responses': 'OpenAI Responses',
+  'anthropic-messages': 'Anthropic Messages'
+}

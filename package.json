@@ -1,0 +1,68 @@
+{
+  "name": "chatbox-lite",
+  "version": "0.1.0",
+  "description": "A private, local-first multi-provider desktop chat client.",
+  "type": "module",
+  "main": "./out/main/index.js",
+  "author": "ChatBox Lite contributors",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "pnpm typecheck && electron-vite build",
+    "package": "pnpm build && electron-builder --dir",
+    "dist": "pnpm build && electron-builder"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-markdown": "^10.0.0",
+    "remark-gfm": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^3.0.0",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.7.0",
+    "vite": "^5.4.0",
+    "vitest": "^3.0.0"
+  },
+  "build": {
+    "appId": "com.chatboxlite.desktop",
+    "productName": "ChatBox Lite",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    }
+  }
+}
