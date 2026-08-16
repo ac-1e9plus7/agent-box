@@ -1321,6 +1321,57 @@ select:disabled {
   background: var(--surface-hover);
 }
 
+.message-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.message-pagination .pagination-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.message-pagination .pagination-arrow:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.message-pagination .pagination-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.message-pagination .pagination-label {
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  padding: 0 3px;
+  color: var(--text-secondary);
+}
+
+.message-tools:has(.message-pagination),
+.user-message-tools:has(.user-pagination) {
+  opacity: 0.85;
+}
+
 .message-model-info {
   margin-left: auto;
   display: flex;

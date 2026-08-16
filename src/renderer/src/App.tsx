@@ -28,6 +28,13 @@ import type {
   SettingsSection,
   WebSearchMode
 } from './types'
+import {
+  deleteMessageNode,
+  ensureMessageTree,
+  getActiveMessageChain,
+  getAncestorsForRegeneration,
+  switchBranch
+} from '../../shared/conversation-tree'
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
 import { runStreamWithReplay } from './stream-helper'
@@ -60,9 +67,11 @@ function createId(prefix: string): string {
 }
 
 function toUiConversation(conversation: StoredConversation): Conversation {
+  const normalizedMessages = ensureMessageTree(conversation.messages)
   return {
     ...conversation,
-    messages: conversation.messages.map((message) => ({
+    currentLeafId: conversation.currentLeafId ?? (normalizedMessages[normalizedMessages.length - 1]?.id),
+    messages: normalizedMessages.map((message) => ({
       ...message,
       modelId: message.role === 'assistant' ? conversation.modelId : undefined,
       status: 'complete'
@@ -79,6 +88,7 @@ function toStoredConversation(conversation: Conversation): StoredConversation {
     agentMode: conversation.agentMode,
     skillIds: conversation.skillIds,
     webSearchMode: conversation.webSearchMode ?? 'off',
+    currentLeafId: conversation.currentLeafId,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
     messages: conversation.messages.map(({
@@ -136,10 +146,10 @@ export default function App(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState('')
   const [toast, setToast] = useState('')
-  const [streaming, setStreaming] = useState(false)
+  const [streamingConversationIds, setStreamingConversationIds] = useState<Set<string>>(new Set())
 
   const conversationsRef = useRef<Conversation[]>([])
-  const activeStreamRef = useRef<ActiveStream | null>(null)
+  const activeStreamsRef = useRef<Map<string, ActiveStream>>(new Map())
   const toastTimerRef = useRef<number | undefined>(undefined)
   const autoRenamingRef = useRef<Set<string>>(new Set())
   const manualRenamedRef = useRef<Set<string>>(new Set())
@@ -148,13 +158,21 @@ export default function App(): JSX.Element {
   const activeModel = models.find((model) => model.id === activeModelId)
   const activeProvider = providers.find((provider) => provider.id === activeModel?.providerId)
   const webSearchAvailable = isWebSearchAvailable(activeModel, activeProvider)
+
+  const isCurrentStreaming = Boolean(activeConversationId && streamingConversationIds.has(activeConversationId))
+
+  const visibleMessages = useMemo(
+    () => (activeConversation ? getActiveMessageChain(activeConversation) : []).filter((message) => message.role !== 'system'),
+    [activeConversation]
+  )
+
   const contextProjection = useMemo(() => activeModel ? projectContext(
-    activeConversation?.messages ?? [],
+    visibleMessages,
     draft,
     settings,
     activeModel,
     attachments
-  ) : undefined, [activeConversation?.messages, activeModel, attachments, draft, settings])
+  ) : undefined, [activeModel, attachments, draft, settings, visibleMessages])
 
   const showToast = useCallback((message: string): void => {
     window.clearTimeout(toastTimerRef.current)
@@ -380,16 +398,26 @@ export default function App(): JSX.Element {
   }, [persistConversation, replaceConversations])
 
   const finishStream = useCallback((event: Extract<StreamEvent, { type: 'done' | 'error' }>): void => {
-    const activeStream = activeStreamRef.current
-    if (!activeStream || event.requestId !== activeStream.requestId) return
+    let targetStream: ActiveStream | undefined
+    for (const stream of activeStreamsRef.current.values()) {
+      if (stream.requestId === event.requestId) {
+        targetStream = stream
+        break
+      }
+    }
+    if (!targetStream) return
+
+    const activeStream = targetStream
+    const targetConvId = activeStream.conversationId
+    const targetAssistantId = activeStream.assistantMessageId
 
     const next = replaceConversations((current) => current.map((conversation) => {
-      if (conversation.id !== activeStream.conversationId) return conversation
+      if (conversation.id !== targetConvId) return conversation
       return {
         ...conversation,
         updatedAt: new Date().toISOString(),
         messages: conversation.messages.map((message) => (
-          message.id === activeStream.assistantMessageId
+          message.id === targetAssistantId
             ? {
               ...message,
               status: event.type === 'error' ? 'error' : 'complete',
@@ -399,11 +427,15 @@ export default function App(): JSX.Element {
         ))
       }
     }))
-    const completedConversation = next.find((conversation) => conversation.id === activeStream.conversationId)
+    const completedConversation = next.find((conversation) => conversation.id === targetConvId)
     if (completedConversation) void persistConversation(completedConversation)
     if (event.type === 'error') showToast(event.error.message)
-    activeStreamRef.current = null
-    setStreaming(false)
+    activeStreamsRef.current.delete(targetConvId)
+    setStreamingConversationIds((prev) => {
+      const nextSet = new Set(prev)
+      nextSet.delete(targetConvId)
+      return nextSet
+    })
 
     // After the first successful user+assistant turn, ask the current model for a concise generated title
     // unless the user has already manually renamed it.
@@ -420,18 +452,31 @@ export default function App(): JSX.Element {
   }, [maybeGenerateTitle, persistConversation, replaceConversations, showToast])
 
   useEffect(() => window.agentbox.chat.onEvent((event) => {
-    const activeStream = activeStreamRef.current
+    if (event.type === 'start') {
+      for (const stream of activeStreamsRef.current.values()) {
+        if (!stream.requestId) {
+          stream.requestId = event.requestId
+          break
+        }
+      }
+    }
+
+    let activeStream: ActiveStream | undefined
+    for (const stream of activeStreamsRef.current.values()) {
+      if (stream.requestId === event.requestId) {
+        activeStream = stream
+        break
+      }
+    }
     if (!activeStream) return
-    if (!activeStream.requestId && event.type === 'start') activeStream.requestId = event.requestId
-    if (event.requestId !== activeStream.requestId) return
 
     if (event.type === 'text-delta' || event.type === 'reasoning-delta') {
       replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream.conversationId) return conversation
+        if (conversation.id !== activeStream!.conversationId) return conversation
         return {
           ...conversation,
           messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream.assistantMessageId) return message
+            if (message.id !== activeStream!.assistantMessageId) return message
             return event.type === 'text-delta'
               ? { ...message, content: message.content + event.delta }
               : { ...message, reasoning: (message.reasoning ?? '') + event.delta }
@@ -442,10 +487,10 @@ export default function App(): JSX.Element {
     }
     if (event.type === 'citation') {
       replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream.conversationId) return conversation
+        if (conversation.id !== activeStream!.conversationId) return conversation
         return {
           ...conversation,
-          messages: conversation.messages.map((message) => message.id === activeStream.assistantMessageId
+          messages: conversation.messages.map((message) => message.id === activeStream!.assistantMessageId
             ? { ...message, citations: mergeCitation(message.citations, event.citation) }
             : message)
         }
@@ -454,10 +499,10 @@ export default function App(): JSX.Element {
     }
     if (event.type === 'usage') {
       replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream.conversationId) return conversation
+        if (conversation.id !== activeStream!.conversationId) return conversation
         return {
           ...conversation,
-          messages: conversation.messages.map((message) => message.id === activeStream.assistantMessageId
+          messages: conversation.messages.map((message) => message.id === activeStream!.assistantMessageId
             ? { ...message, usage: { ...message.usage, ...event.usage } }
             : message)
         }
@@ -482,10 +527,15 @@ export default function App(): JSX.Element {
   }
 
   const handleDeleteConversation = async (conversationId: string): Promise<void> => {
-    if (activeStreamRef.current?.conversationId === conversationId) {
-      await window.agentbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
-      activeStreamRef.current = null
-      setStreaming(false)
+    const stream = activeStreamsRef.current.get(conversationId)
+    if (stream) {
+      if (stream.requestId) await window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
+      activeStreamsRef.current.delete(conversationId)
+      setStreamingConversationIds((prev) => {
+        const nextSet = new Set(prev)
+        nextSet.delete(conversationId)
+        return nextSet
+      })
     }
     autoRenamingRef.current.delete(conversationId)
     manualRenamedRef.current.delete(conversationId)
@@ -633,7 +683,10 @@ export default function App(): JSX.Element {
   const handleSend = async (allowContextTrimming = false): Promise<void> => {
     const content = draft.trim()
     const currentAttachments = [...attachments]
-    if ((!content && currentAttachments.length === 0) || streaming || !activeModel) return
+    if ((!content && currentAttachments.length === 0) || !activeModel) return
+
+    if (activeConversation && streamingConversationIds.has(activeConversation.id)) return
+
     if (contextProjection?.blocked && (!allowContextTrimming || !contextProjection.canTrimOnce)) {
       showToast(contextProjection.message)
       return
@@ -646,11 +699,18 @@ export default function App(): JSX.Element {
       webSearchMode
     })
     if (!conversation) return
+
+    if (streamingConversationIds.has(conversation.id)) return
+
+    const activeChain = getActiveMessageChain(conversation)
+    const lastActiveMessage = activeChain[activeChain.length - 1]
     const timestamp = new Date().toISOString()
+
     const userMessage: ChatMessage = {
       id: createId('message'),
       role: 'user',
       content,
+      parentMessageId: lastActiveMessage ? lastActiveMessage.id : null,
       attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       createdAt: timestamp,
       status: 'complete'
@@ -660,6 +720,7 @@ export default function App(): JSX.Element {
       role: 'assistant',
       content: '',
       reasoning: '',
+      parentMessageId: userMessage.id,
       createdAt: timestamp,
       modelId: activeModel.id,
       status: 'streaming'
@@ -672,22 +733,23 @@ export default function App(): JSX.Element {
       reasoningEnabled,
       webSearchMode,
       messages: [...conversation.messages, userMessage, assistantMessage],
+      currentLeafId: assistantMessage.id,
       updatedAt: timestamp
     }
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
     setDraft('')
     setAttachments([])
-    setStreaming(true)
-    activeStreamRef.current = {
+    setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
+    activeStreamsRef.current.set(nextConversation.id, {
       requestId: '',
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id
-    }
+    })
 
-    const requestMessages: Message[] = nextConversation.messages
-      .filter((message) => message.id !== assistantMessage.id)
-      .map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message)
+    const requestMessages: Message[] = [...activeChain, userMessage].map(
+      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
+    )
 
     const persisted = await persistConversation({
       ...nextConversation,
@@ -699,8 +761,12 @@ export default function App(): JSX.Element {
       )))
       setDraft(content)
       setAttachments(currentAttachments)
-      setStreaming(false)
-      activeStreamRef.current = null
+      activeStreamsRef.current.delete(nextConversation.id)
+      setStreamingConversationIds((prev) => {
+        const nextSet = new Set(prev)
+        nextSet.delete(nextConversation.id)
+        return nextSet
+      })
       return
     }
 
@@ -717,11 +783,13 @@ export default function App(): JSX.Element {
         maxOutputTokens: activeModel.maxOutputTokens,
         allowContextTrimming: allowContextTrimming || undefined
       })
-      if (activeStreamRef.current?.assistantMessageId === assistantMessage.id) {
-        activeStreamRef.current.requestId = requestId
+      const stream = activeStreamsRef.current.get(nextConversation.id)
+      if (stream && stream.assistantMessageId === assistantMessage.id) {
+        stream.requestId = requestId
       }
     } catch (error) {
-      const requestId = activeStreamRef.current?.requestId ?? ''
+      const stream = activeStreamsRef.current.get(nextConversation.id)
+      const requestId = stream?.requestId ?? ''
       finishStream({
         type: 'error',
         requestId,
@@ -730,8 +798,9 @@ export default function App(): JSX.Element {
     }
   }
 
-  const handleStop = async (): Promise<void> => {
-    const activeStream = activeStreamRef.current
+  const handleStop = async (conversationId?: string): Promise<void> => {
+    const targetConvId = conversationId ?? activeConversationId
+    const activeStream = activeStreamsRef.current.get(targetConvId)
     if (!activeStream?.requestId) return
     try {
       await window.agentbox.chat.cancel(activeStream.requestId)
@@ -741,21 +810,33 @@ export default function App(): JSX.Element {
     }
   }
 
-  const handleRegenerate = async (allowContextTrimming = false): Promise<void> => {
-    if (streaming || !activeModel || !activeConversation) return
-    const messages = activeConversation.messages
-    let lastAssistantIndex = -1
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      if (messages[index]?.role === 'assistant') {
-        lastAssistantIndex = index
-        break
+  const handleRegenerate = async (targetAssistantId?: string, allowContextTrimming = false): Promise<void> => {
+    if (!activeModel || !activeConversation || streamingConversationIds.has(activeConversation.id)) return
+    const activeChain = getActiveMessageChain(activeConversation)
+
+    let targetMsg: ChatMessage | undefined
+    if (targetAssistantId) {
+      targetMsg = activeConversation.messages.find(
+        (message) => message.id === targetAssistantId && message.role === 'assistant'
+      )
+    }
+    if (!targetMsg) {
+      for (let index = activeChain.length - 1; index >= 0; index -= 1) {
+        if (activeChain[index]?.role === 'assistant') {
+          targetMsg = activeChain[index]
+          break
+        }
       }
     }
-    if (lastAssistantIndex < 0) return
-    const history = messages.slice(0, lastAssistantIndex)
-    if (!history.some((message) => message.role === 'user')) return
+    if (!targetMsg) return
 
-    const projection = projectContext(history, '', settings, activeModel)
+    const { ancestors, parentUserMessage } = getAncestorsForRegeneration(
+      activeConversation.messages,
+      targetMsg.id
+    )
+    if (!parentUserMessage || ancestors.length === 0) return
+
+    const projection = projectContext(ancestors, '', settings, activeModel)
     if (projection.blocked && (!allowContextTrimming || !projection.canTrimOnce)) {
       showToast(projection.message)
       return
@@ -769,6 +850,7 @@ export default function App(): JSX.Element {
       role: 'assistant',
       content: '',
       reasoning: '',
+      parentMessageId: targetMsg.parentMessageId,
       createdAt: timestamp,
       modelId: activeModel.id,
       status: 'streaming'
@@ -778,30 +860,37 @@ export default function App(): JSX.Element {
       modelId: activeModel.id,
       reasoningEnabled,
       webSearchMode,
-      messages: [...history, assistantMessage],
+      messages: [...activeConversation.messages, assistantMessage],
+      currentLeafId: assistantMessage.id,
       updatedAt: timestamp
     }
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    setStreaming(true)
-    activeStreamRef.current = {
+    setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
+    activeStreamsRef.current.set(nextConversation.id, {
       requestId: '',
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id
-    }
+    })
 
-    const requestMessages: Message[] = history.map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message)
+    const requestMessages: Message[] = ancestors.map(
+      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
+    )
 
     const persisted = await persistConversation({
       ...nextConversation,
-      messages: history
+      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id)
     })
     if (!persisted) {
       replaceConversations((current) => current.map((item) => (
         item.id === activeConversation.id ? activeConversation : item
       )))
-      setStreaming(false)
-      activeStreamRef.current = null
+      activeStreamsRef.current.delete(nextConversation.id)
+      setStreamingConversationIds((prev) => {
+        const nextSet = new Set(prev)
+        nextSet.delete(nextConversation.id)
+        return nextSet
+      })
       return
     }
 
@@ -818,11 +907,13 @@ export default function App(): JSX.Element {
         maxOutputTokens: activeModel.maxOutputTokens,
         allowContextTrimming: allowContextTrimming || undefined
       })
-      if (activeStreamRef.current?.assistantMessageId === assistantMessage.id) {
-        activeStreamRef.current.requestId = requestId
+      const stream = activeStreamsRef.current.get(nextConversation.id)
+      if (stream && stream.assistantMessageId === assistantMessage.id) {
+        stream.requestId = requestId
       }
     } catch (error) {
-      const requestId = activeStreamRef.current?.requestId ?? ''
+      const stream = activeStreamsRef.current.get(nextConversation.id)
+      const requestId = stream?.requestId ?? ''
       finishStream({
         type: 'error',
         requestId,
@@ -831,14 +922,43 @@ export default function App(): JSX.Element {
     }
   }
 
+  const handleSwitchVersion = useCallback((targetMessageId: string): void => {
+    if (!activeConversation || streamingConversationIds.has(activeConversation.id)) return
+    const nextConversation = switchBranch(activeConversation, targetMessageId)
+    replaceConversations((current) => current.map((item) => (
+      item.id === nextConversation.id ? nextConversation : item
+    )))
+    void persistConversation(nextConversation)
+  }, [activeConversation, persistConversation, replaceConversations, streamingConversationIds])
+
+  const handleDeleteMessage = useCallback(async (messageId: string): Promise<void> => {
+    if (!activeConversation) return
+
+    const activeStream = activeStreamsRef.current.get(activeConversation.id)
+    if (activeStream) {
+      if (activeStream.requestId) await window.agentbox.chat.cancel(activeStream.requestId).catch(() => undefined)
+      activeStreamsRef.current.delete(activeConversation.id)
+      setStreamingConversationIds((prev) => {
+        const nextSet = new Set(prev)
+        nextSet.delete(activeConversation.id)
+        return nextSet
+      })
+    }
+
+    const nextConversation = deleteMessageNode(activeConversation, messageId)
+    replaceConversations((current) => current.map((item) => (
+      item.id === nextConversation.id ? nextConversation : item
+    )))
+    void persistConversation(nextConversation)
+  }, [activeConversation, persistConversation, replaceConversations])
+
   const handleEditMessage = async (messageId: string, nextContent: string, regenerate: boolean): Promise<boolean> => {
     const content = nextContent.trim()
-    if (streaming || !activeModel || !activeConversation) return false
+    if (!activeModel || !activeConversation || streamingConversationIds.has(activeConversation.id)) return false
     const messages = activeConversation.messages
-    const targetIndex = messages.findIndex((message) => message.id === messageId && message.role === 'user')
-    if (targetIndex < 0) return false
-    const targetMessage = messages[targetIndex]
-    if (!content && !targetMessage?.attachments?.length) return false
+    const targetUserMsg = messages.find((message) => message.id === messageId && message.role === 'user')
+    if (!targetUserMsg) return false
+    if (!content && !targetUserMsg.attachments?.length) return false
 
     if (!regenerate) {
       const timestamp = new Date().toISOString()
@@ -852,12 +972,25 @@ export default function App(): JSX.Element {
       return true
     }
 
-    const editedHistory = messages.slice(0, targetIndex + 1).map((message, index) => (
-      index === targetIndex ? { ...message, content } : message
-    ))
-    if (!editedHistory.some((message) => message.role === 'user')) return false
+    let ancestors: ChatMessage[] = []
+    if (targetUserMsg.parentMessageId) {
+      const { ancestors: anc } = getAncestorsForRegeneration(messages, targetUserMsg.id)
+      ancestors = anc
+    }
 
-    const projection = projectContext(editedHistory, '', settings, activeModel)
+    const timestamp = new Date().toISOString()
+    const newUserMessage: ChatMessage = {
+      id: createId('message'),
+      role: 'user',
+      content,
+      parentMessageId: targetUserMsg.parentMessageId,
+      attachments: targetUserMsg.attachments,
+      createdAt: timestamp,
+      status: 'complete'
+    }
+
+    const historyForPrompt = [...ancestors, newUserMessage]
+    const projection = projectContext(historyForPrompt, '', settings, activeModel)
     if (projection.blocked) {
       showToast(projection.message)
       return false
@@ -865,45 +998,53 @@ export default function App(): JSX.Element {
     if (!guardWebSearchAvailable()) return false
     if (!guardProviderKey()) return false
 
-    const timestamp = new Date().toISOString()
     const assistantMessage: ChatMessage = {
       id: createId('message'),
       role: 'assistant',
       content: '',
       reasoning: '',
+      parentMessageId: newUserMessage.id,
       createdAt: timestamp,
       modelId: activeModel.id,
       status: 'streaming'
     }
+
     const nextConversation: Conversation = {
       ...activeConversation,
       modelId: activeModel.id,
       reasoningEnabled,
       webSearchMode,
-      messages: [...editedHistory, assistantMessage],
+      messages: [...messages, newUserMessage, assistantMessage],
+      currentLeafId: assistantMessage.id,
       updatedAt: timestamp
     }
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    setStreaming(true)
-    activeStreamRef.current = {
+    setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
+    activeStreamsRef.current.set(nextConversation.id, {
       requestId: '',
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id
-    }
+    })
 
-    const requestMessages: Message[] = editedHistory.map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message)
+    const requestMessages: Message[] = historyForPrompt.map(
+      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
+    )
 
     const persisted = await persistConversation({
       ...nextConversation,
-      messages: editedHistory
+      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id)
     })
     if (!persisted) {
       replaceConversations((current) => current.map((item) => (
         item.id === activeConversation.id ? activeConversation : item
       )))
-      setStreaming(false)
-      activeStreamRef.current = null
+      activeStreamsRef.current.delete(nextConversation.id)
+      setStreamingConversationIds((prev) => {
+        const nextSet = new Set(prev)
+        nextSet.delete(nextConversation.id)
+        return nextSet
+      })
       return false
     }
 
@@ -919,12 +1060,14 @@ export default function App(): JSX.Element {
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
         maxOutputTokens: activeModel.maxOutputTokens
       })
-      if (activeStreamRef.current?.assistantMessageId === assistantMessage.id) {
-        activeStreamRef.current.requestId = requestId
+      const stream = activeStreamsRef.current.get(nextConversation.id)
+      if (stream && stream.assistantMessageId === assistantMessage.id) {
+        stream.requestId = requestId
       }
       return true
     } catch (error) {
-      const requestId = activeStreamRef.current?.requestId ?? ''
+      const stream = activeStreamsRef.current.get(nextConversation.id)
+      const requestId = stream?.requestId ?? ''
       finishStream({
         type: 'error',
         requestId,
@@ -1072,11 +1215,13 @@ export default function App(): JSX.Element {
   }
 
   const handleClearAllData = async (): Promise<void> => {
-    if (activeStreamRef.current) {
-      await window.agentbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
-      activeStreamRef.current = null
-      setStreaming(false)
+    for (const stream of activeStreamsRef.current.values()) {
+      if (stream.requestId) {
+        await window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
+      }
     }
+    activeStreamsRef.current.clear()
+    setStreamingConversationIds(new Set())
     await window.agentbox.data.clearConversations()
     conversationsRef.current = []
     setConversations([])
@@ -1106,11 +1251,6 @@ export default function App(): JSX.Element {
       throw new Error(message)
     }
   }
-
-  const visibleMessages = useMemo(
-    () => (activeConversation?.messages ?? []).filter((message) => message.role !== 'system'),
-    [activeConversation?.messages]
-  )
 
   if (loading) {
     return (
@@ -1175,11 +1315,14 @@ export default function App(): JSX.Element {
         <section className="chat-stage">
           <ChatContent
             messages={visibleMessages}
+            allMessages={activeConversation?.messages}
             models={models}
-            streaming={streaming}
+            streaming={isCurrentStreaming}
             suggestions={promptSuggestions}
+            onDeleteMessage={(messageId) => void handleDeleteMessage(messageId)}
             onEditMessage={(messageId, content, regenerate) => handleEditMessage(messageId, content, regenerate)}
-            onRegenerate={() => void handleRegenerate()}
+            onRegenerate={(targetAssistantId) => void handleRegenerate(targetAssistantId)}
+            onSwitchVersion={handleSwitchVersion}
             onSuggestion={setDraft}
           />
           <Composer
@@ -1199,7 +1342,7 @@ export default function App(): JSX.Element {
             webSearchMode={webSearchMode}
             sendBlocked={contextProjection?.blocked ?? false}
             sendOnEnter={settings.sendShortcut === 'enter'}
-            streaming={streaming}
+            streaming={isCurrentStreaming}
             onAttachmentsChange={setAttachments}
             onDraftChange={setDraft}
             onOpenContextSettings={() => openSettings('general')}
@@ -1207,7 +1350,7 @@ export default function App(): JSX.Element {
             onSend={() => void handleSend()}
             onSendWithTrim={() => void handleSend(true)}
             onShowToast={showToast}
-            onStop={() => void handleStop()}
+            onStop={() => void handleStop(activeConversationId)}
             onToggleAgentMode={handleToggleAgentMode}
             onToggleReasoning={handleToggleReasoning}
             onWebSearchModeChange={handleWebSearchModeChange}

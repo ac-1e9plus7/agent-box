@@ -677,10 +677,17 @@ function validateConversation(value: unknown): Conversation {
     const citations = parseStoredCitations(message.citations)
     const usage = parseStoredTokenUsage(message.usage)
     const attachments = parseStoredAttachments(message.attachments)
+    const parentMessageId =
+      message.parentMessageId === null
+        ? null
+        : typeof message.parentMessageId === 'string' && message.parentMessageId.trim()
+          ? message.parentMessageId.trim()
+          : undefined
     return {
       id: message.id,
       role: message.role,
       content: message.content,
+      parentMessageId,
       reasoning: message.reasoning,
       citations,
       usage,
@@ -703,6 +710,10 @@ function validateConversation(value: unknown): Conversation {
   }
   requireIsoDate(value.createdAt, 'conversation createdAt')
   requireIsoDate(value.updatedAt, 'conversation updatedAt')
+  const currentLeafId =
+    typeof value.currentLeafId === 'string' && value.currentLeafId.trim()
+      ? value.currentLeafId.trim()
+      : undefined
   return {
     id: value.id,
     title: value.title,
@@ -712,6 +723,7 @@ function validateConversation(value: unknown): Conversation {
     skillIds,
     webSearchMode,
     messages,
+    currentLeafId,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }

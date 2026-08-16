@@ -183,6 +183,7 @@ export interface Message {
   id: string
   role: MessageRole
   content: string
+  parentMessageId?: string | null
   reasoning?: string
   citations?: WebCitation[]
   usage?: TokenUsage
@@ -209,6 +210,7 @@ export interface Conversation {
   /** Defaults to off when omitted by an older vault. */
   webSearchMode?: WebSearchMode
   messages: Message[]
+  currentLeafId?: string
   createdAt: string
   updatedAt: string
 }
