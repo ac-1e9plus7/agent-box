@@ -27,11 +27,12 @@ import type {
 } from './types'
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
+import { runStreamWithReplay } from './stream-helper'
 import {
-  TITLE_SYSTEM_PROMPT,
   cleanGeneratedTitle,
   cleanManualTitle,
   firstUserQuestion,
+  TITLE_SYSTEM_PROMPT
 } from './title'
 
 const emptySettings: AppSettings = {
@@ -132,6 +133,7 @@ export default function App(): JSX.Element {
   const activeStreamRef = useRef<ActiveStream | null>(null)
   const toastTimerRef = useRef<number | undefined>(undefined)
   const autoRenamingRef = useRef<Set<string>>(new Set())
+  const manualRenamedRef = useRef<Set<string>>(new Set())
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const activeModel = models.find((model) => model.id === activeModelId)
@@ -285,8 +287,8 @@ export default function App(): JSX.Element {
     if (!model) return
     const question = firstUserQuestion(conversation.messages)
     if (!question) return
-    // Guard against duplicate generation for the same conversation.
-    if (autoRenamingRef.current.has(conversation.id)) return
+    // Guard against duplicate generation or overwriting manual renames.
+    if (autoRenamingRef.current.has(conversation.id) || manualRenamedRef.current.has(conversation.id)) return
     autoRenamingRef.current.add(conversation.id)
 
     let unsubscribe: (() => void) | undefined
@@ -298,42 +300,48 @@ export default function App(): JSX.Element {
       unsubscribe?.()
     }
 
+    const processEvent = (event: StreamEvent): void => {
+      if (event.type === 'text-delta') {
+        collected += event.delta
+        return
+      }
+      if (event.type === 'done') {
+        finish()
+        const title = cleanGeneratedTitle(collected)
+        if (!title) return
+        const current = conversationsRef.current.find((item) => item.id === conversation.id)
+        // Only overwrite if the user has not manually renamed it in the meantime.
+        if (current && !manualRenamedRef.current.has(conversation.id)) {
+          const renamed = { ...current, title, updatedAt: new Date().toISOString() }
+          replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
+          void persistConversation(renamed)
+        }
+        return
+      }
+      if (event.type === 'error') {
+        finish()
+      }
+    }
+
     try {
-      const { requestId } = await window.chatbox.chat.stream({
-        conversationId: conversation.id,
-        modelId: model.id,
-        messages: [
-          { id: 'title-system', role: 'system', content: TITLE_SYSTEM_PROMPT, createdAt: new Date(0).toISOString() },
-          { id: 'title-user', role: 'user', content: question, createdAt: new Date(0).toISOString() },
-        ],
-        reasoningEnabled: false,
-        webSearchMode: 'off',
-        maxOutputTokens: 32,
-      })
-      unsubscribe = window.chatbox.chat.onEvent((event) => {
-        if (event.requestId !== requestId) return
-        if (event.type === 'text-delta') {
-          collected += event.delta
-          return
-        }
-        if (event.type === 'done') {
-          finish()
-          const title = cleanGeneratedTitle(collected)
-          if (!title) return
-          const current = conversationsRef.current.find((item) => item.id === conversation.id)
-          // Only overwrite if the user has not renamed it in the meantime and
-          // it is still the default title.
-          if (current && current.title === '新对话') {
-            const renamed = { ...current, title, updatedAt: new Date().toISOString() }
-            replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
-            void persistConversation(renamed)
-          }
-          return
-        }
-        if (event.type === 'error') {
-          finish()
-        }
-      })
+      const result = await runStreamWithReplay(
+        window.chatbox.chat.stream,
+        window.chatbox.chat.onEvent,
+        {
+          conversationId: conversation.id,
+          modelId: model.id,
+          messages: [
+            { id: 'title-system', role: 'system', content: TITLE_SYSTEM_PROMPT, createdAt: new Date(0).toISOString() },
+            { id: 'title-user', role: 'user', content: question, createdAt: new Date(0).toISOString() },
+          ],
+          reasoningEnabled: false,
+          webSearchMode: 'off',
+          maxOutputTokens: 32,
+        },
+        processEvent
+      )
+      
+      unsubscribe = result.unsubscribe
       // Safety net: give up after 20s regardless of stream state.
       window.setTimeout(() => finish(), 20_000)
     } catch {
@@ -347,7 +355,7 @@ export default function App(): JSX.Element {
     const current = conversationsRef.current.find((item) => item.id === conversationId)
     if (!current || current.title === title) return
     // A manual rename marks the conversation so auto-generation won't override it.
-    autoRenamingRef.current.add(conversationId)
+    manualRenamedRef.current.add(conversationId)
     const renamed = { ...current, title, updatedAt: new Date().toISOString() }
     replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
     void persistConversation(renamed)
@@ -379,18 +387,19 @@ export default function App(): JSX.Element {
     activeStreamRef.current = null
     setStreaming(false)
 
-    // After the first successful user+assistant turn on a still-default-titled
-    // conversation, ask the current model for a concise generated title.
+    // After the first successful user+assistant turn, ask the current model for a concise generated title
+    // unless the user has already manually renamed it.
     if (
       event.type === 'done' &&
       event.finishReason !== 'cancelled' &&
       completedConversation &&
-      completedConversation.title === '新对话' &&
+      !manualRenamedRef.current.has(completedConversation.id) &&
+      !autoRenamingRef.current.has(completedConversation.id) &&
       completedConversation.messages.filter((message) => message.role !== 'system').length === 2
     ) {
       void maybeGenerateTitle(completedConversation)
     }
-  }, [persistConversation, replaceConversations, showToast])
+  }, [maybeGenerateTitle, persistConversation, replaceConversations, showToast])
 
   useEffect(() => window.chatbox.chat.onEvent((event) => {
     const activeStream = activeStreamRef.current
@@ -458,6 +467,8 @@ export default function App(): JSX.Element {
       activeStreamRef.current = null
       setStreaming(false)
     }
+    autoRenamingRef.current.delete(conversationId)
+    manualRenamedRef.current.delete(conversationId)
     try {
       await window.chatbox.conversations.remove(conversationId)
       const next = replaceConversations((current) => current.filter((conversation) => conversation.id !== conversationId))

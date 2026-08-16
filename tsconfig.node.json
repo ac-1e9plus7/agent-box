@@ -14,6 +14,7 @@
     "src/renderer/src/title.ts",
     "src/renderer/src/web-search.ts",
     "src/renderer/src/types.ts",
+    "src/renderer/src/stream-helper.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]
