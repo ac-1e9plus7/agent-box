@@ -705,4 +705,153 @@ describe('request body adapters', () => {
       ),
     ).toBe('off')
   })
+
+  it('encodes multimodal attachments for OpenAI Chat Completions', () => {
+    const messagesWithAttachments: Message[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Check this image and code',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'photo.png',
+            mimeType: 'image/png',
+            size: 500,
+            data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==',
+            type: 'image',
+          },
+          {
+            id: 'att-2',
+            name: 'main.py',
+            mimeType: 'text/x-python',
+            size: 120,
+            data: 'print("hello")',
+            type: 'text',
+          },
+        ],
+        createdAt: timestamp,
+      },
+    ]
+    const body = buildRequestBody(
+      'openai-chat-completions',
+      { kind: 'openai' },
+      model,
+      messagesWithAttachments,
+      { ...request, messages: messagesWithAttachments },
+      4_096,
+    )
+    const messagesBody = body.messages as Array<{ role: string; content: unknown }>
+    expect(messagesBody).toHaveLength(1)
+    expect(messagesBody[0]?.role).toBe('user')
+    expect(messagesBody[0]?.content).toEqual([
+      { type: 'text', text: 'Check this image and code' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==' } },
+      { type: 'text', text: '\n[Attached File: main.py]\n```\nprint("hello")\n```' },
+    ])
+  })
+
+  it('encodes multimodal attachments for OpenAI Responses', () => {
+    const messagesWithAttachments: Message[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Check this image',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'photo.jpg',
+            mimeType: 'image/jpeg',
+            size: 300,
+            data: 'data:image/jpeg;base64,abc123==',
+            type: 'image',
+          },
+        ],
+        createdAt: timestamp,
+      },
+    ]
+    const body = buildRequestBody(
+      'openai-responses',
+      { kind: 'openai' },
+      model,
+      messagesWithAttachments,
+      { ...request, messages: messagesWithAttachments },
+      4_096,
+    )
+    const input = body.input as Array<{ type: string; role: string; content: unknown[] }>
+    expect(input[0]?.content).toEqual([
+      { type: 'input_text', text: 'Check this image' },
+      { type: 'input_image', image_url: 'data:image/jpeg;base64,abc123==' },
+    ])
+  })
+
+  it('encodes multimodal attachments and PDF document blocks for Anthropic Messages', () => {
+    const messagesWithAttachments: Message[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: 'Analyze these files',
+        attachments: [
+          {
+            id: 'att-1',
+            name: 'diagram.png',
+            mimeType: 'image/png',
+            size: 500,
+            data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==',
+            type: 'image',
+          },
+          {
+            id: 'att-2',
+            name: 'doc.pdf',
+            mimeType: 'application/pdf',
+            size: 2000,
+            data: 'data:application/pdf;base64,JVBERi0xLjQK==',
+            type: 'document',
+          },
+          {
+            id: 'att-3',
+            name: 'notes.txt',
+            mimeType: 'text/plain',
+            size: 40,
+            data: 'important notes',
+            type: 'text',
+          },
+        ],
+        createdAt: timestamp,
+      },
+    ]
+    const body = buildRequestBody(
+      'anthropic-messages',
+      { kind: 'anthropic' },
+      model,
+      messagesWithAttachments,
+      { ...request, messages: messagesWithAttachments },
+      4_096,
+    )
+    const conv = body.messages as Array<{ role: string; content: unknown[] }>
+    expect(conv[0]?.role).toBe('user')
+    expect(conv[0]?.content).toEqual([
+      { type: 'text', text: 'Analyze these files' },
+      {
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: 'image/png',
+          data: 'iVBORw0KGgoAAAANSUhEUg==',
+        },
+      },
+      {
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: 'JVBERi0xLjQK==',
+        },
+      },
+      {
+        type: 'text',
+        text: '\n[Attached File: notes.txt]\n```\nimportant notes\n```',
+      },
+    ])
+  })
 })

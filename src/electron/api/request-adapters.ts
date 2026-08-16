@@ -32,7 +32,7 @@ export function buildRequestBody(
   if (format === 'openai-chat-completions') {
     const body: Record<string, unknown> = {
       model: model.remoteId,
-      messages: messages.map(({ role, content }) => ({ role, content })),
+      messages: toOpenAiMessages(messages),
       stream: true,
       max_tokens: maxOutputTokens,
     }
@@ -100,6 +100,40 @@ export function resolveWebSearchMode(
   return request.webSearchMode ?? model.defaultWebSearchMode ?? 'off'
 }
 
+export function toOpenAiMessages(messages: Message[]): Array<Record<string, unknown>> {
+  return messages.map((message) => {
+    if (message.role === 'system' || !message.attachments?.length) {
+      return { role: message.role, content: message.content }
+    }
+    const parts: Array<Record<string, unknown>> = []
+    if (message.content) {
+      parts.push({ type: 'text', text: message.content })
+    }
+    for (const att of message.attachments) {
+      if (att.type === 'image') {
+        parts.push({
+          type: 'image_url',
+          image_url: { url: att.data },
+        })
+      } else if (att.type === 'text') {
+        parts.push({
+          type: 'text',
+          text: `\n[Attached File: ${att.name}]\n\`\`\`\n${att.data}\n\`\`\``,
+        })
+      } else if (att.type === 'document') {
+        parts.push({
+          type: 'text',
+          text: `\n[Attached Document: ${att.name}]`,
+        })
+      }
+    }
+    return {
+      role: message.role,
+      content: parts.length > 0 ? parts : message.content,
+    }
+  })
+}
+
 export function toResponsesInput(messages: Message[]): {
   instructions: string
   input: Array<Record<string, unknown>>
@@ -120,10 +154,34 @@ export function toResponsesInput(messages: Message[]): {
           content: [{ type: 'output_text', text: message.content, annotations: [] }],
         }
       }
+      const contentList: Array<Record<string, unknown>> = []
+      if (message.content) {
+        contentList.push({ type: 'input_text', text: message.content })
+      }
+      if (message.attachments?.length) {
+        for (const att of message.attachments) {
+          if (att.type === 'image') {
+            contentList.push({ type: 'input_image', image_url: att.data })
+          } else if (att.type === 'text') {
+            contentList.push({
+              type: 'input_text',
+              text: `\n[Attached File: ${att.name}]\n\`\`\`\n${att.data}\n\`\`\``,
+            })
+          } else if (att.type === 'document') {
+            contentList.push({
+              type: 'input_text',
+              text: `\n[Attached Document: ${att.name}]`,
+            })
+          }
+        }
+      }
+      if (contentList.length === 0) {
+        contentList.push({ type: 'input_text', text: message.content })
+      }
       return {
         type: 'message',
         role: 'user',
-        content: [{ type: 'input_text', text: message.content }],
+        content: contentList,
       }
     })
   return { instructions, input }
@@ -211,20 +269,81 @@ function reasoningBudget(
   )
 }
 
-function toAnthropicMessages(messages: Message[]): {
+export function toAnthropicContentBlocks(message: Message): string | Array<Record<string, unknown>> {
+  if (!message.attachments?.length) return message.content
+  const blocks: Array<Record<string, unknown>> = []
+  if (message.content) {
+    blocks.push({ type: 'text', text: message.content })
+  }
+  for (const att of message.attachments) {
+    if (att.type === 'image') {
+      const match = att.data.match(/^data:(image\/[a-zA-Z+.-]+);base64,(.+)$/)
+      if (match && match[1] && match[2]) {
+        blocks.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: match[1],
+            data: match[2],
+          },
+        })
+      }
+    } else if (att.type === 'document') {
+      const match = att.data.match(/^data:(application\/pdf);base64,(.+)$/)
+      if (match && match[1] && match[2]) {
+        blocks.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: match[2],
+          },
+        })
+      } else {
+        blocks.push({
+          type: 'text',
+          text: `\n[Attached Document: ${att.name}]`,
+        })
+      }
+    } else if (att.type === 'text') {
+      blocks.push({
+        type: 'text',
+        text: `\n[Attached File: ${att.name}]\n\`\`\`\n${att.data}\n\`\`\``,
+      })
+    }
+  }
+  if (blocks.length === 0) return message.content
+  return blocks
+}
+
+export function toAnthropicMessages(messages: Message[]): {
   system: string
-  conversation: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversation: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }>
 } {
   const system = messages
     .filter((message) => message.role === 'system')
     .map((message) => message.content)
     .join('\n\n')
-  const conversation: Array<{ role: 'user' | 'assistant'; content: string }> = []
+  const conversation: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> = []
   for (const message of messages) {
     if (message.role === 'system') continue
+    const formattedContent = toAnthropicContentBlocks(message)
     const previous = conversation.at(-1)
-    if (previous?.role === message.role) previous.content += `\n\n${message.content}`
-    else conversation.push({ role: message.role, content: message.content })
+    if (previous?.role === message.role) {
+      if (typeof previous.content === 'string' && typeof formattedContent === 'string') {
+        previous.content += `\n\n${formattedContent}`
+      } else {
+        const prevBlocks: Array<Record<string, unknown>> = typeof previous.content === 'string'
+          ? [{ type: 'text', text: previous.content }]
+          : previous.content
+        const nextBlocks: Array<Record<string, unknown>> = typeof formattedContent === 'string'
+          ? [{ type: 'text', text: formattedContent }]
+          : formattedContent
+        previous.content = [...prevBlocks, ...nextBlocks]
+      }
+    } else {
+      conversation.push({ role: message.role, content: formattedContent })
+    }
   }
   return { system, conversation }
 }

@@ -2,8 +2,9 @@ import { Children, isValidElement, useEffect, useRef, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { TokenUsage, WebCitation } from '../../../shared/types'
+import type { MessageAttachment, TokenUsage, WebCitation } from '../../../shared/types'
 import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
+import { formatFileSize } from '../file-helper'
 import { Icon } from './Icon'
 
 interface ChatContentProps {
@@ -150,14 +151,57 @@ function EmptyConversation({
   )
 }
 
+function MessageAttachmentsView({
+  attachments,
+  onPreviewImage
+}: {
+  attachments?: MessageAttachment[]
+  onPreviewImage: (url: string, name: string) => void
+}): JSX.Element | null {
+  if (!attachments?.length) return null
+
+  return (
+    <div className="message-attachments-grid">
+      {attachments.map((attachment) => {
+        if (attachment.type === 'image') {
+          return (
+            <button
+              key={attachment.id}
+              className="message-attachment-image-card"
+              onClick={() => onPreviewImage(attachment.data, attachment.name)}
+              title="点击查看原图"
+              type="button"
+            >
+              <img alt={attachment.name} src={attachment.data} />
+            </button>
+          )
+        }
+        return (
+          <div key={attachment.id} className="message-attachment-doc-card">
+            <div className="message-attachment-icon">
+              <Icon name={attachment.type === 'document' ? 'file' : 'code'} size={18} />
+            </div>
+            <div className="message-attachment-details">
+              <strong title={attachment.name}>{attachment.name}</strong>
+              <small>{formatFileSize(attachment.size)}</small>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function UserMessage({
   message,
   canEdit,
-  onEdit
+  onEdit,
+  onPreviewImage
 }: {
   message: ChatMessage
   canEdit: boolean
   onEdit: (messageId: string, content: string, regenerate: boolean) => Promise<boolean>
+  onPreviewImage: (url: string, name: string) => void
 }): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(message.content)
@@ -176,7 +220,7 @@ function UserMessage({
   }
   const commitEdit = async (regenerate: boolean): Promise<void> => {
     const trimmed = draft.trim()
-    if (!trimmed) return
+    if (!trimmed && !message.attachments?.length) return
     const ok = await onEdit(message.id, trimmed, regenerate)
     if (ok) setEditing(false)
   }
@@ -217,7 +261,10 @@ function UserMessage({
   return (
     <article className="message-row user-message">
       <div className="message-column">
-        <div className="user-bubble"><MessageBody content={message.content} /></div>
+        <MessageAttachmentsView attachments={message.attachments} onPreviewImage={onPreviewImage} />
+        {Boolean(message.content.trim()) && (
+          <div className="user-bubble"><MessageBody content={message.content} /></div>
+        )}
         {canEdit && (
           <div className="user-message-tools">
             <button onClick={startEdit}><Icon name="edit" size={14} /> 编辑</button>
@@ -318,6 +365,7 @@ function AssistantMessage({
 
 export function ChatContent({ messages, models, streaming, suggestions, onEditMessage, onRegenerate, onSuggestion }: ChatContentProps): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null)
+  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: messages.some((message) => message.status === 'streaming') ? 'auto' : 'smooth' })
@@ -360,11 +408,32 @@ export function ChatContent({ messages, models, streaming, suggestions, onEditMe
               message={message}
               canEdit={!streaming}
               onEdit={onEditMessage}
+              onPreviewImage={(url, name) => setPreviewImage({ url, name })}
             />
           )
         })}
         <div ref={endRef} />
       </div>
+
+      {previewImage && (
+        <div className="lightbox-overlay" onClick={() => setPreviewImage(null)}>
+          <div className="lightbox-content" onClick={(event) => event.stopPropagation()}>
+            <div className="lightbox-header">
+              <span className="lightbox-title">{previewImage.name}</span>
+              <button
+                aria-label="关闭预览"
+                className="icon-button"
+                onClick={() => setPreviewImage(null)}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </div>
+            <div className="lightbox-body">
+              <img alt={previewImage.name} src={previewImage.url} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

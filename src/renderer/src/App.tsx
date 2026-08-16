@@ -4,6 +4,7 @@ import type {
   AppSettings,
   Conversation as StoredConversation,
   Message,
+  MessageAttachment,
   ModelInput,
   ProviderInput,
   StreamEvent,
@@ -119,6 +120,7 @@ export default function App(): JSX.Element {
   const [reasoningEnabled, setReasoningEnabled] = useState(false)
   const [webSearchMode, setWebSearchMode] = useState<WebSearchMode>('off')
   const [draft, setDraft] = useState('')
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([])
   const [query, setQuery] = useState('')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -143,8 +145,9 @@ export default function App(): JSX.Element {
     activeConversation?.messages ?? [],
     draft,
     settings,
-    activeModel
-  ) : undefined, [activeConversation?.messages, activeModel, draft, settings])
+    activeModel,
+    attachments
+  ) : undefined, [activeConversation?.messages, activeModel, attachments, draft, settings])
 
   const showToast = useCallback((message: string): void => {
     window.clearTimeout(toastTimerRef.current)
@@ -215,6 +218,7 @@ export default function App(): JSX.Element {
       setReasoningEnabled(Boolean(saved.reasoningEnabled))
       setWebSearchMode(saved.webSearchMode ?? 'off')
       setDraft('')
+      setAttachments([])
       setMobileSidebarOpen(false)
       return saved
     } catch (error) {
@@ -460,6 +464,7 @@ export default function App(): JSX.Element {
     const model = models.find((item) => item.id === conversation.modelId)
     const provider = providers.find((item) => item.id === model?.providerId)
     setWebSearchMode(effectiveWebSearchMode(model, provider, conversation.webSearchMode ?? 'off'))
+    setAttachments([])
     setMobileSidebarOpen(false)
   }
 
@@ -573,7 +578,8 @@ export default function App(): JSX.Element {
 
   const handleSend = async (allowContextTrimming = false): Promise<void> => {
     const content = draft.trim()
-    if (!content || streaming || !activeModel) return
+    const currentAttachments = [...attachments]
+    if ((!content && currentAttachments.length === 0) || streaming || !activeModel) return
     if (contextProjection?.blocked && (!allowContextTrimming || !contextProjection.canTrimOnce)) {
       showToast(contextProjection.message)
       return
@@ -591,6 +597,7 @@ export default function App(): JSX.Element {
       id: createId('message'),
       role: 'user',
       content,
+      attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       createdAt: timestamp,
       status: 'complete'
     }
@@ -603,9 +610,10 @@ export default function App(): JSX.Element {
       modelId: activeModel.id,
       status: 'streaming'
     }
+    const fallbackTitle = content || (currentAttachments[0] ? `[文件] ${currentAttachments[0].name}` : '新对话')
     const nextConversation: Conversation = {
       ...conversation,
-      title: conversation.messages.length === 0 ? makeTitle(content) : conversation.title,
+      title: conversation.messages.length === 0 ? makeTitle(fallbackTitle) : conversation.title,
       modelId: activeModel.id,
       reasoningEnabled,
       webSearchMode,
@@ -615,6 +623,7 @@ export default function App(): JSX.Element {
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
     setDraft('')
+    setAttachments([])
     setStreaming(true)
     activeStreamRef.current = {
       requestId: '',
@@ -635,6 +644,7 @@ export default function App(): JSX.Element {
         item.id === conversation.id ? conversation : item
       )))
       setDraft(content)
+      setAttachments(currentAttachments)
       setStreaming(false)
       activeStreamRef.current = null
       return
@@ -765,10 +775,12 @@ export default function App(): JSX.Element {
 
   const handleEditMessage = async (messageId: string, nextContent: string, regenerate: boolean): Promise<boolean> => {
     const content = nextContent.trim()
-    if (!content || streaming || !activeModel || !activeConversation) return false
+    if (streaming || !activeModel || !activeConversation) return false
     const messages = activeConversation.messages
     const targetIndex = messages.findIndex((message) => message.id === messageId && message.role === 'user')
     if (targetIndex < 0) return false
+    const targetMessage = messages[targetIndex]
+    if (!content && !targetMessage?.attachments?.length) return false
 
     if (!regenerate) {
       const timestamp = new Date().toISOString()
@@ -1108,6 +1120,7 @@ export default function App(): JSX.Element {
           />
           <Composer
             activeModel={activeModel}
+            attachments={attachments}
             contextLimit={contextProjection?.inputBudget ?? 0}
             contextCanTrimOnce={contextProjection?.canTrimOnce ?? false}
             contextMessage={contextProjection?.message ?? ''}
@@ -1122,11 +1135,13 @@ export default function App(): JSX.Element {
             sendBlocked={contextProjection?.blocked ?? false}
             sendOnEnter={settings.sendShortcut === 'enter'}
             streaming={streaming}
+            onAttachmentsChange={setAttachments}
             onDraftChange={setDraft}
             onOpenContextSettings={() => openSettings('general')}
             onOpenModelSettings={() => openSettings('models')}
             onSend={() => void handleSend()}
             onSendWithTrim={() => void handleSend(true)}
+            onShowToast={showToast}
             onStop={() => void handleStop()}
             onToggleReasoning={handleToggleReasoning}
             onWebSearchModeChange={handleWebSearchModeChange}

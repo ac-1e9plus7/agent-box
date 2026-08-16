@@ -53,7 +53,7 @@ src/electron/api/context-window.ts  完整轮次裁剪（token 估算来自 shar
 src/electron/storage/               加密 vault、schema、配额和仓库操作
 src/renderer/src/App.tsx            renderer 状态与业务编排
 src/renderer/src/components/        React UI
-src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、defaults
+src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、file-helper、defaults
 scripts/                            零依赖图标再生命令（generate-icons.mjs、make-ico.mjs）
 build/                              应用图标资产（icon.svg/icon.png/icon.ico），package.json 已引用，必须随仓库提交
 tests/                              协议、schema、配额和纯函数测试
@@ -198,6 +198,7 @@ tests/                              协议、schema、配额和纯函数测试
 - 流式助手与事件重放：`tests/stream-helper.test.ts`
 - 默认模型：`tests/default-models.test.ts`
 - token 步进：`tests/token-step.test.ts`
+- 文件与多模态：`tests/file-helper.test.ts`
 
 测试至少覆盖：正常路径、关闭状态、旧字段缺失、非法/超大外部输入、取消或失败路径，以及三种 API 格式中受影响的每一种。
 

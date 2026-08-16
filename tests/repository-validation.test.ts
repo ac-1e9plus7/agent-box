@@ -273,4 +273,60 @@ describe('AppRepository business constraints and relational integrity', () => {
       }),
     ).rejects.toThrow('Invalid message content')
   })
+
+  it('validates and stores message attachments', async () => {
+    const validConv = {
+      id: 'conv-with-att',
+      title: 'With Attachments',
+      modelId: 'openrouter-auto',
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user' as const,
+          content: 'Here is an attachment',
+          attachments: [
+            {
+              id: 'att-1',
+              name: 'test.png',
+              mimeType: 'image/png',
+              size: 1024,
+              data: 'data:image/png;base64,123456',
+              type: 'image' as const,
+            },
+          ],
+          createdAt: timestamp,
+        },
+      ],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    const saved = await repo.saveConversation(validConv)
+    expect(saved.messages[0]?.attachments).toHaveLength(1)
+    expect(saved.messages[0]?.attachments?.[0]?.name).toBe('test.png')
+
+    // Rejects invalid attachment type
+    await expect(
+      repo.saveConversation({
+        ...validConv,
+        messages: [
+          {
+            id: 'msg-2',
+            role: 'user',
+            content: 'Bad att',
+            createdAt: timestamp,
+            attachments: [
+              {
+                id: 'att-2',
+                name: 'bad.bin',
+                mimeType: 'application/octet-stream',
+                size: 10,
+                data: 'xxx',
+                type: 'unknown' as never,
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow('Invalid attachment type')
+  })
 })

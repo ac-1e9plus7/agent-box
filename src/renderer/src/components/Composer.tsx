@@ -1,11 +1,14 @@
-import { useEffect, useRef } from 'react'
-import type { CSSProperties, JSX } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { ClipboardEvent, CSSProperties, DragEvent, JSX } from 'react'
+import type { MessageAttachment } from '../../../shared/types'
 import type { ModelConfig, WebSearchMode } from '../types'
+import { formatFileSize, processSelectedFiles } from '../file-helper'
 import { WEB_SEARCH_MODE_LABELS } from '../web-search'
 import { Icon } from './Icon'
 
 interface ComposerProps {
   activeModel?: ModelConfig
+  attachments: MessageAttachment[]
   contextCanTrimOnce: boolean
   contextLimit: number
   contextMessage: string
@@ -19,6 +22,7 @@ interface ComposerProps {
   webSearchMode: WebSearchMode
   sendBlocked: boolean
   sendOnEnter: boolean
+  onAttachmentsChange: (attachments: MessageAttachment[]) => void
   onDraftChange: (draft: string) => void
   onOpenContextSettings: () => void
   onOpenModelSettings: () => void
@@ -27,6 +31,7 @@ interface ComposerProps {
   onStop: () => void
   onToggleReasoning: () => void
   onWebSearchModeChange: (mode: WebSearchMode) => void
+  onShowToast: (message: string) => void
   streaming: boolean
 }
 
@@ -38,6 +43,7 @@ function compactNumber(value: number): string {
 
 export function Composer({
   activeModel,
+  attachments,
   contextCanTrimOnce,
   contextLimit,
   contextMessage,
@@ -51,6 +57,7 @@ export function Composer({
   webSearchMode,
   sendBlocked,
   sendOnEnter,
+  onAttachmentsChange,
   onDraftChange,
   onOpenContextSettings,
   onOpenModelSettings,
@@ -59,9 +66,14 @@ export function Composer({
   onStop,
   onToggleReasoning,
   onWebSearchModeChange,
+  onShowToast,
   streaming
 }: ComposerProps): JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
   const contextPercentage = contextLimit ? Math.min((contextTokens / contextLimit) * 100, 100) : 0
   const reasoningLabel = !activeModel?.supportsReasoning
     ? '思考不可用'
@@ -84,8 +96,71 @@ export function Composer({
     textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`
   }, [draft])
 
+  const handleAddFiles = async (files: FileList | File[]): Promise<void> => {
+    if (disabled || uploading) return
+    setUploading(true)
+    try {
+      const processed = await processSelectedFiles(files)
+      onAttachmentsChange([...attachments, ...processed])
+    } catch (error) {
+      onShowToast(error instanceof Error ? error.message : '文件读取失败')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveAttachment = (id: string): void => {
+    onAttachmentsChange(attachments.filter((item) => item.id !== id))
+  }
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>): void => {
+    const items = event.clipboardData?.items
+    if (!items) return
+    const fileItems: File[] = []
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index]
+      if (item && item.kind === 'file') {
+        const file = item.getAsFile()
+        if (file) fileItems.push(file)
+      }
+    }
+    if (fileItems.length > 0) {
+      event.preventDefault()
+      void handleAddFiles(fileItems)
+    }
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    if (!disabled && !isDragging) setIsDragging(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return
+    setIsDragging(false)
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    setIsDragging(false)
+    if (disabled) return
+    const files = event.dataTransfer?.files
+    if (files && files.length > 0) {
+      void handleAddFiles(files)
+    }
+  }
+
+  const canSend = !disabled && !sendBlocked && (Boolean(draft.trim()) || attachments.length > 0)
+
   return (
-    <div className="composer-wrap">
+    <div
+      className={`composer-wrap ${isDragging ? 'is-drag-over' : ''}`}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {contextMessage && (
         <div className={`context-notice is-${contextTone}`} role={contextTone === 'error' ? 'alert' : 'status'}>
           <Icon name={contextTone === 'error' ? 'info' : 'refresh'} size={15} />
@@ -98,6 +173,45 @@ export function Composer({
         </div>
       )}
       <div className={`composer ${disabled ? 'is-disabled' : ''} ${contextTone === 'error' ? 'has-context-error' : ''}`}>
+        <input
+          ref={fileInputRef}
+          accept="image/*,.pdf,.txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.yaml,.yml,.xml,.sql,.sh,.log"
+          aria-label="上传文件"
+          hidden
+          multiple
+          type="file"
+          onChange={(event) => {
+            if (event.target.files?.length) void handleAddFiles(event.target.files)
+          }}
+        />
+
+        {attachments.length > 0 && (
+          <div className="composer-attachments">
+            {attachments.map((attachment) => (
+              <div key={attachment.id} className="composer-attachment-item">
+                {attachment.type === 'image' ? (
+                  <img alt={attachment.name} className="composer-attachment-preview" src={attachment.data} />
+                ) : (
+                  <div className="composer-attachment-file-icon">
+                    <Icon name={attachment.type === 'document' ? 'file' : 'code'} size={16} />
+                  </div>
+                )}
+                <div className="composer-attachment-info">
+                  <span className="composer-attachment-name" title={attachment.name}>{attachment.name}</span>
+                  <small className="composer-attachment-size">{formatFileSize(attachment.size)}</small>
+                </div>
+                <button
+                  aria-label="移除附件"
+                  className="composer-attachment-remove"
+                  onClick={() => handleRemoveAttachment(attachment.id)}
+                >
+                  <Icon name="close" size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <textarea
           ref={textareaRef}
           aria-label="消息输入框"
@@ -109,16 +223,27 @@ export function Composer({
               : event.key === 'Enter' && (event.metaKey || event.ctrlKey)
             if (shouldSend && !event.nativeEvent.isComposing) {
               event.preventDefault()
-              onSend()
+              if (canSend) onSend()
             }
           }}
-          placeholder={disabled ? '请先配置可用模型与 API 密钥' : '给 ChatBox Lite 发送消息…'}
+          onPaste={handlePaste}
+          placeholder={disabled ? '请先配置可用模型与 API 密钥' : '给 ChatBox Lite 发送消息（支持拖拽/粘贴文件或图片）…'}
           rows={1}
           value={draft}
         />
 
         <div className="composer-toolbar">
           <div className="composer-tools-left">
+            <button
+              aria-label="添加图片或文件"
+              className="composer-action-button"
+              disabled={disabled || uploading}
+              onClick={() => fileInputRef.current?.click()}
+              title="上传图片或文本文件（支持粘贴与拖拽）"
+            >
+              <Icon name="paperclip" size={15} />
+              {uploading && <span className="upload-spinner" />}
+            </button>
             <button
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}
               disabled={!activeModel?.supportsReasoning || disabled}
@@ -162,7 +287,7 @@ export function Composer({
               <button
                 className="send-button"
                 aria-label="发送消息"
-                disabled={disabled || sendBlocked || !draft.trim()}
+                disabled={!canSend}
                 onClick={onSend}
               >
                 <Icon name="arrow-up" size={19} />
@@ -178,3 +303,4 @@ export function Composer({
     </div>
   )
 }
+

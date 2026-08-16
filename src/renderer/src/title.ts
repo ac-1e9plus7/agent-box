@@ -16,8 +16,11 @@ export const TITLE_SYSTEM_PROMPT =
  * The user question that will be turned into a title. Empty messages, system
  * messages, and assistant messages are skipped; the first user message wins.
  */
-export function firstUserQuestion(messages: { role: Message['role']; content: string }[]): string {
-  return messages.find((message) => message.role === 'user' && message.content.trim())?.content ?? ''
+export function firstUserQuestion(messages: { role: Message['role']; content: string; attachments?: Message['attachments'] }[]): string {
+  const first = messages.find((message) => message.role === 'user' && (message.content.trim() || message.attachments?.length))
+  if (!first) return ''
+  if (first.content.trim()) return first.content.trim()
+  return first.attachments?.[0]?.name ? `[文件] ${first.attachments[0].name}` : ''
 }
 
 /**

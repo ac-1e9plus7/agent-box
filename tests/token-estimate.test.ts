@@ -36,4 +36,19 @@ describe('shared token estimate', () => {
     expect(REQUEST_OVERHEAD).toBe(64)
     expect(RESERVED_SAFETY_TOKENS).toBe(128)
   })
+
+  it('estimates token costs for image, text, and document attachments', () => {
+    const withImage = estimateMessageTokens({
+      content: 'hello',
+      attachments: [{ id: '1', name: 'pic.png', mimeType: 'image/png', size: 1000, data: 'data:image/png;base64,123', type: 'image' }],
+    })
+    expect(withImage).toBe(PER_MESSAGE_OVERHEAD + estimateTextTokens('hello') + 1000)
+
+    const withText = estimateMessageTokens({
+      content: '',
+      attachments: [{ id: '2', name: 'code.ts', mimeType: 'text/typescript', size: 50, data: 'const x = 1;', type: 'text' }],
+    })
+    expect(withText).toBe(PER_MESSAGE_OVERHEAD + 0 + estimateTextTokens('const x = 1;') + 16)
+  })
 })
+

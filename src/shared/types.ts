@@ -126,6 +126,21 @@ export interface RemoteModel {
 
 export type MessageRole = 'system' | 'user' | 'assistant'
 
+export type MessageAttachmentType = 'image' | 'document' | 'text'
+
+export interface MessageAttachment {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  /**
+   * Data URL for images/documents (e.g. `data:image/png;base64,...` or `data:application/pdf;base64,...`)
+   * or raw UTF-8 string for plain text files.
+   */
+  data: string
+  type: MessageAttachmentType
+}
+
 export interface Message {
   id: string
   role: MessageRole
@@ -134,6 +149,7 @@ export interface Message {
   citations?: WebCitation[]
   usage?: TokenUsage
   modelId?: string
+  attachments?: MessageAttachment[]
   createdAt: string
 }
 

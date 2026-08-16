@@ -11,7 +11,7 @@ import {
  * `ChatMessage[]` is assignable here without coupling this module to renderer
  * types (and keeps it testable from the node project).
  */
-export type ProjectionMessage = Pick<Message, 'role' | 'content'>
+export type ProjectionMessage = Pick<Message, 'role' | 'content'> & { attachments?: Message['attachments'] }
 
 export interface ContextProjection {
   estimatedInputTokens: number
@@ -41,6 +41,7 @@ export function projectContext(
   pendingContent: string,
   settings: AppSettings,
   model: ModelConfig,
+  pendingAttachments?: Message['attachments'],
 ): ContextProjection {
   const inputBudget = model.contextWindow - model.maxOutputTokens - RESERVED_SAFETY_TOKENS
   // The main process injects the configured system prompt on every request,
@@ -64,11 +65,12 @@ export function projectContext(
     if (message.role === 'user') turns.push([message])
     else if (turns.length > 0) turns.at(-1)?.push(message)
   }
-  if (pendingContent.trim()) {
+  if (pendingContent.trim() || pendingAttachments?.length) {
     turns.push([
       {
         role: 'user',
         content: pendingContent.trim(),
+        attachments: pendingAttachments,
       },
     ])
   }

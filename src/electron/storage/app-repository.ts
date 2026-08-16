@@ -3,6 +3,7 @@ import type {
   ApiFormat,
   AppSettings,
   Conversation,
+  MessageAttachment,
   ModelConfig,
   ModelInput,
   ProviderInput,
@@ -461,6 +462,7 @@ function validateConversation(value: unknown): Conversation {
     requireIsoDate(message.createdAt, 'message createdAt')
     const citations = parseStoredCitations(message.citations)
     const usage = parseStoredTokenUsage(message.usage)
+    const attachments = parseStoredAttachments(message.attachments)
     return {
       id: message.id,
       role: message.role,
@@ -468,6 +470,8 @@ function validateConversation(value: unknown): Conversation {
       reasoning: message.reasoning,
       citations,
       usage,
+      modelId: typeof message.modelId === 'string' && message.modelId.trim() ? message.modelId.trim() : undefined,
+      attachments,
       createdAt: message.createdAt,
     } as Conversation['messages'][number]
   })
@@ -476,7 +480,8 @@ function validateConversation(value: unknown): Conversation {
       sum +
       message.content.length +
       (message.reasoning?.length ?? 0) +
-      citationCharacterCount(message.citations),
+      citationCharacterCount(message.citations) +
+      attachmentCharacterCount(message.attachments),
     0,
   )
   if (totalCharacters > MAX_CONVERSATION_CHARACTERS) {
@@ -598,6 +603,55 @@ function sanitizeHeaders(value: Record<string, string>): Record<string, string> 
     output[name] = rawValue
   }
   return output
+}
+
+function parseStoredAttachments(
+  value: unknown,
+): MessageAttachment[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new Error('Invalid message attachments')
+  if (value.length > 20) throw new Error('Too many message attachments')
+  if (value.length === 0) return undefined
+
+  return value.map((item) => {
+    if (!isRecord(item)) throw new Error('Invalid message attachment')
+    requireNonEmptyString(item.id, 'attachment id', 120)
+    requireNonEmptyString(item.name, 'attachment name', 300)
+    requireNonEmptyString(item.mimeType, 'attachment mimeType', 100)
+    if (
+      typeof item.size !== 'number' ||
+      !Number.isFinite(item.size) ||
+      item.size < 0 ||
+      item.size > 50 * 1024 * 1024
+    ) {
+      throw new Error('Invalid attachment size')
+    }
+    if (
+      typeof item.type !== 'string' ||
+      !['image', 'document', 'text'].includes(item.type)
+    ) {
+      throw new Error('Invalid attachment type')
+    }
+    if (typeof item.data !== 'string' || item.data.length > 40_000_000) {
+      throw new Error('Invalid attachment data')
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      mimeType: item.mimeType,
+      size: Math.trunc(item.size),
+      type: item.type as MessageAttachment['type'],
+      data: item.data,
+    }
+  })
+}
+
+function attachmentCharacterCount(attachments?: MessageAttachment[]): number {
+  if (!attachments?.length) return 0
+  return attachments.reduce(
+    (sum, att) => sum + att.data.length + att.name.length,
+    0,
+  )
 }
 
 function requireArray(value: unknown, label: string, maximum: number): unknown[] {

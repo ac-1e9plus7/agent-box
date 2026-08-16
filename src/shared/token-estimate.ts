@@ -31,6 +31,18 @@ export function estimateTextTokens(text: string): number {
  * Estimates the on-the-wire token cost of a message. `reasoning` is never sent
  * to the provider, so it is intentionally excluded from the estimate.
  */
-export function estimateMessageTokens(message: Pick<Message, 'content'>): number {
-  return PER_MESSAGE_OVERHEAD + estimateTextTokens(message.content)
+export function estimateMessageTokens(message: Pick<Message, 'content'> & { attachments?: Message['attachments'] }): number {
+  let total = PER_MESSAGE_OVERHEAD + estimateTextTokens(message.content)
+  if (message.attachments?.length) {
+    for (const attachment of message.attachments) {
+      if (attachment.type === 'image') {
+        total += 1000
+      } else if (attachment.type === 'text') {
+        total += estimateTextTokens(attachment.data) + 16
+      } else if (attachment.type === 'document') {
+        total += Math.ceil(attachment.data.length / 8) + 100
+      }
+    }
+  }
+  return total
 }
