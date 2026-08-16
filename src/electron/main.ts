@@ -1,4 +1,5 @@
-import { join } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, renameSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { ChatGateway } from './api/gateway'
 import { registerIpcHandlers } from './ipc/register-ipc'
@@ -18,7 +19,7 @@ function createWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#f7f7f8',
-    title: 'ChatBox Lite',
+    title: 'AgentBox',
     icon: join(__dirname, '../../build/icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -87,6 +88,89 @@ function configureSessionSecurity(): void {
   session.defaultSession.setPermissionCheckHandler(() => false)
 }
 
+function migrateLegacyUserDataDirectory(): void {
+  try {
+    const currentPath = app.getPath('userData')
+    const currentVaultFile = join(currentPath, 'vault', 'user-data.v1.enc')
+    const currentLocalState = join(currentPath, 'Local State')
+
+    if (existsSync(currentVaultFile)) return
+
+    const parentDir = dirname(currentPath)
+    const legacyCandidates = ['chatbox-lite', 'ChatBox Lite', 'ChatBoxLite', 'chatbox']
+    for (const legacyName of legacyCandidates) {
+      const legacyPath = join(parentDir, legacyName)
+      if (legacyPath.toLowerCase() === currentPath.toLowerCase()) continue
+
+      const legacyVaultFile = join(legacyPath, 'vault', 'user-data.v1.enc')
+      const legacyKeyFile = join(legacyPath, 'vault', 'master-key.bin')
+      const legacyLocalState = join(legacyPath, 'Local State')
+
+      if (existsSync(legacyVaultFile) && existsSync(legacyKeyFile)) {
+        mkdirSync(join(currentPath, 'vault'), { recursive: true })
+
+        // Copy Local State before safeStorage initializes so DPAPI/OSCrypt key matches
+        if (existsSync(legacyLocalState)) {
+          copyFileSync(legacyLocalState, currentLocalState)
+        }
+
+        copyFileSync(legacyKeyFile, join(currentPath, 'vault', 'master-key.bin'))
+        copyFileSync(legacyVaultFile, join(currentPath, 'vault', 'user-data.v1.enc'))
+        break
+      }
+    }
+  } catch {
+    // Non-fatal migration attempt
+  }
+}
+
+async function handleStartupFailure(error: unknown): Promise<void> {
+  const errorMessage = error instanceof Error ? error.message : '未知错误'
+  const isDecryptionError =
+    errorMessage.includes('解密') ||
+    errorMessage.includes('decrypt') ||
+    errorMessage.includes('safeStorage') ||
+    errorMessage.includes('系统密钥')
+
+  const choice = dialog.showMessageBoxSync({
+    type: 'warning',
+    title: 'AgentBox - 数据加载提示',
+    message: isDecryptionError
+      ? '无法解密现有的本地数据（可能是系统凭据发生变化、数据文件损坏或迁移密钥不匹配）。'
+      : `应用启动遇到问题：${errorMessage}`,
+    detail: isDecryptionError
+      ? '您可以选择【重置并创建新数据】（现有文件将被安全备份为 .bak，应用将以初始状态启动），或选择【退出应用】以便稍后手动排查。'
+      : '您可以选择重置本地数据并重新启动，或退出应用。',
+    buttons: ['重置并创建新数据（推荐）', '退出应用'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  })
+
+  if (choice === 0) {
+    try {
+      const currentPath = app.getPath('userData')
+      const vaultPath = join(currentPath, 'vault')
+      if (existsSync(vaultPath)) {
+        const backupPath = join(
+          currentPath,
+          `vault.corrupted.${Date.now()}.bak`,
+        )
+        renameSync(vaultPath, backupPath)
+      }
+      await start()
+      return
+    } catch (resetError) {
+      dialog.showErrorBox(
+        '重置数据失败',
+        `无法重置本地数据：${resetError instanceof Error ? resetError.message : String(resetError)}`,
+      )
+    }
+  }
+
+  app.quit()
+}
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 if (!hasSingleInstanceLock) {
   app.quit()
@@ -99,13 +183,12 @@ if (!hasSingleInstanceLock) {
   })
 
   void app.whenReady().then(async () => {
-    app.setAppUserModelId('com.chatboxlite.desktop')
+    app.setAppUserModelId('com.agentbox.desktop')
     try {
+      migrateLegacyUserDataDirectory()
       await start()
     } catch (error) {
-      const message = error instanceof Error ? error.message : '应用初始化失败。'
-      dialog.showErrorBox('ChatBox Lite 无法启动', message)
-      app.quit()
+      await handleStartupFailure(error)
     }
 
     app.on('activate', () => {

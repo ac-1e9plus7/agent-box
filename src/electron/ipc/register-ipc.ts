@@ -77,6 +77,22 @@ export function registerIpcHandlers(
     return gateway.discoverModels(providerId)
   })
 
+  register(IPC_CHANNELS.skillsList, () => repository.listSkills())
+  register(IPC_CHANNELS.skillsUpsert, (_event, input: Parameters<typeof repository.upsertSkill>[0]) => {
+    assertRecord(input, '技能配置')
+    return repository.upsertSkill(input)
+  })
+  register(IPC_CHANNELS.skillsRemove, (_event, id: string) => {
+    assertId(id)
+    return repository.removeSkill(id)
+  })
+  register(IPC_CHANNELS.skillsToggle, (_event, id: string, enabled: boolean) => {
+    assertId(id)
+    if (typeof enabled !== 'boolean') throw new Error('Invalid enabled state')
+    return repository.toggleSkill(id, enabled)
+  })
+  register(IPC_CHANNELS.skillsResetDefaults, () => repository.resetDefaultSkills())
+
   register(IPC_CHANNELS.conversationsList, () => repository.listConversations())
   register(IPC_CHANNELS.conversationsGet, (_event, id: string) => {
     assertId(id)

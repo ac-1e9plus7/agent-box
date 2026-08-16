@@ -11,7 +11,7 @@ import type {
 export type ApiFormat = SharedApiFormat
 export type WebSearchMode = SharedWebSearchMode
 
-export type SettingsSection = 'general' | 'models' | 'providers' | 'security' | 'about'
+export type SettingsSection = 'general' | 'skills' | 'models' | 'providers' | 'security' | 'about'
 
 export type MessageStatus = 'complete' | 'streaming' | 'error'
 
@@ -33,6 +33,8 @@ export interface ChatMessage extends StoredMessage {
 
 export interface Conversation extends Omit<StoredConversation, 'messages'> {
   messages: ChatMessage[]
+  agentMode?: boolean
+  skillIds?: string[]
   pinned?: boolean
 }
 
@@ -60,7 +62,9 @@ export type IconName =
   | 'app'
   | 'archive'
   | 'arrow-up'
+  | 'bot'
   | 'brain'
+  | 'chart'
   | 'check'
   | 'chevron-down'
   | 'chevron-left'
@@ -69,6 +73,7 @@ export type IconName =
   | 'code'
   | 'copy'
   | 'database'
+  | 'download'
   | 'edit'
   | 'external'
   | 'file'
@@ -91,8 +96,12 @@ export type IconName =
   | 'sidebar'
   | 'sparkles'
   | 'sun'
+  | 'tool'
+  | 'translate'
   | 'trash'
+  | 'upload'
   | 'user'
+  | 'zap'
 
 export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
   'openai-chat-completions': 'OpenAI Chat Completions',

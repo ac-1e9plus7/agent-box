@@ -1,13 +1,15 @@
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { safeStorage } from 'electron'
 
 const KEY_BYTES = 32
 const IV_BYTES = 12
 const AUTH_TAG_BYTES = 16
 const VAULT_VERSION = 1
-const AAD = Buffer.from('chatbox-lite:vault:v1', 'utf8')
+const PRIMARY_AAD = Buffer.from('agentbox:vault:v1', 'utf8')
+const LEGACY_AAD = Buffer.from('chatbox-lite:vault:v1', 'utf8')
+const LEGACY_APP_DIR_NAMES = ['ChatBox Lite', 'chatbox-lite', 'ChatBoxLite', 'chatbox']
 
 interface EncryptedEnvelope {
   version: 1
@@ -30,8 +32,10 @@ export class EncryptedStoreError extends Error {
  * 1. A random 256-bit data key is protected by Electron safeStorage.
  * 2. The complete JSON payload is encrypted with AES-256-GCM.
  * 3. No plaintext fallback is used when the OS key store is unavailable.
+ * 4. Automatically detects and smoothly migrates legacy ChatBox Lite vaults.
  */
 export class EncryptedStore<T extends object> {
+  private readonly userDataDirectory: string
   private readonly directory: string
   private readonly keyPath: string
   private readonly vaultPath: string
@@ -44,6 +48,7 @@ export class EncryptedStore<T extends object> {
     private readonly createDefaultState: () => T,
     private readonly validateState: (value: unknown) => T,
   ) {
+    this.userDataDirectory = userDataDirectory
     this.directory = join(userDataDirectory, 'vault')
     this.keyPath = join(this.directory, 'master-key.bin')
     this.vaultPath = join(this.directory, 'user-data.v1.enc')
@@ -52,24 +57,59 @@ export class EncryptedStore<T extends object> {
   async initialize(): Promise<void> {
     this.assertSecureStorageAvailable()
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
-    this.masterKey = await this.loadOrCreateMasterKey()
 
+    let existingState: T | undefined
     const envelopeBuffer = await this.readIfPresent(this.vaultPath)
-    if (!envelopeBuffer) {
-      this.state = this.createDefaultState()
-      await this.persist(this.state)
+    if (envelopeBuffer) {
+      try {
+        this.masterKey = await this.loadOrCreateMasterKey()
+        const envelope = JSON.parse(envelopeBuffer.toString('utf8')) as EncryptedEnvelope
+        existingState = this.validateState(this.decrypt(envelope))
+      } catch {
+        // Will attempt legacy migration if available before throwing
+      }
+    }
+
+    const isStateEmptyOrDefault = (state?: T): boolean => {
+      if (!state) return true
+      const s = state as Record<string, unknown>
+      const conversations = Array.isArray(s.conversations) ? s.conversations : []
+      const models = Array.isArray(s.models) ? s.models : []
+      const providers = Array.isArray(s.providers) ? s.providers : []
+      const hasCustomData =
+        conversations.length > 0 ||
+        models.length > 1 ||
+        providers.some((p: any) => Boolean(p.apiKeyEncrypted || p.apiKey || p.id !== 'openrouter')) ||
+        providers.length > 1
+      return !hasCustomData
+    }
+
+    if (isStateEmptyOrDefault(existingState)) {
+      const migratedState = await this.tryMigrateFromLegacyDirectories()
+      if (migratedState) {
+        this.state = migratedState
+        if (!this.masterKey) {
+          this.masterKey = await this.loadOrCreateMasterKey()
+        }
+        await this.persist(this.state)
+        return
+      }
+    }
+
+    if (existingState) {
+      this.state = existingState
       return
     }
 
-    try {
-      const envelope = JSON.parse(envelopeBuffer.toString('utf8')) as EncryptedEnvelope
-      this.state = this.validateState(this.decrypt(envelope))
-    } catch (error) {
+    if (envelopeBuffer && !this.state) {
       throw new EncryptedStoreError(
         '无法解密本地数据。系统密钥可能已变化，或数据文件已经损坏。',
-        { cause: error },
       )
     }
+
+    this.masterKey = await this.loadOrCreateMasterKey()
+    this.state = this.createDefaultState()
+    await this.persist(this.state)
   }
 
   read(): T {
@@ -151,7 +191,7 @@ export class EncryptedStore<T extends object> {
     const cipher = createCipheriv('aes-256-gcm', masterKey, iv, {
       authTagLength: AUTH_TAG_BYTES,
     })
-    cipher.setAAD(AAD)
+    cipher.setAAD(PRIMARY_AAD)
     const plaintext = Buffer.from(JSON.stringify(value), 'utf8')
 
     try {
@@ -169,8 +209,7 @@ export class EncryptedStore<T extends object> {
     }
   }
 
-  private decrypt(envelope: EncryptedEnvelope): unknown {
-    const masterKey = this.requireMasterKey()
+  private decryptWithKey(envelope: EncryptedEnvelope, masterKey: Buffer): unknown {
     if (
       envelope.version !== VAULT_VERSION ||
       envelope.algorithm !== 'aes-256-gcm' ||
@@ -188,17 +227,77 @@ export class EncryptedStore<T extends object> {
       throw new Error('Invalid encrypted envelope')
     }
 
-    const decipher = createDecipheriv('aes-256-gcm', masterKey, iv, {
-      authTagLength: AUTH_TAG_BYTES,
-    })
-    decipher.setAAD(AAD)
-    decipher.setAuthTag(authTag)
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
-    try {
-      return JSON.parse(plaintext.toString('utf8'))
-    } finally {
-      plaintext.fill(0)
+    const tryDecryptWithAad = (aad: Buffer): unknown | undefined => {
+      try {
+        const decipher = createDecipheriv('aes-256-gcm', masterKey, iv, {
+          authTagLength: AUTH_TAG_BYTES,
+        })
+        decipher.setAAD(aad)
+        decipher.setAuthTag(authTag)
+        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
+        try {
+          return JSON.parse(plaintext.toString('utf8'))
+        } finally {
+          plaintext.fill(0)
+        }
+      } catch {
+        return undefined
+      }
     }
+
+    const primaryResult = tryDecryptWithAad(PRIMARY_AAD)
+    if (primaryResult !== undefined) return primaryResult
+
+    const legacyResult = tryDecryptWithAad(LEGACY_AAD)
+    if (legacyResult !== undefined) return legacyResult
+
+    throw new Error('Unsupported encrypted envelope or authentication failed')
+  }
+
+  private decrypt(envelope: EncryptedEnvelope): unknown {
+    const masterKey = this.requireMasterKey()
+    return this.decryptWithKey(envelope, masterKey)
+  }
+
+  private async tryMigrateFromLegacyDirectories(): Promise<T | undefined> {
+    const parentDir = dirname(this.userDataDirectory)
+    if (!parentDir || parentDir === this.userDataDirectory) return undefined
+
+    for (const dirName of LEGACY_APP_DIR_NAMES) {
+      const legacyUserDir = join(parentDir, dirName)
+      if (legacyUserDir.toLowerCase() === this.userDataDirectory.toLowerCase()) continue
+
+      const legacyVaultDir = join(legacyUserDir, 'vault')
+      const legacyKeyPath = join(legacyVaultDir, 'master-key.bin')
+      const legacyVaultPath = join(legacyVaultDir, 'user-data.v1.enc')
+
+      try {
+        const wrappedKeyBuffer = await this.readIfPresent(legacyKeyPath)
+        const vaultBuffer = await this.readIfPresent(legacyVaultPath)
+        if (!wrappedKeyBuffer || !vaultBuffer) continue
+
+        const keyBase64 = safeStorage.decryptString(wrappedKeyBuffer)
+        const legacyMasterKey = Buffer.from(keyBase64, 'base64')
+        if (legacyMasterKey.length !== KEY_BYTES) {
+          legacyMasterKey.fill(0)
+          continue
+        }
+
+        try {
+          const envelope = JSON.parse(vaultBuffer.toString('utf8')) as EncryptedEnvelope
+          const decryptedJson = this.decryptWithKey(envelope, legacyMasterKey)
+          if (!decryptedJson) continue
+
+          return this.validateState(decryptedJson)
+        } finally {
+          legacyMasterKey.fill(0)
+        }
+      } catch {
+        continue
+      }
+    }
+
+    return undefined
   }
 
   private async persist(value: T): Promise<void> {

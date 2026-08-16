@@ -7,6 +7,8 @@ import { Icon } from './Icon'
 interface TopbarProps {
   activeModel?: ModelConfig
   activeTitle: string
+  agentMode?: boolean
+  activeSkillsCount?: number
   models: ModelConfig[]
   providers: ProviderConfig[]
   reasoningEnabled: boolean
@@ -14,14 +16,18 @@ interface TopbarProps {
   onModelChange: (modelId: string) => void
   onOpenMobileSidebar: () => void
   onOpenSettings: () => void
+  onOpenSkillsSettings?: () => void
   onRenameConversation: (title: string) => void
   onRestoreSidebar: () => void
+  onToggleAgentMode?: () => void
   onToggleReasoning: () => void
 }
 
 export function Topbar({
   activeModel,
   activeTitle,
+  agentMode = false,
+  activeSkillsCount = 0,
   models,
   providers,
   reasoningEnabled,
@@ -29,8 +35,10 @@ export function Topbar({
   onModelChange,
   onOpenMobileSidebar,
   onOpenSettings,
+  onOpenSkillsSettings,
   onRenameConversation,
   onRestoreSidebar,
+  onToggleAgentMode,
   onToggleReasoning
 }: TopbarProps): JSX.Element {
   const [editing, setEditing] = useState(false)
@@ -115,6 +123,15 @@ export function Topbar({
             ))}
           </select>
         </label>
+        <button
+          className={`agent-header-button ${agentMode ? 'is-active' : ''}`}
+          onClick={onToggleAgentMode}
+          title={agentMode ? `Agent 模式已开启（已激活 ${activeSkillsCount} 个技能）` : '点击开启 Agent 智能体模式'}
+        >
+          <Icon name="bot" size={16} />
+          <span>{agentMode ? `Agent 模式 (${activeSkillsCount})` : 'Agent 模式'}</span>
+          <span className="toggle-dot" />
+        </button>
         <button
           className={`reasoning-header-button ${reasoningEnabled ? 'is-active' : ''}`}
           disabled={!reasoningSupported}

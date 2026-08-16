@@ -132,7 +132,7 @@ function EmptyConversation({
   return (
     <div className="empty-conversation">
       <div className="welcome-mark"><Icon name="app" size={34} /></div>
-      <p className="welcome-eyebrow">CHATBOX LITE</p>
+      <p className="welcome-eyebrow">AGENTBOX</p>
       <h1>今天想聊点什么？</h1>
       <p className="welcome-subtitle">选择一个灵感，或直接在下方输入你的问题。</p>
       <div className="suggestion-grid">

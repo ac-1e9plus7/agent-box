@@ -1,6 +1,6 @@
-# ChatBoxLite
+# AgentBox
 
-ChatBoxLite 是一个使用 React、TypeScript 与 Electron 构建的本地 AI 聊天客户端。交互参考 Chatbox：会话与模型选择集中在主界面，回复使用流式展示；请求由 Electron 主进程发出，渲染进程不会直接接触 API Key。
+AgentBox 是一个使用 React、TypeScript 与 Electron 构建的本地 AI 智能体与多模型客户端。会话、技能与模型选择集中在主界面，回复使用流式展示；请求由 Electron 主进程发出，渲染进程不会直接接触 API Key。
 
 项目默认面向 [OpenRouter](https://openrouter.ai/)，也提供 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 本地连接预设；同时把“模型”“上游供应商”和“API 格式”拆分配置，便于同一个模型按不同路由或协议调用。
 
@@ -8,6 +8,18 @@ ChatBoxLite 是一个使用 React、TypeScript 与 Electron 构建的本地 AI �
 
 - 多会话聊天、流式回复、停止生成与错误提示。
 - 文件上传与多模态输入：支持在输入框点击上传附件、拖拽文件或直接粘贴（Paste）剪贴板截图；支持常见图片（PNG/JPEG/WEBP/GIF）、PDF 文档和各类代码/文本文件；图片自动进行智能尺寸优化（最大 2048px）以保证传输性能与 Token 效率；协议层自动适配 OpenAI Chat (`image_url`)、OpenAI Responses (`input_image`) 与 Anthropic (`image`/`document`) 原生多模态块；消息气泡支持卡片展示与原图灯箱（Lightbox）查看。
+- Agent 智能体模式与技能（Skills）系统：
+  - 支持会话级与全局默认一键切换 Agent 智能体模式。
+  - **多文件与 Python 3 脚本规范**：每个技能由多个 Markdown 文档（`SKILL.md`、`references/*.md`）及 Python 3 / Shell 脚本（`scripts/*.py`、`scripts/*.sh`）组成，在需要脚本时优先采用 Python 3。
+  - **Zip 压缩包生态**：支持以标准 `.zip` 压缩包形式一键导出与导入安装外部技能（自动解析 `SKILL.md`、YAML Frontmatter 元数据及配套脚本）。
+  - 内置 5 大系统预置多文件技能：
+    - **代码执行与算法助手**：`SKILL.md` + `scripts/sandbox_runner.py`（Python 3 测试用例与沙箱捕获工具）+ `references/algorithm_patterns.md`。
+    - **数据分析与表格可视化**：`SKILL.md` + `scripts/data_summary.py`（Python 3 描述性统计与分位数计算）+ `references/visualization_formats.md`。
+    - **研报萃取与长文精读**：`SKILL.md` + `scripts/text_cleaner.py`（Python 3 HTML/正文清洗与关键指标提取）+ `references/extraction_rubric.md`。
+    - **专业多语言精翻与本地化**：`SKILL.md` + `scripts/terminology_matcher.py`（Python 3 行业术语一致性校验）+ `references/localization_standards.md`。
+    - **提示词工程专家**：`SKILL.md` + `scripts/prompt_linter.py`（Python 3 提示词结构诊断）+ `references/prompt_patterns.md`。
+  - 完善的技能管理中心（设置 → 技能）：支持搜索、分类筛选（预置/自定义）、多文件在线切换查看与预览、独立开关启用/禁用、新建自定义技能、一键导出 `.zip` 压缩包、通过 `.zip` 压缩包/JSON 导入外部技能，以及一键安全恢复预置技能（保留自定义技能）。
+  - Agent 模式开启时，Gateway 网关自动将已激活技能的主指令、Python 3 脚本与参考文档动态注入到系统提示词中，赋予大模型强大的自主专家执行能力。
 - 每轮助手回复完成后，气泡下方展示所使用的模型名称以及实际消耗的输出 token 用量。
 - 会话标题：发送首条消息并在助手回复完成后，自动生成一个简短标题（低成本配置：关闭思考与联网、限制输出长度为 32 token、超长输入自动截断至前 2,000 字符）。可在「设置 → 通用 → 输入」中指定专用的自动命名模型（如轻量快速的模型），未配置时默认跟随当前会话模型。可随时在侧边栏会话项或顶部栏标题手动重命名；手动改名后的会话不会被自动命名覆盖。自动命名失败时静默回退，不影响对话。
 - 重新生成：对最近一条助手回复（含失败回复）可一键重新生成，沿用其上方的用户问题与历史；切换模型后再重新生成会使用当前选中的模型。重新生成会丢弃原回复并以新回复替换，符合上下文与配额限制。
@@ -21,7 +33,7 @@ ChatBoxLite 是一个使用 React、TypeScript 与 Electron 构建的本地 AI �
 - 支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 三种 API 格式。
 - 可按会话启用或关闭思考模式，并展示可见思考内容、推理 token 用量与当前 effort。
 - 支持 OpenRouter 联网搜索 server tool，可选自动搜索或原生优先，并展示结构化来源与实际搜索次数。
-- 会话、消息、模型设置、供应商设置和 API Key 均在本机加密保存。
+- 会话、消息、技能配置、模型设置、供应商设置和 API Key 均在本机加密保存。
 
 > “上下文窗口”是客户端用于估算、校验和裁剪消息的预算，不会改变模型在 OpenRouter 或上游供应商处的真实限制。配置值高于真实上限时，请求仍可能被拒绝或被上游截断。
 
@@ -103,7 +115,7 @@ ChatBoxLite 是一个使用 React、TypeScript 与 Electron 构建的本地 AI �
 
 ### 本地静态数据
 
-ChatBoxLite 使用两层密钥模型：
+AgentBox 使用两层密钥模型：
 
 1. 主进程首次运行时生成随机 256-bit vault 主密钥。
 2. 主密钥通过 Electron [`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage) 交由操作系统凭据设施封装。
@@ -115,7 +127,7 @@ ChatBoxLite 使用两层密钥模型：
 ### 进程隔离
 
 - API 请求、解密和文件读写只发生在 Electron 主进程。
-- renderer 启用上下文隔离，只能通过 preload 的 `window.chatbox` 白名单调用 IPC。
+- renderer 启用上下文隔离，只能通过 preload 的 `window.agentbox` 白名单调用 IPC。
 - API Key 对 renderer 是“可写不可读”的：界面只能获知是否已配置，不能读取密钥明文。
 - 流式请求在主进程中归一化为统一事件，renderer 不接触鉴权请求头。
 

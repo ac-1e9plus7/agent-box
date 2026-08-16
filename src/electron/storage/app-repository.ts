@@ -9,9 +9,14 @@ import type {
   ProviderInput,
   ProviderRouting,
   ProviderView,
+  Skill,
+  SkillFile,
+  SkillFileKind,
+  SkillInput,
 } from '../../shared/types'
 import { EncryptedStore } from './encrypted-store'
 import { createOpenRouterAutoModel } from './default-models'
+import { DEFAULT_SKILLS } from './default-skills'
 import { normalizeAppSettings } from './settings-schema'
 import { isApiKeyOptional, isLoopbackUrl } from '../api/provider-policy'
 import { assertConversationMutationAllowed } from './vault-resource-limits'
@@ -33,6 +38,7 @@ export interface VaultState {
   providers: StoredProvider[]
   models: ModelConfig[]
   conversations: Conversation[]
+  skills?: Skill[]
 }
 
 const API_FORMATS = new Set<ApiFormat>([
@@ -43,6 +49,7 @@ const API_FORMATS = new Set<ApiFormat>([
 const MAX_PROVIDERS = 100
 const MAX_MODELS = 2_000
 const MAX_CONVERSATIONS = 10_000
+const MAX_SKILLS = 500
 const MAX_MESSAGES_PER_CONVERSATION = 20_000
 const MAX_MESSAGE_CHARACTERS = 2_000_000
 const MAX_CONVERSATION_CHARACTERS = 50_000_000
@@ -54,6 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultModelId: 'openrouter-auto',
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
+  defaultAgentMode: false,
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
 }
@@ -98,6 +106,9 @@ export class AppRepository {
       }
       if (patch.defaultReasoningEffort !== undefined) {
         next.defaultReasoningEffort = patch.defaultReasoningEffort
+      }
+      if (patch.defaultAgentMode !== undefined) {
+        next.defaultAgentMode = patch.defaultAgentMode
       }
       if (patch.systemPrompt !== undefined) next.systemPrompt = patch.systemPrompt
       if (patch.proxy !== undefined) next.proxy = patch.proxy
@@ -209,6 +220,112 @@ export class AppRepository {
     })
   }
 
+  listSkills(): Skill[] {
+    return structuredClone(this.store.read().skills ?? DEFAULT_SKILLS)
+  }
+
+  getSkill(id: string): Skill | undefined {
+    return this.listSkills().find((skill) => skill.id === id)
+  }
+
+  async upsertSkill(input: SkillInput): Promise<Skill> {
+    return this.store.mutate((draft) => {
+      const skills = draft.skills ?? structuredClone(DEFAULT_SKILLS)
+      const existing = input.id ? skills.find((skill) => skill.id === input.id) : undefined
+      const timestamp = new Date().toISOString()
+      const entryFile = input.entryFile?.trim() || existing?.entryFile || 'SKILL.md'
+
+      let files = input.files
+      if (!files || files.length === 0) {
+        if (input.systemPrompt?.trim()) {
+          files = [
+            {
+              path: entryFile,
+              content: input.systemPrompt.trim(),
+              kind: 'markdown'
+            }
+          ]
+        } else if (existing?.files?.length) {
+          files = existing.files
+        } else {
+          files = [
+            {
+              path: entryFile,
+              content: `# ${input.name.trim()}\n\n${input.description.trim()}`,
+              kind: 'markdown'
+            }
+          ]
+        }
+      }
+
+      const systemPrompt = input.systemPrompt?.trim()
+        || files.find((f) => f.path === entryFile)?.content
+        || files[0]?.content
+        || ''
+
+      const candidate: Skill = {
+        id: input.id?.trim() || `skill-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        name: input.name.trim(),
+        description: input.description.trim(),
+        icon: input.icon?.trim() || existing?.icon || undefined,
+        entryFile,
+        files,
+        systemPrompt,
+        isBuiltIn: existing?.isBuiltIn ?? false,
+        enabled: input.enabled ?? existing?.enabled ?? true,
+        author: input.author?.trim() || existing?.author || undefined,
+        version: input.version?.trim() || existing?.version || '1.0.0',
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      }
+      const validated = validateSkill(candidate)
+      if (existing) {
+        draft.skills = skills.map((item) => (item.id === validated.id ? validated : item))
+      } else {
+        if (skills.length >= MAX_SKILLS) throw new Error('Skill 数量已达上限。')
+        draft.skills = [...skills, validated]
+      }
+      return structuredClone(validated)
+    })
+  }
+
+  async removeSkill(id: string): Promise<void> {
+    return this.store.mutate((draft) => {
+      const skills = draft.skills ?? structuredClone(DEFAULT_SKILLS)
+      const target = skills.find((skill) => skill.id === id)
+      if (!target) return
+      if (target.isBuiltIn) {
+        throw new Error('系统预置技能不可删除，可以选择将其停用。')
+      }
+      draft.skills = skills.filter((skill) => skill.id !== id)
+    })
+  }
+
+  async toggleSkill(id: string, enabled: boolean): Promise<Skill> {
+    return this.store.mutate((draft) => {
+      const skills = draft.skills ?? structuredClone(DEFAULT_SKILLS)
+      const target = skills.find((skill) => skill.id === id)
+      if (!target) throw new Error('技能不存在。')
+      const updated: Skill = {
+        ...target,
+        enabled,
+        updatedAt: new Date().toISOString(),
+      }
+      draft.skills = skills.map((item) => (item.id === id ? updated : item))
+      return structuredClone(updated)
+    })
+  }
+
+  async resetDefaultSkills(): Promise<Skill[]> {
+    return this.store.mutate((draft) => {
+      const current = draft.skills ?? []
+      const customSkills = current.filter((skill) => !skill.isBuiltIn)
+      const nextSkills = [...structuredClone(DEFAULT_SKILLS), ...customSkills]
+      draft.skills = nextSkills
+      return structuredClone(nextSkills)
+    })
+  }
+
   listConversations(): Conversation[] {
     return this.store
       .read()
@@ -304,7 +421,7 @@ function createDefaultVault(): VaultState {
         baseUrl: 'https://openrouter.ai/api/v1',
         apiFormat: 'openai-chat-completions',
         defaultHeaders: {
-          'X-Title': 'ChatBox Lite',
+          'X-Title': 'AgentBox',
         },
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -312,6 +429,7 @@ function createDefaultVault(): VaultState {
     ],
     models: [createOpenRouterAutoModel(timestamp)],
     conversations: [],
+    skills: structuredClone(DEFAULT_SKILLS),
   }
 }
 
@@ -328,12 +446,16 @@ function validateVault(value: unknown): VaultState {
     'conversations',
     MAX_CONVERSATIONS,
   ).map(validateConversation)
+  const skills = value.skills !== undefined
+    ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
+    : structuredClone(DEFAULT_SKILLS)
   return {
     schemaVersion: 1,
     settings: normalizeAppSettings(value.settings),
     providers,
     models,
     conversations,
+    skills,
   }
 }
 
@@ -427,6 +549,92 @@ function parseModel(value: unknown): ModelConfig {
   }
 }
 
+const MAX_SKILL_FILES = 50
+const MAX_SKILL_FILE_CHARACTERS = 500_000
+
+function validateSkillFile(value: unknown): SkillFile {
+  if (!isRecord(value)) throw new Error('Invalid skill file')
+  requireNonEmptyString(value.path, 'skill file path', 255)
+  const path = String(value.path).trim()
+  if (path.includes('..') || path.startsWith('/') || path.startsWith('\\')) {
+    throw new Error('Invalid skill file path: directory traversal not allowed')
+  }
+  if (typeof value.content !== 'string' || value.content.length > MAX_SKILL_FILE_CHARACTERS) {
+    throw new Error(`Invalid skill file content: ${path}`)
+  }
+  const kind = ['markdown', 'python', 'shell', 'other'].includes(String(value.kind))
+    ? (value.kind as SkillFileKind)
+    : 'other'
+  return {
+    path,
+    content: value.content,
+    kind,
+  }
+}
+
+function validateSkill(value: unknown): Skill {
+  if (!isRecord(value)) throw new Error('Invalid skill')
+  requireNonEmptyString(value.id, 'skill id', 100)
+  requireNonEmptyString(value.name, 'skill name', 200)
+  if (typeof value.description !== 'string' || value.description.length > 2_000) {
+    throw new Error('Invalid skill description')
+  }
+  if (value.icon !== undefined && (typeof value.icon !== 'string' || value.icon.length > 50)) {
+    throw new Error('Invalid skill icon')
+  }
+  const entryFile = typeof value.entryFile === 'string' && value.entryFile.trim()
+    ? value.entryFile.trim()
+    : 'SKILL.md'
+
+  let files: SkillFile[] = []
+  if (Array.isArray(value.files) && value.files.length > 0) {
+    if (value.files.length > MAX_SKILL_FILES) throw new Error('Skill 包含的文件数量超过限制')
+    files = value.files.map(validateSkillFile)
+  } else if (typeof value.systemPrompt === 'string' && value.systemPrompt.trim()) {
+    files = [
+      {
+        path: entryFile,
+        content: value.systemPrompt.trim(),
+        kind: 'markdown',
+      },
+    ]
+  }
+
+  const systemPrompt = typeof value.systemPrompt === 'string' && value.systemPrompt.trim()
+    ? value.systemPrompt.trim()
+    : files.find((f) => f.path === entryFile)?.content ?? files[0]?.content ?? ''
+
+  if (value.isBuiltIn !== undefined && typeof value.isBuiltIn !== 'boolean') {
+    throw new Error('Invalid skill built-in flag')
+  }
+  if (typeof value.enabled !== 'boolean') {
+    throw new Error('Invalid skill enabled flag')
+  }
+  if (value.author !== undefined && (typeof value.author !== 'string' || value.author.length > 200)) {
+    throw new Error('Invalid skill author')
+  }
+  if (value.version !== undefined && (typeof value.version !== 'string' || value.version.length > 50)) {
+    throw new Error('Invalid skill version')
+  }
+  if (value.createdAt !== undefined) requireIsoDate(value.createdAt, 'skill createdAt')
+  if (value.updatedAt !== undefined) requireIsoDate(value.updatedAt, 'skill updatedAt')
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description,
+    icon: value.icon,
+    entryFile,
+    files,
+    systemPrompt,
+    isBuiltIn: Boolean(value.isBuiltIn),
+    enabled: value.enabled,
+    author: value.author,
+    version: value.version,
+    createdAt: value.createdAt ?? new Date().toISOString(),
+    updatedAt: value.updatedAt ?? new Date().toISOString(),
+  }
+}
+
 function validateConversation(value: unknown): Conversation {
   if (!isRecord(value)) throw new Error('Invalid conversation')
   requireNonEmptyString(value.id, 'conversation id')
@@ -435,6 +643,12 @@ function validateConversation(value: unknown): Conversation {
   if (value.reasoningEnabled !== undefined && typeof value.reasoningEnabled !== 'boolean') {
     throw new Error('Invalid conversation reasoning flag')
   }
+  if (value.agentMode !== undefined && typeof value.agentMode !== 'boolean') {
+    throw new Error('Invalid conversation agent mode flag')
+  }
+  const skillIds = Array.isArray(value.skillIds)
+    ? value.skillIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)
+    : undefined
   const webSearchMode = parseOptionalWebSearchMode(
     value.webSearchMode,
     'conversation web search mode',
@@ -494,6 +708,8 @@ function validateConversation(value: unknown): Conversation {
     title: value.title,
     modelId: value.modelId,
     reasoningEnabled: value.reasoningEnabled,
+    agentMode: value.agentMode,
+    skillIds,
     webSearchMode,
     messages,
     createdAt: value.createdAt,

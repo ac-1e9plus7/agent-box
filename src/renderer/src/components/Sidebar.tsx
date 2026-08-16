@@ -89,9 +89,9 @@ export function Sidebar({
       >
         <div className="sidebar-drag-region" />
         <div className="sidebar-header">
-          <div className="brand" aria-label="ChatBox Lite">
+          <div className="brand" aria-label="AgentBox">
             <span className="brand-mark"><Icon name="app" size={22} /></span>
-            <span className="brand-name">ChatBox <em>Lite</em></span>
+            <span className="brand-name">Agent<em>Box</em></span>
           </div>
           <button className="icon-button sidebar-collapse" aria-label="收起侧边栏" onClick={onCollapse}>
             <Icon name="sidebar" />

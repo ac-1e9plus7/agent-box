@@ -6,6 +6,7 @@ import type {
   Message,
   ProviderTestResult,
   RemoteModel,
+  Skill,
   StreamEvent,
   WebCitation,
 } from '../../shared/types'
@@ -137,9 +138,18 @@ export class ChatGateway {
         model.maxOutputTokens,
       )
       const settings = this.repository.getSettings()
+      const isAgentMode = Boolean(request.agentMode)
+      let effectiveSystemPrompt = settings.systemPrompt
+      if (isAgentMode) {
+        const allSkills = this.repository.listSkills()
+        const activeSkills = request.skillIds?.length
+          ? allSkills.filter((skill) => request.skillIds!.includes(skill.id) && skill.enabled)
+          : allSkills.filter((skill) => skill.enabled)
+        effectiveSystemPrompt = buildAgentSystemPrompt(activeSkills, settings.systemPrompt)
+      }
       const messages = addConfiguredSystemPrompt(
         requestMessages,
-        settings.systemPrompt,
+        effectiveSystemPrompt,
       )
       const prepared = prepareMessagesForContext(
         messages,
@@ -310,6 +320,69 @@ export class ChatGateway {
   }
 }
 
+function buildAgentSystemPrompt(skills: Skill[], userSystemPrompt: string): string {
+  const activeSkills = skills.filter((skill) => skill.enabled)
+  const parts: string[] = []
+
+  parts.push(
+    '【Agent 智能体模式已启用】\n' +
+    '你当前处于自主 Agent 专家模式。请以严谨、结构化、以目标为导向的方式执行任务：\n' +
+    '1. 深入分析用户真实意图与关键要求。\n' +
+    '2. 面对复杂问题时，按逻辑拆解为明确的步骤并逐步分析与推理。\n' +
+    '3. 若需脚本辅助执行、数据计算、逻辑推演或算法验证，优先使用 Python 3 脚本。\n' +
+    '4. 严格遵循并调用下方已激活的专业领域技能（Skills）及其配套脚本与参考规范。'
+  )
+
+  if (activeSkills.length > 0) {
+    parts.push(
+      '=== 当前已激活的专业技能 (Active Skills) ===\n' +
+      activeSkills
+        .map((skill, index) => {
+          const files = skill.files && skill.files.length > 0
+            ? skill.files
+            : [{ path: skill.entryFile || 'SKILL.md', content: skill.systemPrompt || '', kind: 'markdown' as const }]
+
+          const entryDoc = files.find((f) => f.path === (skill.entryFile || 'SKILL.md'))?.content
+            || skill.systemPrompt
+            || files[0]?.content
+            || ''
+
+          const pythonScripts = files.filter((f) => f.kind === 'python')
+          const shellScripts = files.filter((f) => f.kind === 'shell')
+          const otherDocs = files.filter((f) => f.kind === 'markdown' && f.path !== (skill.entryFile || 'SKILL.md'))
+
+          const skillSections: string[] = [
+            `[技能 ${index + 1}: ${skill.name}] (标识: ${skill.id}, 版本: ${skill.version ?? '1.0.0'})\n描述: ${skill.description}\n\n## 操作规范与核心指令:\n${entryDoc.trim()}`
+          ]
+
+          if (pythonScripts.length > 0) {
+            const pySection = pythonScripts.map((s) => `### Python 3 脚本: \`${s.path}\`\n\`\`\`python\n${s.content.trim()}\n\`\`\``).join('\n\n')
+            skillSections.push(`## 附带 Python 3 执行/工具脚本:\n${pySection}`)
+          }
+
+          if (shellScripts.length > 0) {
+            const shSection = shellScripts.map((s) => `### Shell 脚本: \`${s.path}\`\n\`\`\`bash\n${s.content.trim()}\n\`\`\``).join('\n\n')
+            skillSections.push(`## 附带 Shell 脚本:\n${shSection}`)
+          }
+
+          if (otherDocs.length > 0) {
+            const docSection = otherDocs.map((d) => `### 参考文档: \`${d.path}\`\n${d.content.trim()}`).join('\n\n')
+            skillSections.push(`## 附带参考文档:\n${docSection}`)
+          }
+
+          return skillSections.join('\n\n')
+        })
+        .join('\n\n----------------------------------------\n\n'),
+    )
+  }
+
+  if (userSystemPrompt.trim()) {
+    parts.push(`=== 用户全局系统指令 ===\n${userSystemPrompt.trim()}`)
+  }
+
+  return parts.join('\n\n')
+}
+
 function addConfiguredSystemPrompt(messages: Message[], systemPrompt: string): Message[] {
   const trimmedPrompt = systemPrompt.trim()
   if (!trimmedPrompt) return structuredClone(messages)
@@ -347,6 +420,16 @@ function validateChatRequest(request: ChatRequest): Message[] {
   }
   if (typeof request.reasoningEnabled !== 'boolean') {
     throw new GatewayError('思考模式配置无效。', 'invalid_request')
+  }
+  if (request.agentMode !== undefined && typeof request.agentMode !== 'boolean') {
+    throw new GatewayError('Agent 模式配置无效。', 'invalid_request')
+  }
+  if (
+    request.skillIds !== undefined &&
+    (!Array.isArray(request.skillIds) ||
+      request.skillIds.some((id) => typeof id !== 'string' || id.length > 100))
+  ) {
+    throw new GatewayError('技能列表配置无效。', 'invalid_request')
   }
   if (
     request.webSearchMode !== undefined &&
@@ -669,6 +752,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export {
+  buildAgentSystemPrompt,
   addConfiguredSystemPrompt,
   validateChatRequest,
   endpointFor,

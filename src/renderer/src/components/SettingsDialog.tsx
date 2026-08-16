@@ -8,7 +8,8 @@ import type {
   SettingsSection,
   WebSearchMode
 } from '../types'
-import type { ProviderRouting, RemoteModel } from '../../../shared/types'
+import type { ProviderRouting, RemoteModel, Skill, SkillFile, SkillInput } from '../../../shared/types'
+import { exportSkillToZip, parseSkillFromZip } from '../../../shared/skill-zip'
 import { API_FORMAT_LABELS } from '../types'
 import { stepTokenValue } from '../token-step'
 import { isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../web-search'
@@ -28,15 +29,21 @@ interface SettingsDialogProps {
   open: boolean
   preferences: AppPreferences
   providers: ProviderConfig[]
+  skills?: Skill[]
   onClose: () => void
   onClearData?: () => Promise<void>
   onDiscoverModels?: (providerId: string) => Promise<RemoteModel[]>
   onSave: (payload: SettingsSavePayload) => void | Promise<void>
   onTestProvider?: (provider: ProviderConfig, apiKeyInput: string, clearApiKey: boolean) => Promise<boolean>
+  onUpsertSkill?: (input: SkillInput) => Promise<Skill>
+  onRemoveSkill?: (id: string) => Promise<void>
+  onToggleSkill?: (id: string, enabled: boolean) => Promise<Skill>
+  onResetDefaultSkills?: () => Promise<Skill[]>
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
   { id: 'general', label: '通用', icon: 'settings' },
+  { id: 'skills', label: 'Agent 技能', icon: 'bot' },
   { id: 'models', label: '模型', icon: 'sparkles' },
   { id: 'providers', label: '服务商', icon: 'globe' },
   { id: 'security', label: '数据与安全', icon: 'shield' },
@@ -195,16 +202,22 @@ export function SettingsDialog({
   open,
   preferences,
   providers,
+  skills = [],
   onClose,
   onClearData,
   onDiscoverModels,
   onSave,
-  onTestProvider
+  onTestProvider,
+  onUpsertSkill,
+  onRemoveSkill,
+  onToggleSkill,
+  onResetDefaultSkills
 }: SettingsDialogProps): JSX.Element | null {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection)
   const [modelDrafts, setModelDrafts] = useState<ModelConfig[]>(models)
   const [providerDrafts, setProviderDrafts] = useState<ProviderConfig[]>(providers)
   const [preferenceDraft, setPreferenceDraft] = useState<AppPreferences>(preferences)
+  const [skillsList, setSkillsList] = useState<Skill[]>(skills)
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({})
   const [clearApiKeyIds, setClearApiKeyIds] = useState<string[]>([])
   const [selectedModelId, setSelectedModelId] = useState(models[0]?.id ?? '')
@@ -219,6 +232,17 @@ export function SettingsDialog({
   const [clearConfirming, setClearConfirming] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState('')
+
+  // Skills UI state
+  const [editingSkill, setEditingSkill] = useState<SkillInput | null>(null)
+  const [installingSkill, setInstallingSkill] = useState(false)
+  const [skillImportText, setSkillImportText] = useState('')
+  const [skillImportError, setSkillImportError] = useState('')
+  const [skillFilter, setSkillFilter] = useState<'all' | 'builtin' | 'custom'>('all')
+  const [skillSearch, setSkillSearch] = useState('')
+  const [skillActionError, setSkillActionError] = useState('')
+  const [expandedSkillPromptIds, setExpandedSkillPromptIds] = useState<Set<string>>(new Set())
+  const [activeSkillFileTabs, setActiveSkillFileTabs] = useState<Record<string, string>>({})
 
   const confirmClearData = async (): Promise<void> => {
     if (!onClearData) return
@@ -240,6 +264,11 @@ export function SettingsDialog({
     setClearApiKeyIds([])
     setShowApiKey(false)
     setSaveError('')
+    setEditingSkill(null)
+    setInstallingSkill(false)
+    setSkillImportText('')
+    setSkillImportError('')
+    setSkillActionError('')
     onClose()
   }, [onClose])
 
@@ -249,6 +278,7 @@ export function SettingsDialog({
     setModelDrafts(models.map((model) => ({ ...model })))
     setProviderDrafts(providers.map((provider) => ({ ...provider })))
     setPreferenceDraft({ ...preferences })
+    setSkillsList(skills.map((skill) => ({ ...skill })))
     setApiKeyInputs({})
     setClearApiKeyIds([])
     setSelectedModelId(models[0]?.id ?? '')
@@ -259,7 +289,183 @@ export function SettingsDialog({
     setRemoteModels(null)
     setModelsNeedingCalibration([])
     setSaveError('')
-  }, [initialSection, models, open, preferences, providers])
+    setEditingSkill(null)
+    setInstallingSkill(false)
+    setSkillImportText('')
+    setSkillImportError('')
+    setSkillActionError('')
+  }, [initialSection, models, open, preferences, providers, skills])
+
+  const handleToggleSkill = async (id: string, enabled: boolean): Promise<void> => {
+    if (!onToggleSkill) return
+    setSkillActionError('')
+    try {
+      const updated = await onToggleSkill(id, enabled)
+      setSkillsList((prev) => prev.map((s) => (s.id === id ? updated : s)))
+    } catch (err) {
+      setSkillActionError(err instanceof Error ? err.message : '切换技能状态失败')
+    }
+  }
+
+  const handleSaveSkill = async (input: SkillInput): Promise<void> => {
+    if (!onUpsertSkill) return
+    setSkillActionError('')
+    try {
+      const saved = await onUpsertSkill(input)
+      setSkillsList((prev) => {
+        const exists = prev.some((s) => s.id === saved.id)
+        return exists ? prev.map((s) => (s.id === saved.id ? saved : s)) : [...prev, saved]
+      })
+      setEditingSkill(null)
+    } catch (err) {
+      setSkillActionError(err instanceof Error ? err.message : '保存技能失败')
+    }
+  }
+
+  const handleRemoveSkill = async (id: string): Promise<void> => {
+    if (!onRemoveSkill) return
+    setSkillActionError('')
+    try {
+      await onRemoveSkill(id)
+      setSkillsList((prev) => prev.filter((s) => s.id !== id))
+    } catch (err) {
+      setSkillActionError(err instanceof Error ? err.message : '删除技能失败')
+    }
+  }
+
+  const handleResetSkills = async (): Promise<void> => {
+    if (!onResetDefaultSkills) return
+    setSkillActionError('')
+    try {
+      const reset = await onResetDefaultSkills()
+      setSkillsList(reset)
+    } catch (err) {
+      setSkillActionError(err instanceof Error ? err.message : '恢复默认技能失败')
+    }
+  }
+
+  const handleExportSkill = async (skill: Skill): Promise<void> => {
+    setSkillActionError('')
+    try {
+      const zipData = await exportSkillToZip(skill)
+      const blob = new Blob([zipData], { type: 'application/zip' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `skill-${skill.id || 'custom'}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setSkillActionError(err instanceof Error ? err.message : '导出 Zip 技能包失败')
+    }
+  }
+
+  const handleImportZipFile = async (file: File): Promise<void> => {
+    setSkillImportError('')
+    try {
+      const buffer = await file.arrayBuffer()
+      const candidate = await parseSkillFromZip(buffer)
+      if (onUpsertSkill) {
+        const saved = await onUpsertSkill(candidate)
+        setSkillsList((prev) => {
+          const exists = prev.some((s) => s.id === saved.id)
+          return exists ? prev.map((s) => (s.id === saved.id ? saved : s)) : [...prev, saved]
+        })
+      }
+      setInstallingSkill(false)
+      setSkillImportText('')
+    } catch (err) {
+      setSkillImportError(err instanceof Error ? err.message : '解析或导入 Zip 技能包失败，请检查压缩包内容。')
+    }
+  }
+
+  const handleImportTextOrFile = async (file: File): Promise<void> => {
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      await handleImportZipFile(file)
+      return
+    }
+    setSkillImportError('')
+    try {
+      const text = await file.text()
+      setSkillImportText(text)
+    } catch {
+      setSkillImportError('读取文件失败，请重试。')
+    }
+  }
+
+  const handleImportSkillText = async (): Promise<void> => {
+    setSkillImportError('')
+    if (!skillImportText.trim()) {
+      setSkillImportError('请输入或粘贴技能 JSON 配置。')
+      return
+    }
+    try {
+      const parsed = JSON.parse(skillImportText.trim())
+      const items = Array.isArray(parsed) ? parsed : [parsed]
+      for (const item of items) {
+        if (!item || typeof item !== 'object') throw new Error('无效的技能配置格式')
+        if (typeof item.name !== 'string' || !item.name.trim()) throw new Error('技能缺少有效名称')
+        if (typeof item.systemPrompt !== 'string' || !item.systemPrompt.trim()) throw new Error('技能缺少有效系统指令 (systemPrompt)')
+
+        const candidate: SkillInput = {
+          id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined,
+          name: item.name.trim(),
+          description: typeof item.description === 'string' ? item.description.trim() : '',
+          icon: typeof item.icon === 'string' ? item.icon.trim() : undefined,
+          entryFile: typeof item.entryFile === 'string' ? item.entryFile.trim() : 'SKILL.md',
+          files: Array.isArray(item.files) ? item.files : undefined,
+          systemPrompt: item.systemPrompt.trim(),
+          author: typeof item.author === 'string' ? item.author.trim() : undefined,
+          version: typeof item.version === 'string' ? item.version.trim() : '1.0.0',
+          enabled: true
+        }
+        if (onUpsertSkill) {
+          const saved = await onUpsertSkill(candidate)
+          setSkillsList((prev) => {
+            const exists = prev.some((s) => s.id === saved.id)
+            return exists ? prev.map((s) => (s.id === saved.id ? saved : s)) : [...prev, saved]
+          })
+        }
+      }
+      setInstallingSkill(false)
+      setSkillImportText('')
+    } catch (err) {
+      setSkillImportError(err instanceof Error ? err.message : '解析或导入失败，请检查配置格式。')
+    }
+  }
+
+  const togglePromptExpanded = (id: string): void => {
+    setExpandedSkillPromptIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectSkillFileTab = (skillId: string, filePath: string): void => {
+    setActiveSkillFileTabs((prev) => ({
+      ...prev,
+      [skillId]: filePath
+    }))
+  }
+
+  const filteredSkills = useMemo(() => {
+    return skillsList.filter((skill) => {
+      if (skillFilter === 'builtin' && !skill.isBuiltIn) return false
+      if (skillFilter === 'custom' && skill.isBuiltIn) return false
+      if (skillSearch.trim()) {
+        const query = skillSearch.toLowerCase().trim()
+        const matchName = skill.name.toLowerCase().includes(query)
+        const matchDesc = skill.description.toLowerCase().includes(query)
+        const matchAuthor = (skill.author ?? '').toLowerCase().includes(query)
+        return matchName || matchDesc || matchAuthor
+      }
+      return true
+    })
+  }, [skillsList, skillFilter, skillSearch])
 
   useEffect(() => {
     if (!open) return
@@ -502,7 +708,7 @@ export function SettingsDialog({
         <aside className="settings-sidebar">
           <div className="settings-brand">
             <span className="brand-mark"><Icon name="app" size={21} /></span>
-            <span>ChatBox Lite</span>
+            <span>AgentBox</span>
           </div>
           <nav>
             {settingsNav.map((item) => (
@@ -526,10 +732,12 @@ export function SettingsDialog({
           <header className="settings-header">
             <div>
               <h2>{settingsNav.find((item) => item.id === activeSection)?.label}</h2>
+              <p>{activeSection === 'general' && '调整 AgentBox 的使用偏好'}</p>
+              <p>{activeSection === 'skills' && '管理、安装与自定义 Agent 智能体专业技能'}</p>
               <p>{activeSection === 'models' && '配置模型能力、上下文窗口与请求格式'}</p>
               <p>{activeSection === 'providers' && '管理 API 端点与访问密钥'}</p>
-              <p>{activeSection === 'general' && '调整 ChatBox Lite 的使用偏好'}</p>
               <p>{activeSection === 'security' && '了解本地加密与系统安全存储'}</p>
+              <p>{activeSection === 'about' && '关于 AgentBox 与系统信息'}</p>
             </div>
             <button className="icon-button" aria-label="关闭设置" onClick={closeDialog}><Icon name="close" /></button>
           </header>
@@ -538,7 +746,7 @@ export function SettingsDialog({
             {activeSection === 'general' && (
               <div className="settings-section-content narrow-settings">
                 <section className="settings-card">
-                  <h3>外观</h3>
+                  <h3>外观与行为</h3>
                   <div className="settings-row">
                     <div><strong>主题</strong><small>跟随系统或使用固定主题</small></div>
                     <div className="segmented-control">
@@ -552,6 +760,14 @@ export function SettingsDialog({
                         </button>
                       ))}
                     </div>
+                  </div>
+                  <div className="settings-row">
+                    <div><strong>新会话默认 Agent 模式</strong><small>新建对话时默认开启智能体模式与技能注入</small></div>
+                    <SettingsToggle
+                      checked={Boolean(preferenceDraft.defaultAgentMode)}
+                      label="新会话默认 Agent 模式"
+                      onChange={(defaultAgentMode) => setPreferenceDraft((current) => ({ ...current, defaultAgentMode }))}
+                    />
                   </div>
                   <div className="settings-row">
                     <div><strong>新会话默认思考</strong><small>支持推理的模型将自动开启</small></div>
@@ -687,6 +903,395 @@ export function SettingsDialog({
                     </label>
                   )}
                 </section>
+              </div>
+            )}
+
+            {activeSection === 'skills' && (
+              <div className="settings-section-content skills-settings">
+                <div className="skills-toolbar">
+                  <div className="skills-toolbar-left">
+                    <div className="skills-search-box">
+                      <Icon name="search" size={15} />
+                      <input
+                        placeholder="搜索技能名称、描述或作者…"
+                        value={skillSearch}
+                        onChange={(e) => setSkillSearch(e.target.value)}
+                      />
+                      {skillSearch && (
+                        <button className="icon-button" onClick={() => setSkillSearch('')} aria-label="清空搜索">
+                          <Icon name="close" size={13} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="segmented-control">
+                      {(['all', 'builtin', 'custom'] as const).map((filter) => (
+                        <button
+                          key={filter}
+                          className={skillFilter === filter ? 'is-active' : ''}
+                          onClick={() => setSkillFilter(filter)}
+                        >
+                          {filter === 'all'
+                            ? `全部 (${skillsList.length})`
+                            : filter === 'builtin'
+                              ? `预置 (${skillsList.filter((s) => s.isBuiltIn).length})`
+                              : `自定义 (${skillsList.filter((s) => !s.isBuiltIn).length})`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="skills-toolbar-right">
+                    <button
+                      className="skills-action-btn is-primary"
+                      onClick={() => {
+                        setEditingSkill({
+                          name: '',
+                          description: '',
+                          icon: 'bot',
+                          entryFile: 'SKILL.md',
+                          files: [
+                            {
+                              path: 'SKILL.md',
+                              content: '# 新技能\n\n请在此处编写技能规范与说明。',
+                              kind: 'markdown'
+                            }
+                          ],
+                          systemPrompt: '',
+                          version: '1.0.0',
+                          author: 'User',
+                          enabled: true
+                        })
+                      }}
+                    >
+                      <Icon name="plus" size={14} />
+                      <span>新建技能</span>
+                    </button>
+                    <button
+                      className="skills-action-btn"
+                      onClick={() => {
+                        setInstallingSkill(true)
+                        setSkillImportText('')
+                        setSkillImportError('')
+                      }}
+                    >
+                      <Icon name="upload" size={14} />
+                      <span>导入技能</span>
+                    </button>
+                    <button
+                      className="skills-action-btn"
+                      onClick={() => void handleResetSkills()}
+                      title="重置系统预置技能并保留自定义技能"
+                    >
+                      <Icon name="refresh" size={14} />
+                      <span>恢复预置</span>
+                    </button>
+                  </div>
+                </div>
+
+                {skillActionError && (
+                  <div className="settings-error-banner" role="alert">
+                    <Icon name="info" size={15} />
+                    <span>{skillActionError}</span>
+                    <button className="icon-button" onClick={() => setSkillActionError('')}><Icon name="close" size={13} /></button>
+                  </div>
+                )}
+
+                <div className="skills-grid">
+                  {filteredSkills.length === 0 ? (
+                    <div className="skills-empty">
+                      <Icon name="bot" size={32} />
+                      <p>未找到匹配的技能</p>
+                      <small>可点击上方「新建技能」或「导入技能」添加新能力（支持 .zip 压缩包）</small>
+                    </div>
+                  ) : (
+                    filteredSkills.map((skill) => {
+                      const isExpanded = expandedSkillPromptIds.has(skill.id)
+                      const iconName = (skill.icon as Parameters<typeof Icon>[0]['name']) || 'bot'
+                      const files = skill.files && skill.files.length > 0
+                        ? skill.files
+                        : [{ path: skill.entryFile || 'SKILL.md', content: skill.systemPrompt || '', kind: 'markdown' as const }]
+                      const mdCount = files.filter((f) => f.kind === 'markdown').length
+                      const pyCount = files.filter((f) => f.kind === 'python').length
+                      const shCount = files.filter((f) => f.kind === 'shell').length
+                      const activeTabPath = activeSkillFileTabs[skill.id] || skill.entryFile || files[0]?.path || 'SKILL.md'
+                      const activeFile = files.find((f) => f.path === activeTabPath) || files[0]
+
+                      return (
+                        <div key={skill.id} className={`skill-card ${!skill.enabled ? 'is-disabled' : ''}`}>
+                          <div className="skill-card-header">
+                            <div className="skill-icon-wrapper">
+                              <Icon name={iconName} size={20} />
+                            </div>
+                            <div className="skill-info">
+                              <div className="skill-title-row">
+                                <h4>{skill.name}</h4>
+                                <span className={`skill-badge ${skill.isBuiltIn ? 'is-builtin' : 'is-custom'}`}>
+                                  {skill.isBuiltIn ? '预置' : '自定义'}
+                                </span>
+                              </div>
+                              <div className="skill-meta-row">
+                                {skill.version && <span className="skill-version">v{skill.version}</span>}
+                                {skill.author && <span className="skill-author">by {skill.author}</span>}
+                              </div>
+                            </div>
+                            <div className="skill-toggle-wrapper">
+                              <SettingsToggle
+                                checked={skill.enabled}
+                                label={skill.enabled ? '已启用' : '已停用'}
+                                onChange={(enabled) => void handleToggleSkill(skill.id, enabled)}
+                              />
+                            </div>
+                          </div>
+
+                          <p className="skill-description">{skill.description}</p>
+
+                          <div className="skill-file-tags">
+                            {mdCount > 0 && (
+                              <span className="skill-tag skill-tag-md" title={`${mdCount} 个 Markdown 文档`}>
+                                <Icon name="file" size={11} />
+                                {mdCount} Markdown
+                              </span>
+                            )}
+                            {pyCount > 0 && (
+                              <span className="skill-tag skill-tag-py" title={`${pyCount} 个 Python 3 脚本`}>
+                                <Icon name="code" size={11} />
+                                {pyCount} Python 3
+                              </span>
+                            )}
+                            {shCount > 0 && (
+                              <span className="skill-tag skill-tag-sh" title={`${shCount} 个 Shell 脚本`}>
+                                <Icon name="tool" size={11} />
+                                {shCount} Shell
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="skill-prompt-section">
+                            <button
+                              className="skill-prompt-header-btn"
+                              type="button"
+                              onClick={() => togglePromptExpanded(skill.id)}
+                            >
+                              <span>查看技能文件与规范 ({files.length} 个文件)</span>
+                              <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={14} />
+                            </button>
+                            {isExpanded && (
+                              <div className="skill-files-viewer">
+                                <div className="skill-files-tabs">
+                                  {files.map((file) => (
+                                    <button
+                                      key={file.path}
+                                      className={`skill-file-tab ${file.path === activeTabPath ? 'is-active' : ''}`}
+                                      onClick={() => selectSkillFileTab(skill.id, file.path)}
+                                      type="button"
+                                    >
+                                      <Icon
+                                        name={file.kind === 'python' ? 'code' : file.kind === 'shell' ? 'tool' : 'file'}
+                                        size={12}
+                                      />
+                                      <span>{file.path}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                                <pre className="skill-prompt-preview">
+                                  <code>{activeFile?.content || ''}</code>
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="skill-card-footer">
+                            <button
+                              className="skill-footer-btn"
+                              onClick={() => {
+                                setEditingSkill({
+                                  id: skill.id,
+                                  name: skill.name,
+                                  description: skill.description,
+                                  icon: skill.icon,
+                                  entryFile: skill.entryFile || 'SKILL.md',
+                                  files: skill.files,
+                                  systemPrompt: skill.systemPrompt,
+                                  author: skill.author,
+                                  version: skill.version,
+                                  enabled: skill.enabled
+                                })
+                              }}
+                            >
+                              <Icon name="edit" size={13} />
+                              <span>编辑</span>
+                            </button>
+                            <button
+                              className="skill-footer-btn"
+                              onClick={() => void handleExportSkill(skill)}
+                              title="导出为 Zip 技能压缩包 (.zip)"
+                            >
+                              <Icon name="download" size={13} />
+                              <span>导出 .zip</span>
+                            </button>
+                            {!skill.isBuiltIn && (
+                              <button
+                                className="skill-footer-btn is-danger"
+                                onClick={() => void handleRemoveSkill(skill.id)}
+                                title="删除此自定义技能"
+                              >
+                                <Icon name="trash" size={13} />
+                                <span>删除</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Skill Edit / Create Modal */}
+                {editingSkill && (
+                  <div className="skill-modal-backdrop" onClick={() => setEditingSkill(null)}>
+                    <div className="skill-modal" onClick={(e) => e.stopPropagation()}>
+                      <header className="skill-modal-header">
+                        <h3>{editingSkill.id ? '编辑技能' : '新建自定义技能'}</h3>
+                        <button className="icon-button" onClick={() => setEditingSkill(null)}><Icon name="close" size={16} /></button>
+                      </header>
+                      <div className="skill-modal-body">
+                        <div className="skill-form-row">
+                          <label className="skill-form-field" style={{ flex: 2 }}>
+                            <span>技能名称 *</span>
+                            <input
+                              autoFocus
+                              placeholder="例如：数据分析师"
+                              value={editingSkill.name}
+                              onChange={(e) => setEditingSkill({ ...editingSkill, name: e.target.value })}
+                            />
+                          </label>
+                          <label className="skill-form-field" style={{ flex: 1 }}>
+                            <span>图标</span>
+                            <select
+                              value={editingSkill.icon ?? 'bot'}
+                              onChange={(e) => setEditingSkill({ ...editingSkill, icon: e.target.value })}
+                            >
+                              <option value="bot">智能体 (bot)</option>
+                              <option value="code">代码 (code)</option>
+                              <option value="chart">图表 (chart)</option>
+                              <option value="translate">翻译 (translate)</option>
+                              <option value="sparkles">智能 (sparkles)</option>
+                              <option value="tool">工具 (tool)</option>
+                              <option value="search">搜索 (search)</option>
+                              <option value="file">文档 (file)</option>
+                              <option value="globe">网络 (globe)</option>
+                              <option value="zap">极速 (zap)</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        <div className="skill-form-row">
+                          <label className="skill-form-field" style={{ flex: 1 }}>
+                            <span>作者</span>
+                            <input
+                              placeholder="例如：Community / User"
+                              value={editingSkill.author ?? ''}
+                              onChange={(e) => setEditingSkill({ ...editingSkill, author: e.target.value })}
+                            />
+                          </label>
+                          <label className="skill-form-field" style={{ flex: 1 }}>
+                            <span>版本号</span>
+                            <input
+                              placeholder="例如：1.0.0"
+                              value={editingSkill.version ?? '1.0.0'}
+                              onChange={(e) => setEditingSkill({ ...editingSkill, version: e.target.value })}
+                            />
+                          </label>
+                        </div>
+
+                        <label className="skill-form-field">
+                          <span>技能简述</span>
+                          <input
+                            placeholder="简明描述此技能适用的场景与擅长的任务…"
+                            value={editingSkill.description}
+                            onChange={(e) => setEditingSkill({ ...editingSkill, description: e.target.value })}
+                          />
+                        </label>
+
+                        <label className="skill-form-field">
+                          <span>主指令 Markdown 文件 (SKILL.md) *</span>
+                          <textarea
+                            placeholder="定义 Agent 激活此技能时的专业执行规范、思考准则与输出格式…"
+                            rows={8}
+                            value={editingSkill.systemPrompt ?? ''}
+                            onChange={(e) => setEditingSkill({ ...editingSkill, systemPrompt: e.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <footer className="skill-modal-footer">
+                        <button className="secondary-button" onClick={() => setEditingSkill(null)}>取消</button>
+                        <button
+                          className="primary-button"
+                          disabled={!editingSkill.name.trim() || !(editingSkill.systemPrompt || editingSkill.files?.length)}
+                          onClick={() => void handleSaveSkill(editingSkill)}
+                        >
+                          保存技能
+                        </button>
+                      </footer>
+                    </div>
+                  </div>
+                )}
+
+                {/* Skill Import Modal */}
+                {installingSkill && (
+                  <div className="skill-modal-backdrop" onClick={() => setInstallingSkill(false)}>
+                    <div className="skill-modal" onClick={(e) => e.stopPropagation()}>
+                      <header className="skill-modal-header">
+                        <h3>导入外部技能 (Import Skill)</h3>
+                        <button className="icon-button" onClick={() => setInstallingSkill(false)}><Icon name="close" size={16} /></button>
+                      </header>
+                      <div className="skill-modal-body">
+                        <p className="skill-modal-hint">
+                          <strong>推荐方式</strong>：选择包含 <code>SKILL.md</code>、Python 3 / Shell 脚本和参考文档的 <strong>.zip 技能压缩包</strong> 直接导入。
+                        </p>
+                        <div className="skill-import-dropzone">
+                          <label className="skill-file-upload-btn">
+                            <Icon name="upload" size={16} />
+                            <span>选择技能压缩包 (.zip) 或 JSON 文件</span>
+                            <input
+                              type="file"
+                              accept=".zip,.json,application/zip,application/json"
+                              style={{ display: 'none' }}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) void handleImportTextOrFile(file)
+                              }}
+                            />
+                          </label>
+                        </div>
+                        <label className="skill-form-field" style={{ marginTop: '12px' }}>
+                          <span>或者粘贴 JSON 文本配置：</span>
+                          <textarea
+                            className="mono-input"
+                            placeholder={`{\n  "name": "数学推演专家",\n  "description": "...",\n  "systemPrompt": "..."\n}`}
+                            rows={6}
+                            value={skillImportText}
+                            onChange={(e) => setSkillImportText(e.target.value)}
+                          />
+                        </label>
+                        {skillImportError && (
+                          <div className="settings-field-error" style={{ marginTop: '8px' }}>
+                            {skillImportError}
+                          </div>
+                        )}
+                      </div>
+                      <footer className="skill-modal-footer">
+                        <button className="secondary-button" onClick={() => setInstallingSkill(false)}>取消</button>
+                        <button
+                          className="primary-button"
+                          disabled={!skillImportText.trim()}
+                          onClick={() => void handleImportSkillText()}
+                        >
+                          导入文本配置
+                        </button>
+                      </footer>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1169,8 +1774,8 @@ export function SettingsDialog({
             {activeSection === 'about' && (
               <div className="about-panel">
                 <div className="about-mark"><Icon name="app" size={42} /></div>
-                <h2>ChatBox Lite</h2>
-                <p>简洁、私密的多模型桌面聊天客户端。</p>
+                <h2>AgentBox</h2>
+                <p>私密、强大的多模型 AI 智能体与桌面客户端。</p>
                 <span className="version-pill">Version 0.1.0</span>
                 <div className="about-divider" />
                 <small>Built with React, Electron & OpenRouter</small>

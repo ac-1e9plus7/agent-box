@@ -17,6 +17,7 @@ interface ComposerProps {
   contextTokens: number
   disabled?: boolean
   draft: string
+  agentMode?: boolean
   reasoningEnabled: boolean
   webSearchAvailable: boolean
   webSearchMode: WebSearchMode
@@ -29,6 +30,7 @@ interface ComposerProps {
   onSend: () => void
   onSendWithTrim: () => void
   onStop: () => void
+  onToggleAgentMode?: () => void
   onToggleReasoning: () => void
   onWebSearchModeChange: (mode: WebSearchMode) => void
   onShowToast: (message: string) => void
@@ -52,6 +54,7 @@ export function Composer({
   contextTokens,
   disabled,
   draft,
+  agentMode = false,
   reasoningEnabled,
   webSearchAvailable,
   webSearchMode,
@@ -64,6 +67,7 @@ export function Composer({
   onSend,
   onSendWithTrim,
   onStop,
+  onToggleAgentMode,
   onToggleReasoning,
   onWebSearchModeChange,
   onShowToast,
@@ -227,7 +231,7 @@ export function Composer({
             }
           }}
           onPaste={handlePaste}
-          placeholder={disabled ? '请先配置可用模型与 API 密钥' : '给 ChatBox Lite 发送消息（支持拖拽/粘贴文件或图片）…'}
+          placeholder={disabled ? '请先配置可用模型与 API 密钥' : '给 AgentBox 发送消息（支持拖拽/粘贴文件或图片）…'}
           rows={1}
           value={draft}
         />
@@ -243,6 +247,16 @@ export function Composer({
             >
               <Icon name="paperclip" size={15} />
               {uploading && <span className="upload-spinner" />}
+            </button>
+            <button
+              className={`agent-pill ${agentMode ? 'is-active' : ''}`}
+              disabled={disabled}
+              onClick={onToggleAgentMode}
+              title={agentMode ? 'Agent 模式已开启（执行时注入已激活 Skills）' : '点击开启 Agent 智能体模式'}
+            >
+              <Icon name="bot" size={15} />
+              <span>Agent</span>
+              {agentMode && <Icon name="check" size={13} />}
             </button>
             <button
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}

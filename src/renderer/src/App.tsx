@@ -7,6 +7,8 @@ import type {
   MessageAttachment,
   ModelInput,
   ProviderInput,
+  Skill,
+  SkillInput,
   StreamEvent,
   WebCitation
 } from '../../shared/types'
@@ -41,6 +43,7 @@ const emptySettings: AppSettings = {
   sendShortcut: 'enter',
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
+  defaultAgentMode: false,
   contextManagementMode: 'manual',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' }
@@ -73,6 +76,8 @@ function toStoredConversation(conversation: Conversation): StoredConversation {
     title: conversation.title,
     modelId: conversation.modelId,
     reasoningEnabled: conversation.reasoningEnabled,
+    agentMode: conversation.agentMode,
+    skillIds: conversation.skillIds,
     webSearchMode: conversation.webSearchMode ?? 'off',
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
@@ -114,9 +119,11 @@ export default function App(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(emptySettings)
   const [providers, setProviders] = useState<ProviderConfig[]>([])
   const [models, setModels] = useState<ModelConfig[]>([])
+  const [skills, setSkills] = useState<Skill[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState('')
   const [activeModelId, setActiveModelId] = useState('')
+  const [agentMode, setAgentMode] = useState(false)
   const [reasoningEnabled, setReasoningEnabled] = useState(false)
   const [webSearchMode, setWebSearchMode] = useState<WebSearchMode>('off')
   const [draft, setDraft] = useState('')
@@ -164,7 +171,7 @@ export default function App(): JSX.Element {
 
   const persistConversation = useCallback(async (conversation: Conversation): Promise<boolean> => {
     try {
-      const saved = await window.chatbox.conversations.save(toStoredConversation(conversation))
+      const saved = await window.agentbox.conversations.save(toStoredConversation(conversation))
       replaceConversations((current) => current.map((item) => (
         item.id === saved.id ? { ...toUiConversation(saved), messages: item.messages } : item
       )))
@@ -177,7 +184,7 @@ export default function App(): JSX.Element {
 
   const createConversation = useCallback(async (
     modelId?: string,
-    modeOverrides?: Pick<Conversation, 'reasoningEnabled' | 'webSearchMode'>
+    modeOverrides?: Pick<Conversation, 'reasoningEnabled' | 'webSearchMode' | 'agentMode'>
   ): Promise<Conversation | undefined> => {
     const resolvedModel = models.find((model) => model.id === modelId)
       ?? models.find((model) => model.id === settings.defaultModelId)
@@ -200,6 +207,7 @@ export default function App(): JSX.Element {
           resolvedModel.defaultReasoningEnabled || settings.defaultReasoningEnabled
         )
       ),
+      agentMode: modeOverrides?.agentMode ?? settings.defaultAgentMode ?? false,
       webSearchMode: effectiveWebSearchMode(
         resolvedModel,
         resolvedProvider,
@@ -211,10 +219,11 @@ export default function App(): JSX.Element {
     }
 
     try {
-      const saved = toUiConversation(await window.chatbox.conversations.save(toStoredConversation(conversation)))
+      const saved = toUiConversation(await window.agentbox.conversations.save(toStoredConversation(conversation)))
       replaceConversations((current) => [saved, ...current])
       setActiveConversationId(saved.id)
       setActiveModelId(saved.modelId)
+      setAgentMode(Boolean(saved.agentMode))
       setReasoningEnabled(Boolean(saved.reasoningEnabled))
       setWebSearchMode(saved.webSearchMode ?? 'off')
       setDraft('')
@@ -225,18 +234,19 @@ export default function App(): JSX.Element {
       showToast(`无法新建会话：${normalizeError(error)}`)
       return undefined
     }
-  }, [models, providers, replaceConversations, settings.defaultModelId, settings.defaultReasoningEnabled, showToast])
+  }, [models, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, showToast])
 
   const bootstrap = useCallback(async (): Promise<void> => {
     setLoading(true)
     setBootstrapError('')
     try {
-      if (!window.chatbox) throw new Error('安全桥接未加载，请重新启动应用。')
-      const [nextSettings, providerViews, modelViews, conversationViews] = await Promise.all([
-        window.chatbox.settings.get(),
-        window.chatbox.providers.list(),
-        window.chatbox.models.list(),
-        window.chatbox.conversations.list()
+      if (!window.agentbox) throw new Error('安全桥接未加载，请重新启动应用。')
+      const [nextSettings, providerViews, modelViews, conversationViews, initialSkills] = await Promise.all([
+        window.agentbox.settings.get(),
+        window.agentbox.providers.list(),
+        window.agentbox.models.list(),
+        window.agentbox.conversations.list(),
+        window.agentbox.skills.list()
       ])
       const uiProviders: ProviderConfig[] = providerViews.map((provider) => ({
         ...provider,
@@ -246,6 +256,7 @@ export default function App(): JSX.Element {
       setSettings(nextSettings)
       setProviders(uiProviders)
       setModels(modelViews)
+      setSkills(initialSkills)
       conversationsRef.current = uiConversations
       setConversations(uiConversations)
 
@@ -256,6 +267,7 @@ export default function App(): JSX.Element {
       const initialProvider = uiProviders.find((provider) => provider.id === initialModel?.providerId)
       setActiveConversationId(initialConversation?.id ?? '')
       setActiveModelId(initialModel?.id ?? '')
+      setAgentMode(initialConversation?.agentMode ?? nextSettings.defaultAgentMode ?? false)
       setReasoningEnabled(
         initialConversation?.reasoningEnabled
           ?? Boolean(initialModel?.supportsReasoning && (
@@ -331,8 +343,8 @@ export default function App(): JSX.Element {
 
     try {
       const result = await runStreamWithReplay(
-        window.chatbox.chat.stream,
-        window.chatbox.chat.onEvent,
+        window.agentbox.chat.stream,
+        window.agentbox.chat.onEvent,
         {
           conversationId: conversation.id,
           modelId: model.id,
@@ -407,7 +419,7 @@ export default function App(): JSX.Element {
     }
   }, [maybeGenerateTitle, persistConversation, replaceConversations, showToast])
 
-  useEffect(() => window.chatbox.chat.onEvent((event) => {
+  useEffect(() => window.agentbox.chat.onEvent((event) => {
     const activeStream = activeStreamRef.current
     if (!activeStream) return
     if (!activeStream.requestId && event.type === 'start') activeStream.requestId = event.requestId
@@ -460,6 +472,7 @@ export default function App(): JSX.Element {
     if (!conversation) return
     setActiveConversationId(conversation.id)
     setActiveModelId(conversation.modelId)
+    setAgentMode(conversation.agentMode ?? settings.defaultAgentMode ?? false)
     setReasoningEnabled(Boolean(conversation.reasoningEnabled))
     const model = models.find((item) => item.id === conversation.modelId)
     const provider = providers.find((item) => item.id === model?.providerId)
@@ -470,14 +483,14 @@ export default function App(): JSX.Element {
 
   const handleDeleteConversation = async (conversationId: string): Promise<void> => {
     if (activeStreamRef.current?.conversationId === conversationId) {
-      await window.chatbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
+      await window.agentbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
       activeStreamRef.current = null
       setStreaming(false)
     }
     autoRenamingRef.current.delete(conversationId)
     manualRenamedRef.current.delete(conversationId)
     try {
-      await window.chatbox.conversations.remove(conversationId)
+      await window.agentbox.conversations.remove(conversationId)
       const next = replaceConversations((current) => current.filter((conversation) => conversation.id !== conversationId))
       if (activeConversationId === conversationId) {
         const nextConversation = next[0]
@@ -486,6 +499,7 @@ export default function App(): JSX.Element {
         const nextModel = models.find((model) => model.id === nextModelId)
         const nextProvider = providers.find((provider) => provider.id === nextModel?.providerId)
         setActiveModelId(nextModelId)
+        setAgentMode(nextConversation?.agentMode ?? settings.defaultAgentMode ?? false)
         setReasoningEnabled(Boolean(nextConversation?.reasoningEnabled ?? settings.defaultReasoningEnabled))
         setWebSearchMode(effectiveWebSearchMode(
           nextModel,
@@ -507,7 +521,7 @@ export default function App(): JSX.Element {
     setReasoningEnabled(model.supportsReasoning && model.defaultReasoningEnabled)
     setWebSearchMode(nextWebSearchMode)
     setSettings((current) => ({ ...current, defaultModelId: modelId }))
-    void window.chatbox.settings.update({ defaultModelId: modelId }).catch((error) => showToast(normalizeError(error)))
+    void window.agentbox.settings.update({ defaultModelId: modelId }).catch((error) => showToast(normalizeError(error)))
 
     if (activeConversation) {
       const nextConversation: Conversation = {
@@ -519,6 +533,20 @@ export default function App(): JSX.Element {
       }
       replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
       await persistConversation(nextConversation)
+    }
+  }
+
+  const handleToggleAgentMode = (): void => {
+    const nextMode = !agentMode
+    setAgentMode(nextMode)
+    if (activeConversation) {
+      const nextConversation: Conversation = {
+        ...activeConversation,
+        agentMode: nextMode,
+        updatedAt: new Date().toISOString()
+      }
+      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      void persistConversation(nextConversation)
     }
   }
 
@@ -536,6 +564,32 @@ export default function App(): JSX.Element {
       void persistConversation(nextConversation)
     }
   }
+
+  const handleUpsertSkill = useCallback(async (input: SkillInput): Promise<Skill> => {
+    const saved = await window.agentbox.skills.upsert(input)
+    setSkills((prev) => {
+      const exists = prev.some((s) => s.id === saved.id)
+      return exists ? prev.map((s) => (s.id === saved.id ? saved : s)) : [...prev, saved]
+    })
+    return saved
+  }, [])
+
+  const handleRemoveSkill = useCallback(async (id: string): Promise<void> => {
+    await window.agentbox.skills.remove(id)
+    setSkills((prev) => prev.filter((s) => s.id !== id))
+  }, [])
+
+  const handleToggleSkill = useCallback(async (id: string, enabled: boolean): Promise<Skill> => {
+    const updated = await window.agentbox.skills.toggle(id, enabled)
+    setSkills((prev) => prev.map((s) => (s.id === id ? updated : s)))
+    return updated
+  }, [])
+
+  const handleResetDefaultSkills = useCallback(async (): Promise<Skill[]> => {
+    const reset = await window.agentbox.skills.resetDefaults()
+    setSkills(reset)
+    return reset
+  }, [])
 
   const handleWebSearchModeChange = (mode: WebSearchMode): void => {
     if (mode !== 'off' && !webSearchAvailable) {
@@ -651,10 +705,12 @@ export default function App(): JSX.Element {
     }
 
     try {
-      const { requestId } = await window.chatbox.chat.stream({
+      const { requestId } = await window.agentbox.chat.stream({
         conversationId: nextConversation.id,
         modelId: activeModel.id,
         messages: requestMessages,
+        agentMode: nextConversation.agentMode ?? agentMode,
+        skillIds: nextConversation.skillIds,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -678,7 +734,7 @@ export default function App(): JSX.Element {
     const activeStream = activeStreamRef.current
     if (!activeStream?.requestId) return
     try {
-      await window.chatbox.chat.cancel(activeStream.requestId)
+      await window.agentbox.chat.cancel(activeStream.requestId)
       finishStream({ type: 'done', requestId: activeStream.requestId, finishReason: 'cancelled' })
     } catch (error) {
       showToast(`无法停止生成：${normalizeError(error)}`)
@@ -750,10 +806,12 @@ export default function App(): JSX.Element {
     }
 
     try {
-      const { requestId } = await window.chatbox.chat.stream({
+      const { requestId } = await window.agentbox.chat.stream({
         conversationId: nextConversation.id,
         modelId: activeModel.id,
         messages: requestMessages,
+        agentMode: nextConversation.agentMode ?? agentMode,
+        skillIds: nextConversation.skillIds,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -850,10 +908,12 @@ export default function App(): JSX.Element {
     }
 
     try {
-      const { requestId } = await window.chatbox.chat.stream({
+      const { requestId } = await window.agentbox.chat.stream({
         conversationId: nextConversation.id,
         modelId: activeModel.id,
         messages: requestMessages,
+        agentMode: nextConversation.agentMode ?? agentMode,
+        skillIds: nextConversation.skillIds,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -892,7 +952,7 @@ export default function App(): JSX.Element {
         ...(apiKey && !clearApiKey ? { apiKey } : {}),
         ...(clearApiKey ? { clearApiKey: true } : {})
       }
-      const saved = await window.chatbox.providers.upsert(input)
+      const saved = await window.agentbox.providers.upsert(input)
       providerIdMap.set(provider.id, saved.id)
       savedProviders.push({ ...saved, isBuiltIn: saved.id === 'openrouter' })
     }
@@ -917,7 +977,7 @@ export default function App(): JSX.Element {
         anthropicThinkingMode: model.anthropicThinkingMode,
         providerRouting: model.providerRouting
       }
-      const saved = await window.chatbox.models.upsert(input)
+      const saved = await window.agentbox.models.upsert(input)
       modelIdMap.set(model.id, saved.id)
       savedModels.push(saved)
     }
@@ -939,16 +999,16 @@ export default function App(): JSX.Element {
         : conversation
     })
     await Promise.all(updatedConversations.map((conversation) => (
-      conversation.modelId ? window.chatbox.conversations.save(toStoredConversation(conversation)) : Promise.resolve()
+      conversation.modelId ? window.agentbox.conversations.save(toStoredConversation(conversation)) : Promise.resolve()
     )))
 
     const keptModelIds = new Set(payload.models.filter((model) => existingModelIds.has(model.id)).map((model) => model.id))
     for (const model of models) {
-      if (!keptModelIds.has(model.id)) await window.chatbox.models.remove(model.id)
+      if (!keptModelIds.has(model.id)) await window.agentbox.models.remove(model.id)
     }
     const keptProviderIds = new Set(payload.providers.filter((provider) => existingProviderIds.has(provider.id)).map((provider) => provider.id))
     for (const provider of providers) {
-      if (!keptProviderIds.has(provider.id)) await window.chatbox.providers.remove(provider.id)
+      if (!keptProviderIds.has(provider.id)) await window.agentbox.providers.remove(provider.id)
     }
 
     const nextDefaultModelId = modelIdMap.get(payload.preferences.defaultModelId ?? '')
@@ -956,7 +1016,7 @@ export default function App(): JSX.Element {
     const nextTitleGenerationModelId = payload.preferences.titleGenerationModelId
       ? (modelIdMap.get(payload.preferences.titleGenerationModelId) ?? (savedModels.some((model) => model.id === payload.preferences.titleGenerationModelId) ? payload.preferences.titleGenerationModelId : undefined))
       : undefined
-    const savedSettings = await window.chatbox.settings.update({
+    const savedSettings = await window.agentbox.settings.update({
       ...payload.preferences,
       defaultModelId: nextDefaultModelId,
       titleGenerationModelId: nextTitleGenerationModelId
@@ -988,7 +1048,7 @@ export default function App(): JSX.Element {
   ): Promise<boolean> => {
     try {
       const isPersisted = providers.some((item) => item.id === provider.id)
-      const result = await window.chatbox.providers.test({
+      const result = await window.agentbox.providers.test({
         ...(isPersisted ? { id: provider.id } : {}),
         name: provider.name,
         kind: provider.kind,
@@ -1013,11 +1073,11 @@ export default function App(): JSX.Element {
 
   const handleClearAllData = async (): Promise<void> => {
     if (activeStreamRef.current) {
-      await window.chatbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
+      await window.agentbox.chat.cancel(activeStreamRef.current.requestId).catch(() => undefined)
       activeStreamRef.current = null
       setStreaming(false)
     }
-    await window.chatbox.data.clearConversations()
+    await window.agentbox.data.clearConversations()
     conversationsRef.current = []
     setConversations([])
     setActiveConversationId('')
@@ -1037,7 +1097,7 @@ export default function App(): JSX.Element {
 
   const discoverModels = async (providerId: string) => {
     try {
-      const discovered = await window.chatbox.models.discover(providerId)
+      const discovered = await window.agentbox.models.discover(providerId)
       showToast(`已获取 ${discovered.length} 个模型。`)
       return discovered
     } catch (error) {
@@ -1056,7 +1116,7 @@ export default function App(): JSX.Element {
     return (
       <main className="app-loading">
         <span className="loading-mark"><Icon name="app" size={34} /></span>
-        <h1>ChatBox Lite</h1>
+        <h1>AgentBox</h1>
         <div className="loading-line"><i /></div>
         <p>正在解锁本地数据…</p>
       </main>
@@ -1096,6 +1156,8 @@ export default function App(): JSX.Element {
         <Topbar
           activeModel={activeModel}
           activeTitle={activeConversation?.title ?? '新对话'}
+          agentMode={agentMode}
+          activeSkillsCount={skills.filter((s) => s.enabled).length}
           models={models}
           providers={providers}
           reasoningEnabled={reasoningEnabled}
@@ -1103,8 +1165,10 @@ export default function App(): JSX.Element {
           onModelChange={(modelId) => void handleModelChange(modelId)}
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
           onOpenSettings={() => openSettings('models')}
+          onOpenSkillsSettings={() => openSettings('skills')}
           onRenameConversation={(title) => activeConversation && renameConversation(activeConversation.id, title)}
           onRestoreSidebar={() => setSidebarCollapsed(false)}
+          onToggleAgentMode={handleToggleAgentMode}
           onToggleReasoning={handleToggleReasoning}
         />
 
@@ -1129,6 +1193,7 @@ export default function App(): JSX.Element {
             contextTokens={contextProjection?.estimatedInputTokens ?? 0}
             disabled={!activeModel}
             draft={draft}
+            agentMode={agentMode}
             reasoningEnabled={reasoningEnabled}
             webSearchAvailable={webSearchAvailable}
             webSearchMode={webSearchMode}
@@ -1143,6 +1208,7 @@ export default function App(): JSX.Element {
             onSendWithTrim={() => void handleSend(true)}
             onShowToast={showToast}
             onStop={() => void handleStop()}
+            onToggleAgentMode={handleToggleAgentMode}
             onToggleReasoning={handleToggleReasoning}
             onWebSearchModeChange={handleWebSearchModeChange}
           />
@@ -1155,11 +1221,16 @@ export default function App(): JSX.Element {
         open={settingsOpen}
         preferences={settings}
         providers={providers}
+        skills={skills}
         onClose={() => setSettingsOpen(false)}
         onClearData={handleClearAllData}
         onDiscoverModels={discoverModels}
         onSave={saveSettings}
         onTestProvider={testProvider}
+        onUpsertSkill={handleUpsertSkill}
+        onRemoveSkill={handleRemoveSkill}
+        onToggleSkill={handleToggleSkill}
+        onResetDefaultSkills={handleResetDefaultSkills}
       />
 
       {toast && <div className="toast" role="status"><Icon name="info" size={16} /><span>{toast}</span></div>}

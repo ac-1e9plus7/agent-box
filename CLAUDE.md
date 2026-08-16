@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-ChatBoxLite 是一个 React 19 + TypeScript + Electron 35 + electron-vite 桌面聊天客户端，主要面向 OpenRouter，同时支持 CLIProxyAPI、OpenAI、Anthropic 和自定义兼容服务。
+AgentBox 是一个 React 19 + TypeScript + Electron 35 + electron-vite 桌面客户端与 AI 智能体应用，主要面向 OpenRouter，同时支持 CLIProxyAPI、OpenAI、Anthropic 和自定义兼容服务。
 
 核心目标：
 
@@ -43,20 +43,21 @@ pnpm dist
 src/shared/                         跨进程类型、IPC channel 与共享纯函数
 src/shared/token-estimate.ts        token 估算常量与函数（main 与 renderer 共用，禁止再各自实现）
 src/electron/main.ts                Electron 生命周期、窗口与外链策略
-src/electron/preload.ts             最小化、冻结的 window.chatbox API
+src/electron/preload.ts             最小化、冻结的 window.agentbox API
 src/electron/ipc/register-ipc.ts    IPC 注册与 sender 校验
-src/electron/api/gateway.ts         网络、超时、流式请求、取消、代理 dispatcher
+src/electron/api/gateway.ts         网络、超时、流式请求、取消、Agent 提示词装配、代理 dispatcher
 src/electron/api/request-adapters.ts 三种请求格式的请求体构造
 src/electron/api/protocol-adapters.ts 三种 SSE/响应格式的统一解析
 src/electron/api/provider-policy.ts URL、鉴权和 provider 安全策略
 src/electron/api/context-window.ts  完整轮次裁剪（token 估算来自 shared/token-estimate）
-src/electron/storage/               加密 vault、schema、配额和仓库操作
+src/electron/storage/default-skills.ts 5 个系统内置技能定义
+src/electron/storage/               加密 vault、skills CRUD、schema、配额和仓库操作
 src/renderer/src/App.tsx            renderer 状态与业务编排
 src/renderer/src/components/        React UI
 src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、file-helper、defaults
 scripts/                            零依赖图标再生命令（generate-icons.mjs、make-ico.mjs）
 build/                              应用图标资产（icon.svg/icon.png/icon.ico），package.json 已引用，必须随仓库提交
-tests/                              协议、schema、配额和纯函数测试
+tests/                              协议、schema、配额、Skills 和纯函数测试
 ```
 
 保持职责边界：renderer 只处理展示和用户交互；所有密钥、网络和持久化操作必须留在主进程。
@@ -76,7 +77,7 @@ tests/                              协议、schema、配额和纯函数测试
 
 - 保持 `sandbox: true`、`contextIsolation: true`、`nodeIntegration: false` 和 `webSecurity: true`。
 - sandboxed preload 必须输出 CommonJS `out/preload/index.cjs`；不要改回含顶层 import 的 ESM preload，也不要通过关闭 sandbox 规避加载问题。
-- preload 只暴露 `window.chatbox` 白名单，并保持 deep freeze。
+- preload 只暴露 `window.agentbox` 白名单，并保持 deep freeze。
 - IPC 必须同时校验目标 `WebContents`、`senderFrame === mainFrame` 和精确页面 URL。
 - 生产 renderer 使用 `file://`，CSP 必须保留在 `src/renderer/index.html` 的 meta 中；HTTP response header 不能为 `file://` 提供 CSP。
 - 新窗口始终由 Electron 拒绝。只有经过主进程二次校验的 `http:`/`https:` URL 可交给 `shell.openExternal`。
@@ -204,8 +205,8 @@ tests/                              协议、schema、配额和纯函数测试
 
 ## 开发排障提示
 
-- `pnpm dev` 编译成功但新窗口立即退出时，先检查是否已有 ChatBox Lite/Electron 实例持有 single-instance lock。
-- 窗口空白且 `window.chatbox` 不存在时，检查 preload 是否仍输出并加载 `index.cjs`，不要关闭 sandbox。
+- `pnpm dev` 编译成功但新窗口立即退出时，先检查是否已有 AgentBox/Electron 实例持有 single-instance lock。
+- 窗口空白且 `window.agentbox` 不存在时，检查 preload 是否仍输出并加载 `index.cjs`，不要关闭 sandbox。
 - 首次启动失败时检查 `safeStorage`/系统凭据后端，不要创建明文 fallback。
 - 修改应用图标后运行 `node scripts/generate-icons.mjs && node scripts/make-ico.mjs` 重新生成全套 PNG 与 ICO；`build/` 下的图标资产必须随仓库提交，否则打包缺图标。
 - 新增被测试引用的 renderer 纯函数模块时，必须同时加入 `tsconfig.node.json` 的 `include`（与 `token-step.ts`、`context-projection.ts`、`title.ts` 同模式），否则 typecheck 报 TS6307。

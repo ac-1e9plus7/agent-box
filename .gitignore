@@ -39,7 +39,7 @@ yarn-error.log*
 !.env.example
 *.pem
 *.key
-.chatboxlite/
+.agentbox/
 
 # Editor and OS metadata
 .DS_Store

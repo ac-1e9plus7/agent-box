@@ -34,7 +34,7 @@ describe('clearConversations data wipe', () => {
   let dir: string
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'chatbox-clear-'))
+    dir = mkdtempSync(join(tmpdir(), 'agentbox-clear-'))
   })
   afterAll(() => {
     rmSync(dir, { recursive: true, force: true })

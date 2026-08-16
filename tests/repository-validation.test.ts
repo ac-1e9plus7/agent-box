@@ -21,8 +21,8 @@ const {
 describe('Header sanitization and injection prevention (sanitizeHeaders)', () => {
   it('accepts safe custom HTTP headers', () => {
     const headers = {
-      'X-Title': 'ChatBox Lite',
-      'HTTP-Referer': 'https://chatbox.desktop',
+      'X-Title': 'AgentBox',
+      'HTTP-Referer': 'https://agentbox.desktop',
       'OpenAI-Beta': 'assistants=v2',
     }
     expect(sanitizeHeaders(headers)).toEqual(headers)
@@ -144,7 +144,7 @@ describe('AppRepository business constraints and relational integrity', () => {
   const timestamp = '2026-08-15T00:00:00.000Z'
 
   beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), 'chatbox-repo-test-'))
+    dir = mkdtempSync(join(tmpdir(), 'agentbox-repo-test-'))
   })
   afterAll(() => {
     rmSync(dir, { recursive: true, force: true })

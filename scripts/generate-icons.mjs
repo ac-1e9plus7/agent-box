@@ -1,4 +1,4 @@
-// Self-contained logo rasterizer. No dependencies. Renders the ChatBox Lite
+// Self-contained logo rasterizer. No dependencies. Renders the AgentBox
 // app icon (rounded-square green gradient + white circular spark mark) to PNGs.
 // Geometry mirrors the in-app `app` icon (Icon.tsx) so the app icon and the
 // in-app logo stay unified.

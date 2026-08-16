@@ -44,8 +44,46 @@ export interface AppSettings {
   titleGenerationModelId?: string
   defaultReasoningEnabled: boolean
   defaultReasoningEffort: Exclude<ReasoningEffort, 'none'>
+  defaultAgentMode?: boolean
   systemPrompt: string
   proxy: ProxyConfig
+}
+
+export type SkillFileKind = 'markdown' | 'python' | 'shell' | 'other'
+
+export interface SkillFile {
+  path: string
+  content: string
+  kind: SkillFileKind
+}
+
+export interface Skill {
+  id: string
+  name: string
+  description: string
+  icon?: string
+  entryFile: string
+  files: SkillFile[]
+  systemPrompt?: string
+  isBuiltIn?: boolean
+  enabled: boolean
+  author?: string
+  version?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface SkillInput {
+  id?: string
+  name: string
+  description: string
+  icon?: string
+  entryFile?: string
+  files?: SkillFile[]
+  systemPrompt?: string
+  enabled?: boolean
+  author?: string
+  version?: string
 }
 
 /** A provider object that is safe to expose to the renderer. */
@@ -166,6 +204,8 @@ export interface Conversation {
   title: string
   modelId: string
   reasoningEnabled?: boolean
+  agentMode?: boolean
+  skillIds?: string[]
   /** Defaults to off when omitted by an older vault. */
   webSearchMode?: WebSearchMode
   messages: Message[]
@@ -178,6 +218,8 @@ export interface ChatRequest {
   modelId: string
   messages: Message[]
   reasoningEnabled: boolean
+  agentMode?: boolean
+  skillIds?: string[]
   /** Overrides the model default for this request. */
   webSearchMode?: WebSearchMode
   /** Explicitly opts this one request into complete-turn trimming. */
@@ -223,7 +265,7 @@ export interface AppInfo {
   platform: string
 }
 
-export interface ChatboxAPI {
+export interface AgentboxAPI {
   settings: {
     get(): Promise<AppSettings>
     update(patch: Partial<AppSettings>): Promise<AppSettings>
@@ -240,6 +282,13 @@ export interface ChatboxAPI {
     upsert(input: ModelInput): Promise<ModelConfig>
     remove(id: string): Promise<void>
     discover(providerId: string): Promise<RemoteModel[]>
+  }
+  skills: {
+    list(): Promise<Skill[]>
+    upsert(input: SkillInput): Promise<Skill>
+    remove(id: string): Promise<void>
+    toggle(id: string, enabled: boolean): Promise<Skill>
+    resetDefaults(): Promise<Skill[]>
   }
   conversations: {
     list(): Promise<Conversation[]>
@@ -266,7 +315,7 @@ export interface ChatboxAPI {
 
 declare global {
   interface Window {
-    chatbox: ChatboxAPI
+    agentbox: AgentboxAPI
   }
 }
 

@@ -10,7 +10,7 @@ const developmentCsp =
   "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws:; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'"
 
 const developmentCspPlugin: Plugin = {
-  name: 'chatbox-lite-development-csp',
+  name: 'agentbox-development-csp',
   apply: 'serve',
   transformIndexHtml(html) {
     return html.replace(productionCsp, developmentCsp)

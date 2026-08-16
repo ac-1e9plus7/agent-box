@@ -1,12 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../shared/ipc'
 import type {
+  AgentboxAPI,
   AppSettings,
-  ChatboxAPI,
   ChatRequest,
   Conversation,
   ModelInput,
   ProviderInput,
+  SkillInput,
   StreamEvent,
 } from '../shared/types'
 
@@ -22,7 +23,7 @@ ipcRenderer.on(IPC_CHANNELS.chatEvent, (_event, streamEvent: StreamEvent) => {
   }
 })
 
-const chatboxApi: ChatboxAPI = {
+const agentboxApi: AgentboxAPI = {
   settings: {
     get: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGet),
     update: (patch: Partial<AppSettings>) =>
@@ -42,6 +43,14 @@ const chatboxApi: ChatboxAPI = {
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.modelsRemove, id),
     discover: (providerId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.modelsDiscover, providerId),
+  },
+  skills: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.skillsList),
+    upsert: (input: SkillInput) => ipcRenderer.invoke(IPC_CHANNELS.skillsUpsert, input),
+    remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.skillsRemove, id),
+    toggle: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.skillsToggle, id, enabled),
+    resetDefaults: () => ipcRenderer.invoke(IPC_CHANNELS.skillsResetDefaults),
   },
   conversations: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.conversationsList),
@@ -68,10 +77,10 @@ const chatboxApi: ChatboxAPI = {
 }
 
 if (!process.contextIsolated) {
-  throw new Error('ChatBox Lite requires Electron context isolation.')
+  throw new Error('AgentBox requires Electron context isolation.')
 }
 
-contextBridge.exposeInMainWorld('chatbox', deepFreeze(chatboxApi))
+contextBridge.exposeInMainWorld('agentbox', deepFreeze(agentboxApi))
 
 function deepFreeze<T>(value: T): T {
   if (value && typeof value === 'object') {

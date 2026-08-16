@@ -43,7 +43,7 @@ describe('EncryptedStore safety and encryption integrity', () => {
   beforeEach(() => {
     mockEncryptionAvailable = true
     mockStorageBackend = undefined
-    tempDir = mkdtempSync(join(tmpdir(), 'chatbox-store-test-'))
+    tempDir = mkdtempSync(join(tmpdir(), 'agentbox-store-test-'))
   })
 
   afterEach(() => {

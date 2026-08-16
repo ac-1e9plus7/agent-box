@@ -37,6 +37,9 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (value.titleGenerationModelId !== undefined && typeof value.titleGenerationModelId !== 'string') {
     throw new Error('Invalid title generation model')
   }
+  if (value.defaultAgentMode !== undefined && typeof value.defaultAgentMode !== 'boolean') {
+    throw new Error('Invalid default agent mode')
+  }
   const proxy = normalizeProxy(value.proxy)
   return {
     theme: value.theme as AppSettings['theme'],
@@ -48,6 +51,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     defaultReasoningEnabled: value.defaultReasoningEnabled,
     defaultReasoningEffort:
       value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],
+    defaultAgentMode: Boolean(value.defaultAgentMode),
     systemPrompt: value.systemPrompt,
     proxy,
   }
