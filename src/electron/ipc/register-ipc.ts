@@ -183,3 +183,10 @@ function unmaskProxyUrl(newUrl: string, oldUrl: string): string {
   if (newUrl === maskProxyUrl(oldUrl)) return oldUrl
   return newUrl
 }
+
+export {
+  maskProxyUrl,
+  unmaskProxyUrl,
+  isTrustedMainPage,
+}
+

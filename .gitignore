@@ -9,6 +9,7 @@ node_modules/
 dist/
 out/
 release/
+unpacked_app/
 artifacts/
 *.app
 *.dmg

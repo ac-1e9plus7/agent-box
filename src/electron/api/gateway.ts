@@ -40,7 +40,7 @@ const MODEL_DISCOVERY_TIMEOUT_MS = 30_000
 const MAX_MODEL_RESPONSE_BYTES = 32 * 1024 * 1024
 const MAX_ERROR_RESPONSE_BYTES = 32 * 1024
 
-class GatewayError extends Error {
+export class GatewayError extends Error {
   constructor(
     message: string,
     readonly code?: string,
@@ -667,3 +667,16 @@ function isTimeoutError(error: unknown): boolean {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+
+export {
+  addConfiguredSystemPrompt,
+  validateChatRequest,
+  endpointFor,
+  httpError,
+  readResponseTextLimited,
+  toChatError,
+  redactError,
+  redactSecret,
+  extractModelArray,
+}
+

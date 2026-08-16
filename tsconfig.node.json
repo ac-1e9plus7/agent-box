@@ -12,6 +12,8 @@
     "src/renderer/src/token-step.ts",
     "src/renderer/src/context-projection.ts",
     "src/renderer/src/title.ts",
+    "src/renderer/src/web-search.ts",
+    "src/renderer/src/types.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]
