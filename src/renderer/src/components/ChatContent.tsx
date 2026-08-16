@@ -296,6 +296,9 @@ function AssistantMessage({
             {showRegenerate && (
               <button onClick={onRegenerate}><Icon name="refresh" size={14} /> 重新生成</button>
             )}
+            <div className="message-model-info">
+              <Icon name="app" size={14} /> {model?.name ?? message.modelId ?? '未知模型'} {message.usage?.outputTokens ? `(${message.usage.outputTokens} tokens)` : ''}
+            </div>
           </div>
         )}
         {message.status === 'error' && (

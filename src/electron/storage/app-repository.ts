@@ -89,6 +89,9 @@ export class AppRepository {
         next.contextManagementMode = patch.contextManagementMode
       }
       if (patch.defaultModelId !== undefined) next.defaultModelId = patch.defaultModelId
+      if (patch.titleGenerationModelId !== undefined) {
+        next.titleGenerationModelId = patch.titleGenerationModelId
+      }
       if (patch.defaultReasoningEnabled !== undefined) {
         next.defaultReasoningEnabled = patch.defaultReasoningEnabled
       }

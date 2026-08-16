@@ -41,6 +41,7 @@ export interface AppSettings {
   sendShortcut: 'enter' | 'mod-enter'
   contextManagementMode: ContextManagementMode
   defaultModelId?: string
+  titleGenerationModelId?: string
   defaultReasoningEnabled: boolean
   defaultReasoningEffort: Exclude<ReasoningEffort, 'none'>
   systemPrompt: string
@@ -132,6 +133,7 @@ export interface Message {
   reasoning?: string
   citations?: WebCitation[]
   usage?: TokenUsage
+  modelId?: string
   createdAt: string
 }
 

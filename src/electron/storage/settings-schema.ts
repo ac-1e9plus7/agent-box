@@ -34,6 +34,9 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (value.defaultModelId !== undefined && typeof value.defaultModelId !== 'string') {
     throw new Error('Invalid default model')
   }
+  if (value.titleGenerationModelId !== undefined && typeof value.titleGenerationModelId !== 'string') {
+    throw new Error('Invalid title generation model')
+  }
   const proxy = normalizeProxy(value.proxy)
   return {
     theme: value.theme as AppSettings['theme'],
@@ -41,6 +44,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     contextManagementMode:
       contextManagementMode as AppSettings['contextManagementMode'],
     defaultModelId: value.defaultModelId as string | undefined,
+    titleGenerationModelId: value.titleGenerationModelId as string | undefined,
     defaultReasoningEnabled: value.defaultReasoningEnabled,
     defaultReasoningEffort:
       value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],

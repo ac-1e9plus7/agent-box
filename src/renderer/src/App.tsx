@@ -283,10 +283,12 @@ export default function App(): JSX.Element {
   }, [])
 
   const maybeGenerateTitle = useCallback(async (conversation: Conversation): Promise<void> => {
-    const model = models.find((item) => item.id === conversation.modelId)
+    const modelId = settings.titleGenerationModelId || conversation.modelId
+    const model = models.find((item) => item.id === modelId)
     if (!model) return
-    const question = firstUserQuestion(conversation.messages)
-    if (!question) return
+    const rawQuestion = firstUserQuestion(conversation.messages)
+    if (!rawQuestion) return
+    const question = rawQuestion.length > 2000 ? rawQuestion.slice(0, 2000) + '\n...' : rawQuestion
     // Guard against duplicate generation or overwriting manual renames.
     if (autoRenamingRef.current.has(conversation.id) || manualRenamedRef.current.has(conversation.id)) return
     autoRenamingRef.current.add(conversation.id)
@@ -347,7 +349,7 @@ export default function App(): JSX.Element {
     } catch {
       finish()
     }
-  }, [models, persistConversation, replaceConversations])
+  }, [models, persistConversation, replaceConversations, settings.titleGenerationModelId])
 
   const renameConversation = useCallback((conversationId: string, rawTitle: string): void => {
     const title = cleanManualTitle(rawTitle)
@@ -939,9 +941,13 @@ export default function App(): JSX.Element {
 
     const nextDefaultModelId = modelIdMap.get(payload.preferences.defaultModelId ?? '')
       ?? (savedModels.some((model) => model.id === payload.preferences.defaultModelId) ? payload.preferences.defaultModelId : fallbackModelId)
+    const nextTitleGenerationModelId = payload.preferences.titleGenerationModelId
+      ? (modelIdMap.get(payload.preferences.titleGenerationModelId) ?? (savedModels.some((model) => model.id === payload.preferences.titleGenerationModelId) ? payload.preferences.titleGenerationModelId : undefined))
+      : undefined
     const savedSettings = await window.chatbox.settings.update({
       ...payload.preferences,
-      defaultModelId: nextDefaultModelId
+      defaultModelId: nextDefaultModelId,
+      titleGenerationModelId: nextTitleGenerationModelId
     })
     setProviders(savedProviders)
     setModels(savedModels)

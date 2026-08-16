@@ -146,9 +146,10 @@ tests/                              协议、schema、配额和纯函数测试
 ## 会话标题
 
 - 自动命名在首条 user+assistant 往返成功完成后触发，复用 `chat.stream` + `onEvent`（按 `requestId` 路由），**不得为此新增 IPC channel**。
-- 标题生成请求是低成本配置：强制 `reasoningEnabled: false`、`webSearchMode: 'off'`、`maxOutputTokens: 32`，沿用当前会话模型；请求本身不落库。
+- 使用 `src/renderer/src/stream-helper.ts` 的 `runStreamWithReplay` 在发起流式请求前先订阅 IPC 事件并缓冲早期 delta，消除 Promise 解析与事件分发之间的竞态。
+- 标题生成请求是低成本配置：强制 `reasoningEnabled: false`、`webSearchMode: 'off'`、`maxOutputTokens: 32`。优先使用 `AppSettings.titleGenerationModelId` 中指定的全局命名模型，未配置时回退沿用当前会话模型；超长输入在发送前自动截断至前 2,000 字符；请求本身不落库。
 - 标题清洗逻辑集中在 `src/renderer/src/title.ts`（去引号/换行/末尾标点、裁剪长度）。
-- 手动改名后（记入 `autoRenamingRef`）不再被自动命名覆盖；自动命名失败必须静默回退到截断标题，不得阻塞 UI 或丢对话。
+- 手动改名后（记入 `manualRenamedRef`）不再被自动命名覆盖；自动命名失败必须静默回退到截断标题，不得阻塞 UI 或丢对话。
 
 ## 上下文管理
 
@@ -162,6 +163,7 @@ tests/                              协议、schema、配额和纯函数测试
 ## React 与状态处理
 
 - 共享持久化类型来自 `src/shared/types.ts`；renderer 扩展类型放在 `src/renderer/src/types.ts`。
+- 消息在发起时记录当前使用的 `modelId`；助手回复完成后在气泡下方展示模型名称及消耗的 `outputTokens`。
 - 旧会话缺少可选字段时使用兼容默认值，不要在 bootstrap 时无条件写回整个 vault。
 - 开始流式请求前必须先成功保存用户消息；失败时停止请求并恢复草稿。
 - 流式 usage 事件可能分多次到达，按字段合并而不是整体覆盖。
@@ -193,6 +195,7 @@ tests/                              协议、schema、配额和纯函数测试
 - vault 配额和旧数据兼容：`tests/vault-resource-limits.test.ts`
 - 清除会话数据：`tests/clear-conversations.test.ts`
 - 标题清洗：`tests/title-generation.test.ts`
+- 流式助手与事件重放：`tests/stream-helper.test.ts`
 - 默认模型：`tests/default-models.test.ts`
 - token 步进：`tests/token-step.test.ts`
 

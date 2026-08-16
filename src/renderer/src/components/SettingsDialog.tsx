@@ -601,6 +601,21 @@ export function SettingsDialog({
                       onChange={(event) => setPreferenceDraft((current) => ({ ...current, systemPrompt: event.target.value }))}
                     />
                   </label>
+                  <div className="settings-row" style={{ marginTop: '16px' }}>
+                    <div><strong>自动命名模型</strong><small>对话产生时自动生成标题所用的模型</small></div>
+                    <select
+                      value={preferenceDraft.titleGenerationModelId ?? ''}
+                      onChange={(event) => setPreferenceDraft((current) => ({
+                        ...current,
+                        titleGenerationModelId: event.target.value === '' ? undefined : event.target.value
+                      }))}
+                    >
+                      <option value="">跟随当前会话模型</option>
+                      {models.map((model) => (
+                        <option key={model.id} value={model.id}>{model.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </section>
                 <section className="settings-card context-policy-card">
                   <h3>上下文管理</h3>
