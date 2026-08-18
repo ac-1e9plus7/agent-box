@@ -1042,6 +1042,38 @@ select:disabled {
   font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+.message-body .katex-display {
+  margin: 10px 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+  text-align: center;
+}
+
+.message-body .katex-display::-webkit-scrollbar {
+  height: 5px;
+}
+
+.message-body .katex-display::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-tertiary), transparent 60%);
+  border-radius: 4px;
+}
+
+.message-body .katex {
+  font-size: 1.06em;
+  text-rendering: auto;
+}
+
+.message-body .katex-error {
+  color: var(--danger);
+  background: var(--danger-soft);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .code-block {
   overflow: hidden;
   margin: 13px 0;
@@ -1405,6 +1437,10 @@ select:disabled {
   color: color-mix(in srgb, var(--text), var(--accent) 8%);
   font-size: 13.5px;
   line-height: 1.65;
+}
+
+.user-bubble .message-body .katex {
+  color: inherit;
 }
 
 .user-message-time {

@@ -3,6 +3,7 @@ import type { ClipboardEvent, CSSProperties, DragEvent, JSX } from 'react'
 import type { MessageAttachment } from '../../../shared/types'
 import type { ModelConfig, WebSearchMode } from '../types'
 import { formatFileSize, processSelectedFiles } from '../file-helper'
+import { handleComposerKeyDown } from '../composer-helper'
 import { WEB_SEARCH_MODE_LABELS } from '../web-search'
 import { Icon } from './Icon'
 
@@ -222,12 +223,35 @@ export function Composer({
           disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
-            const shouldSend = sendOnEnter
-              ? event.key === 'Enter' && !event.shiftKey
-              : event.key === 'Enter' && (event.metaKey || event.ctrlKey)
-            if (shouldSend && !event.nativeEvent.isComposing) {
+            const action = handleComposerKeyDown({
+              key: event.key,
+              shiftKey: event.shiftKey,
+              ctrlKey: event.ctrlKey,
+              metaKey: event.metaKey,
+              altKey: event.altKey,
+              isComposing: event.nativeEvent.isComposing,
+              sendOnEnter,
+              canSend,
+              draft,
+              selectionStart: event.currentTarget.selectionStart ?? draft.length,
+              selectionEnd: event.currentTarget.selectionEnd ?? draft.length
+            })
+
+            if (action.type === 'send') {
               event.preventDefault()
-              if (canSend) onSend()
+              onSend()
+            } else if (action.type === 'newline') {
+              event.preventDefault()
+              if (action.nextDraft !== undefined) {
+                onDraftChange(action.nextDraft)
+              }
+              if (action.nextCursor !== undefined) {
+                requestAnimationFrame(() => {
+                  if (textareaRef.current) {
+                    textareaRef.current.selectionStart = textareaRef.current.selectionEnd = action.nextCursor!
+                  }
+                })
+              }
             }
           }}
           onPaste={handlePaste}
@@ -311,7 +335,7 @@ export function Composer({
         </div>
       </div>
       <p className="composer-hint" id="web-search-description">
-        AI 可能会出错，请核查重要信息。{sendOnEnter ? 'Enter 发送，Shift + Enter 换行' : '⌘ + Enter 发送'}
+        AI 可能会出错，请核查重要信息。{sendOnEnter ? 'Enter 发送，Shift / Ctrl / ⌘ + Enter 换行' : '⌘ / Ctrl + Enter 发送，Enter 换行'}
         {webSearchMode !== 'off' && webSearchAvailable && <span> · {webSearchDescription}</span>}
       </p>
     </div>

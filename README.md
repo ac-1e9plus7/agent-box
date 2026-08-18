@@ -7,6 +7,7 @@ AgentBox 是一个使用 React、TypeScript 与 Electron 构建的本地 AI 智�
 ## 主要功能
 
 - 多会话聊天、流式回复、停止生成与错误提示。
+- Markdown 排版与 LaTeX 数学公式：聊天气泡支持自然换行（单次回车换行即可正确换行，无需连续两个换行）；全面支持 LaTeX 数学公式渲染（行内公式 `$…$` 与 `\(…\)`, 块级公式 `$$…$$` 与 `\[…\]`，`math` 代码块及矩阵/对齐环境），具备横向滚动和容错处理。
 - 文件上传与多模态输入：支持在输入框点击上传附件、拖拽文件或直接粘贴（Paste）剪贴板截图；支持常见图片（PNG/JPEG/WEBP/GIF）、PDF 文档和各类代码/文本文件；图片自动进行智能尺寸优化（最大 2048px）以保证传输性能与 Token 效率；协议层自动适配 OpenAI Chat (`image_url`)、OpenAI Responses (`input_image`) 与 Anthropic (`image`/`document`) 原生多模态块；消息气泡支持卡片展示与原图灯箱（Lightbox）查看。
 - Agent 智能体模式与技能（Skills）系统：
   - 支持会话级与全局默认一键切换 Agent 智能体模式。

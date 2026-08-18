@@ -1,11 +1,15 @@
 import { Children, isValidElement, useEffect, useRef, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
+import rehypeKatex from 'rehype-katex'
+import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
+import remarkMath from 'remark-math'
 import { getMessageSiblings } from '../../../shared/conversation-tree'
 import type { MessageAttachment, TokenUsage, WebCitation } from '../../../shared/types'
 import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
 import { formatFileSize } from '../file-helper'
+import { preprocessMarkdown } from '../markdown-helper'
 import { Icon } from './Icon'
 
 interface ChatContentProps {
@@ -97,10 +101,12 @@ function textFromNode(node: ReactNode): string {
 }
 
 function MessageBody({ content }: { content: string }): JSX.Element {
+  const processed = preprocessMarkdown(content)
   return (
     <div className="message-body">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         components={{
           a: ({ children, ...props }) => <a {...props} rel="noopener noreferrer" target="_blank">{children}</a>,
           pre: ({ children }) => {
@@ -123,7 +129,7 @@ function MessageBody({ content }: { content: string }): JSX.Element {
           }
         }}
       >
-        {content}
+        {processed}
       </ReactMarkdown>
     </div>
   )

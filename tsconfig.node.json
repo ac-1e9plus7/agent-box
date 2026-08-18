@@ -4,6 +4,7 @@
     "composite": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
     "types": ["node", "electron"]
   },
   "include": [
@@ -16,6 +17,8 @@
     "src/renderer/src/types.ts",
     "src/renderer/src/stream-helper.ts",
     "src/renderer/src/file-helper.ts",
+    "src/renderer/src/markdown-helper.ts",
+    "src/renderer/src/composer-helper.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]

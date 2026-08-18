@@ -54,7 +54,7 @@ src/electron/storage/default-skills.ts 5 个系统内置技能定义
 src/electron/storage/               加密 vault、skills CRUD、schema、配额和仓库操作
 src/renderer/src/App.tsx            renderer 状态与业务编排
 src/renderer/src/components/        React UI
-src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、file-helper、defaults
+src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、file-helper、markdown-helper、composer-helper、defaults
 scripts/                            零依赖图标再生命令（generate-icons.mjs、make-ico.mjs）
 build/                              应用图标资产（icon.svg/icon.png/icon.ico），package.json 已引用，必须随仓库提交
 tests/                              协议、schema、配额、Skills 和纯函数测试
@@ -200,6 +200,8 @@ tests/                              协议、schema、配额、Skills 和纯函�
 - 默认模型：`tests/default-models.test.ts`
 - token 步进：`tests/token-step.test.ts`
 - 文件与多模态：`tests/file-helper.test.ts`
+- Markdown 与 LaTeX：`tests/markdown-helper.test.ts`
+- 输入框快捷键：`tests/composer-helper.test.ts`
 
 测试至少覆盖：正常路径、关闭状态、旧字段缺失、非法/超大外部输入、取消或失败路径，以及三种 API 格式中受影响的每一种。
 
