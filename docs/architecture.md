@@ -9,38 +9,38 @@ AgentBox 是一个基于 **React 19 + TypeScript + Electron 35 + electron-vite**
 ```mermaid
 graph TB
     subgraph Renderer_Process ["Renderer Process (Sandboxed React UI)"]
-        UI[React 19 UI / Components]
-        State[State Management & Context Projection]
-        PreloadAPI[window.agentbox API]
+        UI["React 19 UI / Components"]
+        State["State Management & Context Projection"]
+        PreloadAPI["window.agentbox API"]
         UI --> State
         State --> PreloadAPI
     end
 
     subgraph Preload ["Preload Boundary (Sandboxed CJS)"]
-        PreloadAPI -. IPC Invoke / Send .-> IPC_Bridge[IPC Handlers with Sender Validation]
+        PreloadAPI -.->|"IPC Invoke / Send"| IPC_Bridge["IPC Handlers with Sender Validation"]
     end
 
     subgraph Main_Process ["Electron Main Process (Node.js Environment)"]
-        IPC_Bridge --> Gateway[ChatGateway & Multi-turn Loop]
-        IPC_Bridge --> Repo[AppRepository & Encrypted Vault]
-        IPC_Bridge --> McpMgr[McpManager & Tool Retriever]
+        IPC_Bridge --> Gateway["ChatGateway & Multi-turn Loop"]
+        IPC_Bridge --> Repo["AppRepository & Encrypted Vault"]
+        IPC_Bridge --> McpMgr["McpManager & Tool Retriever"]
 
-        Gateway --> ReqAdapters[Request Adapters (OpenAI / Responses / Anthropic)]
-        Gateway --> ProtAdapters[Protocol Adapters & SSE Stream Parsers]
-        Gateway --> ProxyDispatcher[undici ProxyAgent / fetch]
+        Gateway --> ReqAdapters["Request Adapters (OpenAI / Responses / Anthropic)"]
+        Gateway --> ProtAdapters["Protocol Adapters & SSE Stream Parsers"]
+        Gateway --> ProxyDispatcher["undici ProxyAgent / fetch"]
 
-        McpMgr --> StdioTrans[Stdio Transport (child_process)]
-        McpMgr --> SseTrans[SSE Transport (HTTP Client)]
+        McpMgr --> StdioTrans["Stdio Transport (child_process)"]
+        McpMgr --> SseTrans["SSE Transport (HTTP Client)"]
 
-        Repo --> EncStore[EncryptedStore & safeStorage]
+        Repo --> EncStore["EncryptedStore & safeStorage"]
     end
 
     subgraph OS_Layer ["Operating System Layer"]
-        EncStore --> CredentialStore[OS Keyring / Credential Protection]
-        EncStore --> DiskStorage[Local Encrypted Vault File]
-        StdioTrans --> LocalMCP[Local CLI Tools (Python, Node, Binary)]
-        ProxyDispatcher --> CloudAPI[OpenRouter / OpenAI / Anthropic APIs]
-        SseTrans --> RemoteMCP[Remote MCP Servers]
+        EncStore --> CredentialStore["OS Keyring / Credential Protection"]
+        EncStore --> DiskStorage["Local Encrypted Vault File"]
+        StdioTrans --> LocalMCP["Local CLI Tools (Python, Node, Binary)"]
+        ProxyDispatcher --> CloudAPI["OpenRouter / OpenAI / Anthropic APIs"]
+        SseTrans --> RemoteMCP["Remote MCP Servers"]
     end
 ```
 

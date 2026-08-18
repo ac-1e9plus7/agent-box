@@ -60,10 +60,10 @@ Model Context Protocol (MCP) 是开放的工具集成标准。AgentBox 实现了
 
 ```mermaid
 sequenceDiagram
-    participant User as 用户 / Renderer
-    participant GW as ChatGateway
-    participant Model as 大模型 API (OpenAI/Anthropic)
-    participant MCP as McpManager (主进程)
+    participant User as "用户 / Renderer"
+    participant GW as "ChatGateway"
+    participant Model as "大模型 API (OpenAI/Anthropic)"
+    participant MCP as "McpManager (主进程)"
 
     User->>GW: 发送问题（开启 Agent 模式）
     GW->>Model: 携带 Top-K 工具定义发起请求
