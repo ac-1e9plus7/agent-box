@@ -40,21 +40,33 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (value.defaultAgentMode !== undefined && typeof value.defaultAgentMode !== 'boolean') {
     throw new Error('Invalid default agent mode')
   }
+  if (value.mcpEnabled !== undefined && typeof value.mcpEnabled !== 'boolean') {
+    throw new Error('Invalid MCP enabled setting')
+  }
+  const mcpToolRetrievalMode = value.mcpToolRetrievalMode ?? 'auto'
+  if (!['auto', 'all'].includes(String(mcpToolRetrievalMode))) {
+    throw new Error('Invalid MCP tool retrieval mode')
+  }
   const proxy = normalizeProxy(value.proxy)
-  return {
+  const settings: AppSettings = {
     theme: value.theme as AppSettings['theme'],
     sendShortcut: value.sendShortcut as AppSettings['sendShortcut'],
     contextManagementMode:
       contextManagementMode as AppSettings['contextManagementMode'],
     defaultModelId: value.defaultModelId as string | undefined,
-    titleGenerationModelId: value.titleGenerationModelId as string | undefined,
     defaultReasoningEnabled: value.defaultReasoningEnabled,
     defaultReasoningEffort:
       value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],
     defaultAgentMode: Boolean(value.defaultAgentMode),
+    mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
+    mcpToolRetrievalMode: mcpToolRetrievalMode as AppSettings['mcpToolRetrievalMode'],
     systemPrompt: value.systemPrompt,
     proxy,
   }
+  if (value.titleGenerationModelId !== undefined) {
+    settings.titleGenerationModelId = value.titleGenerationModelId as string
+  }
+  return settings
 }
 
 /**

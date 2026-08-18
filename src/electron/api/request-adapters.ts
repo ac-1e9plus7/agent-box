@@ -1,6 +1,7 @@
 import type {
   ApiFormat,
   ChatRequest,
+  McpToolDefinition,
   Message,
   ModelConfig,
   ProviderKind,
@@ -23,6 +24,7 @@ export function buildRequestBody(
   messages: Message[],
   request: ChatRequest,
   maxOutputTokens: number,
+  mcpTools?: McpToolDefinition[],
 ): Record<string, unknown> {
   const effort = request.reasoningEffort ?? model.defaultReasoningEffort
   const routing =
@@ -40,7 +42,7 @@ export function buildRequestBody(
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (routing) body.provider = routing
     applyOpenAiReasoning(body, provider.kind, request.reasoningEnabled, effort)
-    applyOpenRouterWebSearch(body, provider.kind, webSearchMode)
+    applyOpenAiTools(body, provider.kind, webSearchMode, mcpTools)
     return body
   }
 
@@ -64,7 +66,7 @@ export function buildRequestBody(
     else if (provider.kind === 'openrouter' || provider.kind === 'cliproxy') {
       body.reasoning = { effort: 'none' }
     }
-    applyOpenRouterWebSearch(body, provider.kind, webSearchMode)
+    applyResponsesTools(body, provider.kind, webSearchMode, mcpTools)
     return body
   }
 
@@ -89,7 +91,7 @@ export function buildRequestBody(
       budget_tokens: reasoningBudget(effort, maxOutputTokens),
     }
   }
-  applyOpenRouterWebSearch(body, provider.kind, webSearchMode)
+  applyAnthropicTools(body, provider.kind, webSearchMode, mcpTools)
   return body
 }
 
@@ -101,9 +103,38 @@ export function resolveWebSearchMode(
 }
 
 export function toOpenAiMessages(messages: Message[]): Array<Record<string, unknown>> {
-  return messages.map((message) => {
-    if (message.role === 'system' || !message.attachments?.length) {
-      return { role: message.role, content: message.content }
+  const result: Array<Record<string, unknown>> = []
+  for (const message of messages) {
+    if (message.role === 'system') {
+      result.push({ role: 'system', content: message.content })
+      continue
+    }
+    if (message.role === 'assistant' && message.toolExecutions?.length) {
+      const toolCalls = message.toolExecutions.map((exec) => ({
+        id: exec.id,
+        type: 'function',
+        function: {
+          name: exec.toolName,
+          arguments: JSON.stringify(exec.args),
+        },
+      }))
+      result.push({
+        role: 'assistant',
+        content: message.content || null,
+        tool_calls: toolCalls,
+      })
+      for (const exec of message.toolExecutions) {
+        result.push({
+          role: 'tool',
+          tool_call_id: exec.id,
+          content: exec.result ?? '',
+        })
+      }
+      continue
+    }
+    if (!message.attachments?.length) {
+      result.push({ role: message.role, content: message.content })
+      continue
     }
     const parts: Array<Record<string, unknown>> = []
     if (message.content) {
@@ -127,11 +158,12 @@ export function toOpenAiMessages(messages: Message[]): Array<Record<string, unkn
         })
       }
     }
-    return {
+    result.push({
       role: message.role,
       content: parts.length > 0 ? parts : message.content,
-    }
-  })
+    })
+  }
+  return result
 }
 
 export function toResponsesInput(messages: Message[]): {
@@ -219,30 +251,125 @@ function applyOpenAiReasoning(
   }
 }
 
-function applyOpenRouterWebSearch(
+function applyOpenAiTools(
   body: Record<string, unknown>,
   providerKind: ProviderKind,
-  mode: WebSearchMode,
+  webSearchMode: WebSearchMode,
+  mcpTools?: McpToolDefinition[],
 ): void {
-  if (mode === 'off') return
-  if (providerKind !== 'openrouter') {
-    throw new RequestAdapterError(
-      '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
-      'web_search_not_supported',
-    )
-  }
-  body.tools = [
-    {
+  const tools: Array<Record<string, unknown>> = []
+  if (webSearchMode !== 'off') {
+    if (providerKind !== 'openrouter') {
+      throw new RequestAdapterError(
+        '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+        'web_search_not_supported',
+      )
+    }
+    tools.push({
       type: 'openrouter:web_search',
       parameters: {
-        engine: mode,
+        engine: webSearchMode,
         max_results: 5,
         max_uses: 2,
         max_total_results: 8,
       },
-    },
-  ]
-  body.max_tool_calls = 2
+    })
+    body.max_tool_calls = 2
+  }
+  if (mcpTools?.length) {
+    for (const tool of mcpTools) {
+      tools.push({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      })
+    }
+  }
+  if (tools.length > 0) {
+    body.tools = tools
+  }
+}
+
+function applyResponsesTools(
+  body: Record<string, unknown>,
+  providerKind: ProviderKind,
+  webSearchMode: WebSearchMode,
+  mcpTools?: McpToolDefinition[],
+): void {
+  const tools: Array<Record<string, unknown>> = []
+  if (webSearchMode !== 'off') {
+    if (providerKind !== 'openrouter') {
+      throw new RequestAdapterError(
+        '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+        'web_search_not_supported',
+      )
+    }
+    tools.push({
+      type: 'openrouter:web_search',
+      parameters: {
+        engine: webSearchMode,
+        max_results: 5,
+        max_uses: 2,
+        max_total_results: 8,
+      },
+    })
+    body.max_tool_calls = 2
+  }
+  if (mcpTools?.length) {
+    for (const tool of mcpTools) {
+      tools.push({
+        type: 'function',
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      })
+    }
+  }
+  if (tools.length > 0) {
+    body.tools = tools
+  }
+}
+
+function applyAnthropicTools(
+  body: Record<string, unknown>,
+  providerKind: ProviderKind,
+  webSearchMode: WebSearchMode,
+  mcpTools?: McpToolDefinition[],
+): void {
+  const tools: Array<Record<string, unknown>> = []
+  if (webSearchMode !== 'off') {
+    if (providerKind !== 'openrouter') {
+      throw new RequestAdapterError(
+        '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+        'web_search_not_supported',
+      )
+    }
+    tools.push({
+      type: 'openrouter:web_search',
+      parameters: {
+        engine: webSearchMode,
+        max_results: 5,
+        max_uses: 2,
+        max_total_results: 8,
+      },
+    })
+    body.max_tool_calls = 2
+  }
+  if (mcpTools?.length) {
+    for (const tool of mcpTools) {
+      tools.push({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema,
+      })
+    }
+  }
+  if (tools.length > 0) {
+    body.tools = tools
+  }
 }
 
 function reasoningBudget(
@@ -327,6 +454,29 @@ export function toAnthropicMessages(messages: Message[]): {
   const conversation: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> = []
   for (const message of messages) {
     if (message.role === 'system') continue
+    if (message.role === 'assistant' && message.toolExecutions?.length) {
+      const contentBlocks: Array<Record<string, unknown>> = []
+      if (message.content) {
+        contentBlocks.push({ type: 'text', text: message.content })
+      }
+      for (const exec of message.toolExecutions) {
+        contentBlocks.push({
+          type: 'tool_use',
+          id: exec.id,
+          name: exec.toolName,
+          input: exec.args,
+        })
+      }
+      const toolResults: Array<Record<string, unknown>> = message.toolExecutions.map((exec) => ({
+        type: 'tool_result',
+        tool_use_id: exec.id,
+        content: exec.result ?? '',
+        is_error: exec.isError,
+      }))
+      conversation.push({ role: 'assistant', content: contentBlocks })
+      conversation.push({ role: 'user', content: toolResults })
+      continue
+    }
     const formattedContent = toAnthropicContentBlocks(message)
     const previous = conversation.at(-1)
     if (previous?.role === message.role) {

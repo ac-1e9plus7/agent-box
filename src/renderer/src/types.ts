@@ -11,7 +11,7 @@ import type {
 export type ApiFormat = SharedApiFormat
 export type WebSearchMode = SharedWebSearchMode
 
-export type SettingsSection = 'general' | 'skills' | 'models' | 'providers' | 'security' | 'about'
+export type SettingsSection = 'general' | 'skills' | 'mcp' | 'models' | 'providers' | 'security' | 'about'
 
 export type MessageStatus = 'complete' | 'streaming' | 'error'
 
@@ -35,6 +35,7 @@ export interface Conversation extends Omit<StoredConversation, 'messages'> {
   messages: ChatMessage[]
   agentMode?: boolean
   skillIds?: string[]
+  mcpServerIds?: string[]
   pinned?: boolean
 }
 

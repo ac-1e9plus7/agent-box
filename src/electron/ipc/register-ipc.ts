@@ -7,17 +7,20 @@ import type {
   AppSettings,
   ChatRequest,
   Conversation,
+  McpServerInput,
   ModelInput,
   ProviderInput,
   StreamEvent,
 } from '../../shared/types'
 import { ChatGateway } from '../api/gateway'
+import { McpManager } from '../mcp/mcp-manager'
 import { AppRepository } from '../storage/app-repository'
 
 export function registerIpcHandlers(
   window: BrowserWindow,
   repository: AppRepository,
   gateway: ChatGateway,
+  mcpManager: McpManager,
 ): () => void {
   const register = <Arguments extends unknown[], Result>(
     channel: string,
@@ -92,6 +95,29 @@ export function registerIpcHandlers(
     return repository.toggleSkill(id, enabled)
   })
   register(IPC_CHANNELS.skillsResetDefaults, () => repository.resetDefaultSkills())
+
+  register(IPC_CHANNELS.mcpListServers, () => repository.listMcpServers())
+  register(IPC_CHANNELS.mcpUpsertServer, (_event, input: McpServerInput) => {
+    assertRecord(input, 'MCP 服务配置')
+    return repository.upsertMcpServer(input)
+  })
+  register(IPC_CHANNELS.mcpRemoveServer, (_event, id: string) => {
+    assertId(id)
+    return repository.removeMcpServer(id)
+  })
+  register(IPC_CHANNELS.mcpToggleServer, (_event, id: string, enabled: boolean) => {
+    assertId(id)
+    if (typeof enabled !== 'boolean') throw new Error('Invalid enabled state')
+    return repository.toggleMcpServer(id, enabled)
+  })
+  register(IPC_CHANNELS.mcpTestServer, (_event, input: McpServerInput) => {
+    assertRecord(input, 'MCP 服务配置')
+    return mcpManager.testServer(input)
+  })
+  register(IPC_CHANNELS.mcpListTools, (_event, serverId?: string) => {
+    if (serverId !== undefined) assertId(serverId)
+    return mcpManager.listAllTools(serverId ? [serverId] : undefined)
+  })
 
   register(IPC_CHANNELS.conversationsList, () => repository.listConversations())
   register(IPC_CHANNELS.conversationsGet, (_event, id: string) => {

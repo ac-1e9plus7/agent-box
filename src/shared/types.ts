@@ -36,6 +36,9 @@ export interface ProxyConfig {
   url: string
 }
 
+export type McpTransportType = 'stdio' | 'sse'
+export type McpToolRetrievalMode = 'auto' | 'all'
+
 export interface AppSettings {
   theme: ThemeMode
   sendShortcut: 'enter' | 'mod-enter'
@@ -45,8 +48,62 @@ export interface AppSettings {
   defaultReasoningEnabled: boolean
   defaultReasoningEffort: Exclude<ReasoningEffort, 'none'>
   defaultAgentMode?: boolean
+  mcpEnabled?: boolean
+  mcpToolRetrievalMode?: McpToolRetrievalMode
   systemPrompt: string
   proxy: ProxyConfig
+}
+
+export interface McpServerConfig {
+  id: string
+  name: string
+  description?: string
+  enabled: boolean
+  transport: McpTransportType
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+  createdAt: string
+  updatedAt: string
+}
+
+export interface McpServerInput {
+  id?: string
+  name: string
+  description?: string
+  enabled?: boolean
+  transport: McpTransportType
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+}
+
+export interface McpToolParameterSchema {
+  type: string
+  properties?: Record<string, unknown>
+  required?: string[]
+  description?: string
+  [key: string]: unknown
+}
+
+export interface McpToolDefinition {
+  name: string
+  description?: string
+  inputSchema: McpToolParameterSchema
+  serverId: string
+  serverName: string
+}
+
+export interface McpServerTestResult {
+  ok: boolean
+  latencyMs: number
+  toolsCount: number
+  message: string
+  tools?: McpToolDefinition[]
 }
 
 export type SkillFileKind = 'markdown' | 'python' | 'shell' | 'other'
@@ -179,6 +236,17 @@ export interface MessageAttachment {
   type: MessageAttachmentType
 }
 
+export interface ToolCallExecution {
+  id: string
+  toolName: string
+  serverId?: string
+  serverName?: string
+  args: Record<string, unknown>
+  result?: string
+  isError?: boolean
+  status: 'calling' | 'executing' | 'complete' | 'error'
+}
+
 export interface Message {
   id: string
   role: MessageRole
@@ -189,6 +257,7 @@ export interface Message {
   usage?: TokenUsage
   modelId?: string
   attachments?: MessageAttachment[]
+  toolExecutions?: ToolCallExecution[]
   createdAt: string
 }
 
@@ -207,6 +276,7 @@ export interface Conversation {
   reasoningEnabled?: boolean
   agentMode?: boolean
   skillIds?: string[]
+  mcpServerIds?: string[]
   /** Defaults to off when omitted by an older vault. */
   webSearchMode?: WebSearchMode
   messages: Message[]
@@ -222,6 +292,7 @@ export interface ChatRequest {
   reasoningEnabled: boolean
   agentMode?: boolean
   skillIds?: string[]
+  mcpServerIds?: string[]
   /** Overrides the model default for this request. */
   webSearchMode?: WebSearchMode
   /** Explicitly opts this one request into complete-turn trimming. */
@@ -251,6 +322,10 @@ export type StreamEvent =
   | { type: 'text-delta'; requestId: string; delta: string }
   | { type: 'reasoning-delta'; requestId: string; delta: string }
   | { type: 'citation'; requestId: string; citation: WebCitation }
+  | { type: 'tool-call-start'; requestId: string; callId: string; toolName: string; serverName?: string }
+  | { type: 'tool-call-args'; requestId: string; callId: string; delta: string }
+  | { type: 'tool-call-complete'; requestId: string; callId: string; toolName: string; args: Record<string, unknown> }
+  | { type: 'tool-result'; requestId: string; callId: string; toolName: string; result: string; isError?: boolean }
   | { type: 'usage'; requestId: string; usage: TokenUsage }
   | { type: 'done'; requestId: string; finishReason?: string }
   | { type: 'error'; requestId: string; error: ChatError }
@@ -291,6 +366,14 @@ export interface AgentboxAPI {
     remove(id: string): Promise<void>
     toggle(id: string, enabled: boolean): Promise<Skill>
     resetDefaults(): Promise<Skill[]>
+  }
+  mcp: {
+    listServers(): Promise<McpServerConfig[]>
+    upsertServer(input: McpServerInput): Promise<McpServerConfig>
+    removeServer(id: string): Promise<void>
+    toggleServer(id: string, enabled: boolean): Promise<McpServerConfig>
+    testServer(input: McpServerInput): Promise<McpServerTestResult>
+    listTools(serverId?: string): Promise<McpToolDefinition[]>
   }
   conversations: {
     list(): Promise<Conversation[]>

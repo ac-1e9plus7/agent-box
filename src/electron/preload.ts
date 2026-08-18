@@ -52,6 +52,18 @@ const agentboxApi: AgentboxAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.skillsToggle, id, enabled),
     resetDefaults: () => ipcRenderer.invoke(IPC_CHANNELS.skillsResetDefaults),
   },
+  mcp: {
+    listServers: () => ipcRenderer.invoke(IPC_CHANNELS.mcpListServers),
+    upsertServer: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mcpUpsertServer, input),
+    removeServer: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.mcpRemoveServer, id),
+    toggleServer: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mcpToggleServer, id, enabled),
+    testServer: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mcpTestServer, input),
+    listTools: (serverId?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.mcpListTools, serverId),
+  },
   conversations: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.conversationsList),
     get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.conversationsGet, id),

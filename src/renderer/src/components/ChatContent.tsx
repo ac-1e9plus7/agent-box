@@ -1,4 +1,4 @@
-import { Children, isValidElement, useEffect, useRef, useState } from 'react'
+import { Children, isValidElement, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -6,7 +6,7 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { getMessageSiblings } from '../../../shared/conversation-tree'
-import type { MessageAttachment, TokenUsage, WebCitation } from '../../../shared/types'
+import type { MessageAttachment, TokenUsage, ToolCallExecution, WebCitation } from '../../../shared/types'
 import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
 import { formatFileSize } from '../file-helper'
 import { preprocessMarkdown } from '../markdown-helper'
@@ -90,6 +90,81 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
         <p className="message-sources-empty">搜索服务未返回可展示的结构化来源。</p>
       )}
     </section>
+  )
+}
+
+function ToolExecutionItem({ execution }: { execution: ToolCallExecution }): JSX.Element {
+  const isExecuting = execution.status === 'executing'
+  const isError = execution.isError || execution.status === 'error'
+  const [open, setOpen] = useState(isExecuting || isError)
+
+  const argsStr = useMemo(() => {
+    try {
+      return JSON.stringify(execution.args, null, 2)
+    } catch {
+      return String(execution.args)
+    }
+  }, [execution.args])
+
+  return (
+    <details className={`tool-execution-card ${isError ? 'is-error' : isExecuting ? 'is-executing' : 'is-complete'}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary className="tool-execution-header">
+        <div className="tool-execution-title">
+          <Icon name="tool" size={14} />
+          <strong>{execution.toolName}</strong>
+          {execution.serverName && <span className="tool-server-badge">{execution.serverName}</span>}
+        </div>
+        <div className="tool-execution-status">
+          {isExecuting && (
+            <span className="tool-status-badge executing">
+              <i className="spinner" /> 执行中…
+            </span>
+          )}
+          {execution.status === 'complete' && !isError && (
+            <span className="tool-status-badge complete">
+              <Icon name="check" size={12} /> 执行完成
+            </span>
+          )}
+          {isError && (
+            <span className="tool-status-badge error">
+              <Icon name="close" size={12} /> 执行失败
+            </span>
+          )}
+          <Icon className="tool-chevron" name="chevron-down" size={13} />
+        </div>
+      </summary>
+      <div className="tool-execution-body">
+        {Boolean(argsStr && argsStr !== '{}') && (
+          <div className="tool-param-block">
+            <span className="tool-block-label">输入参数:</span>
+            <pre><code>{argsStr}</code></pre>
+          </div>
+        )}
+        {execution.result !== undefined && execution.result !== null && (
+          <div className="tool-result-block">
+            <span className="tool-block-label">执行结果:</span>
+            <pre><code>{execution.result}</code></pre>
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
+
+function ToolExecutionList({ executions }: { executions?: ToolCallExecution[] }): JSX.Element | null {
+  if (!executions || executions.length === 0) return null
+  return (
+    <div className="tool-executions-container">
+      <div className="tool-executions-heading">
+        <Icon name="tool" size={13} />
+        <span>已执行 {executions.length} 个 MCP 工具调用</span>
+      </div>
+      <div className="tool-executions-list">
+        {executions.map((exec) => (
+          <ToolExecutionItem key={exec.id} execution={exec} />
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -389,6 +464,7 @@ function AssistantMessage({
             </span>
           </div>
         )}
+        <ToolExecutionList executions={message.toolExecutions} />
         {message.content.trim() ? <MessageBody content={message.content} /> : isStreaming ? (
           <div className="typing-indicator" aria-label="正在回复"><i /><i /><i /></div>
         ) : message.status !== 'error' && (message.citations?.length ?? 0) > 0 ? (

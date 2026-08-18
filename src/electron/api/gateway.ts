@@ -3,13 +3,17 @@ import type {
   ApiFormat,
   ChatError,
   ChatRequest,
+  McpToolDefinition,
   Message,
   ProviderTestResult,
   RemoteModel,
   Skill,
   StreamEvent,
+  ToolCallExecution,
   WebCitation,
 } from '../../shared/types'
+import { McpManager } from '../mcp/mcp-manager'
+import { retrieveRelevantTools } from '../mcp/tool-retriever'
 import { AppRepository, type StoredProvider } from '../storage/app-repository'
 import {
   ContextWindowError,
@@ -58,7 +62,10 @@ export class ChatGateway {
   private proxyAgent: ProxyAgent | undefined
   private proxyUrl: string | undefined
 
-  constructor(private readonly repository: AppRepository) {}
+  constructor(
+    private readonly repository: AppRepository,
+    private readonly mcpManager?: McpManager,
+  ) {}
 
   /**
    * Returns a cached undici `ProxyAgent` for the configured custom proxy, or
@@ -139,13 +146,26 @@ export class ChatGateway {
       )
       const settings = this.repository.getSettings()
       const isAgentMode = Boolean(request.agentMode)
+      let allMcpTools: McpToolDefinition[] = []
+      let effectiveMcpTools: McpToolDefinition[] = []
+      if (isAgentMode && this.mcpManager && settings.mcpEnabled !== false) {
+        allMcpTools = await this.mcpManager.listAllTools(request.mcpServerIds)
+        if (allMcpTools.length > 0) {
+          const lastUserMessage = requestMessages.filter((m) => m.role === 'user').at(-1)?.content || ''
+          effectiveMcpTools = retrieveRelevantTools(lastUserMessage, allMcpTools, {
+            mode: settings.mcpToolRetrievalMode,
+            maxTools: 8,
+          })
+        }
+      }
+
       let effectiveSystemPrompt = settings.systemPrompt
       if (isAgentMode) {
         const allSkills = this.repository.listSkills()
         const activeSkills = request.skillIds?.length
           ? allSkills.filter((skill) => request.skillIds!.includes(skill.id) && skill.enabled)
           : allSkills.filter((skill) => skill.enabled)
-        effectiveSystemPrompt = buildAgentSystemPrompt(activeSkills, settings.systemPrompt)
+        effectiveSystemPrompt = buildAgentSystemPrompt(activeSkills, settings.systemPrompt, effectiveMcpTools)
       }
       const messages = addConfiguredSystemPrompt(
         requestMessages,
@@ -161,60 +181,132 @@ export class ChatGateway {
         ),
       )
 
-      const response = await fetch(
-        endpointFor(provider.baseUrl, format),
-        this.withProxy({
-          method: 'POST',
-          headers: buildProviderHeaders(provider, format),
-          body: JSON.stringify(
-            buildRequestBody(
-              format,
-              provider,
-              model,
-              prepared.messages,
-              request,
-              maxOutputTokens,
+      const MAX_AGENT_TOOL_TURNS = 6
+      let currentTurnMessages = prepared.messages
+      let turn = 0
+
+      while (turn < MAX_AGENT_TOOL_TURNS) {
+        turn++
+        resetStallTimer()
+
+        const response = await fetch(
+          endpointFor(provider.baseUrl, format),
+          this.withProxy({
+            method: 'POST',
+            headers: buildProviderHeaders(provider, format),
+            body: JSON.stringify(
+              buildRequestBody(
+                format,
+                provider,
+                model,
+                currentTurnMessages,
+                request,
+                maxOutputTokens,
+                effectiveMcpTools.length > 0 ? effectiveMcpTools : undefined,
+              ),
             ),
-          ),
-          signal: controller.signal,
-          redirect: 'error',
-        }),
-      )
+            signal: controller.signal,
+            redirect: 'error',
+          }),
+        )
 
-      if (!response.ok) throw await httpError(response)
-      if (!response.body) throw new GatewayError('供应商没有返回响应流。', 'empty_response')
+        if (!response.ok) throw await httpError(response)
+        if (!response.body) throw new GatewayError('供应商没有返回响应流。', 'empty_response')
 
-      const wrappedBody = new ReadableStream<Uint8Array>({
-        async start(ctrl) {
-          const reader = response.body!.getReader()
-          try {
-            while (true) {
-              const { value, done } = await reader.read()
-              resetStallTimer()
-              if (done) {
-                ctrl.close()
-                break
+        const wrappedBody = new ReadableStream<Uint8Array>({
+          async start(ctrl) {
+            const reader = response.body!.getReader()
+            try {
+              while (true) {
+                const { value, done } = await reader.read()
+                resetStallTimer()
+                if (done) {
+                  ctrl.close()
+                  break
+                }
+                ctrl.enqueue(value)
               }
-              ctrl.enqueue(value)
+            } catch (e) {
+              ctrl.error(e)
+            } finally {
+              reader.releaseLock()
             }
-          } catch (e) {
-            ctrl.error(e)
-          } finally {
-            reader.releaseLock()
-          }
-        },
-        cancel(reason) {
-          response.body!.cancel(reason).catch(() => {})
-        },
-      })
+          },
+          cancel(reason) {
+            response.body!.cancel(reason).catch(() => {})
+          },
+        })
 
-      const completed = await consumeStream(
-        format,
-        wrappedBody,
-        requestId,
-        emit,
-      )
-      if (!completed) emit({ type: 'done', requestId })
+        const streamResult = await consumeStream(
+          format,
+          wrappedBody,
+          requestId,
+          emit,
+          allMcpTools,
+        )
+
+        if (streamResult.toolCalls.length > 0 && this.mcpManager && isAgentMode) {
+          const toolExecutions: ToolCallExecution[] = []
+
+          for (const rawCall of streamResult.toolCalls) {
+            let parsedArgs: Record<string, unknown> = {}
+            try {
+              parsedArgs = JSON.parse(rawCall.argumentsText || '{}')
+            } catch {
+              parsedArgs = {}
+            }
+
+            emit({
+              type: 'tool-call-complete',
+              requestId,
+              callId: rawCall.id,
+              toolName: rawCall.name,
+              args: parsedArgs,
+            })
+
+            const toolDef = allMcpTools.find((t) => t.name === rawCall.name)
+            const serverId = toolDef?.serverId || ''
+            const serverName = toolDef?.serverName || ''
+
+            const execResult = await this.mcpManager.executeTool(serverId, rawCall.name, parsedArgs)
+
+            emit({
+              type: 'tool-result',
+              requestId,
+              callId: rawCall.id,
+              toolName: rawCall.name,
+              result: execResult.result,
+              isError: execResult.isError,
+            })
+
+            toolExecutions.push({
+              id: rawCall.id,
+              toolName: rawCall.name,
+              serverId,
+              serverName: execResult.serverName || serverName,
+              args: parsedArgs,
+              result: execResult.result,
+              isError: execResult.isError,
+              status: execResult.isError ? 'error' : 'complete',
+            })
+          }
+
+          const assistantMsg: Message = {
+            id: `assistant-turn-${turn}-${Date.now()}`,
+            role: 'assistant',
+            content: streamResult.text,
+            toolExecutions,
+            createdAt: new Date().toISOString(),
+          }
+          currentTurnMessages = [...currentTurnMessages, assistantMsg]
+          continue
+        }
+
+        if (!streamResult.completed) {
+          emit({ type: 'done', requestId, finishReason: streamResult.finishReason })
+        }
+        break
+      }
     } catch (error) {
       if (isAbortError(error)) {
         emit({ type: 'done', requestId, finishReason: 'cancelled' })
@@ -320,7 +412,11 @@ export class ChatGateway {
   }
 }
 
-function buildAgentSystemPrompt(skills: Skill[], userSystemPrompt: string): string {
+function buildAgentSystemPrompt(
+  skills: Skill[],
+  userSystemPrompt: string,
+  mcpTools?: McpToolDefinition[],
+): string {
   const activeSkills = skills.filter((skill) => skill.enabled)
   const parts: string[] = []
 
@@ -330,8 +426,18 @@ function buildAgentSystemPrompt(skills: Skill[], userSystemPrompt: string): stri
     '1. 深入分析用户真实意图与关键要求。\n' +
     '2. 面对复杂问题时，按逻辑拆解为明确的步骤并逐步分析与推理。\n' +
     '3. 若需脚本辅助执行、数据计算、逻辑推演或算法验证，优先使用 Python 3 脚本。\n' +
-    '4. 严格遵循并调用下方已激活的专业领域技能（Skills）及其配套脚本与参考规范。'
+    '4. 严格遵循并调用下方已激活的专业领域技能（Skills）及其配套脚本与参考规范。\n' +
+    '5. 当需要调用外部环境、文件读写、数据库或网络工具时，可主动发起 MCP 工具调用。'
   )
+
+  if (mcpTools && mcpTools.length > 0) {
+    parts.push(
+      '=== 当前已就绪的 MCP 工具 (Active MCP Tools) ===\n' +
+      mcpTools
+        .map((tool) => `- \`${tool.name}\` (来源: ${tool.serverName}): ${tool.description || '无描述'}`)
+        .join('\n')
+    )
+  }
 
   if (activeSkills.length > 0) {
     parts.push(
@@ -507,20 +613,84 @@ function endpointFor(baseUrl: string, format: ApiFormat | 'models'): string {
   return new URL(path, `${baseUrl.replace(/\/$/, '')}/`).toString()
 }
 
+interface AccumulatedToolCall {
+  index: number
+  id: string
+  name: string
+  argumentsText: string
+}
+
+interface StreamConsumptionResult {
+  completed: boolean
+  text: string
+  finishReason?: string
+  toolCalls: AccumulatedToolCall[]
+}
+
 async function consumeStream(
   format: ApiFormat,
   stream: ReadableStream<Uint8Array>,
   requestId: string,
   emit: StreamEmitter,
-): Promise<boolean> {
+  allMcpTools?: McpToolDefinition[],
+): Promise<StreamConsumptionResult> {
   let completed = false
   let finishReason: string | undefined
+  let text = ''
   const citationState = createCitationEmissionState()
+  const toolCallsMap = new Map<number | string, AccumulatedToolCall>()
+
+  const handleToolDelta = (delta: { index?: number; id?: string; name?: string; argumentsDelta?: string }) => {
+    const key = delta.index ?? (delta.id || 0)
+    let tc = toolCallsMap.get(key)
+    if (!tc) {
+      const id = delta.id || `call_${Date.now().toString(36)}_${toolCallsMap.size}`
+      const name = delta.name || ''
+      tc = {
+        index: typeof delta.index === 'number' ? delta.index : 0,
+        id,
+        name,
+        argumentsText: '',
+      }
+      toolCallsMap.set(key, tc)
+      const toolDef = allMcpTools?.find((t) => t.name === name)
+      emit({
+        type: 'tool-call-start',
+        requestId,
+        callId: id,
+        toolName: name,
+        serverName: toolDef?.serverName,
+      })
+    } else {
+      if (delta.id && !tc.id) tc.id = delta.id
+      if (delta.name && !tc.name) {
+        tc.name = delta.name
+        const toolDef = allMcpTools?.find((t) => t.name === delta.name)
+        emit({
+          type: 'tool-call-start',
+          requestId,
+          callId: tc.id,
+          toolName: tc.name,
+          serverName: toolDef?.serverName,
+        })
+      }
+    }
+
+    if (delta.argumentsDelta) {
+      tc.argumentsText += delta.argumentsDelta
+      emit({
+        type: 'tool-call-args',
+        requestId,
+        callId: tc.id,
+        delta: delta.argumentsDelta,
+      })
+    }
+  }
 
   for await (const message of parseSse(stream)) {
     if (message.data === '[DONE]') {
-      if (!completed) emit({ type: 'done', requestId, finishReason })
-      return true
+      if (!completed && toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
+      return { completed: true, text, finishReason, toolCalls: Array.from(toolCallsMap.values()) }
     }
 
     let payload: unknown
@@ -533,9 +703,15 @@ async function consumeStream(
     if (format === 'openai-chat-completions') {
       const parsed = parseChatCompletionEvent(payload)
       if (parsed.error) throw toGatewayError(parsed.error)
-      if (parsed.text) emit({ type: 'text-delta', requestId, delta: parsed.text })
+      if (parsed.text) {
+        text += parsed.text
+        emit({ type: 'text-delta', requestId, delta: parsed.text })
+      }
       if (parsed.reasoning) {
         emit({ type: 'reasoning-delta', requestId, delta: parsed.reasoning })
+      }
+      if (parsed.toolCallDelta) {
+        handleToolDelta(parsed.toolCallDelta)
       }
       emitNewCitations(
         parsed.citations,
@@ -551,9 +727,15 @@ async function consumeStream(
     if (format === 'openai-responses') {
       const parsed = parseResponsesEvent(payload, message.event)
       if (parsed.error) throw toGatewayError(parsed.error)
-      if (parsed.text) emit({ type: 'text-delta', requestId, delta: parsed.text })
+      if (parsed.text) {
+        text += parsed.text
+        emit({ type: 'text-delta', requestId, delta: parsed.text })
+      }
       if (parsed.reasoning) {
         emit({ type: 'reasoning-delta', requestId, delta: parsed.reasoning })
+      }
+      if (parsed.toolCallDelta) {
+        handleToolDelta(parsed.toolCallDelta)
       }
       emitNewCitations(
         parsed.citations,
@@ -565,16 +747,22 @@ async function consumeStream(
       if (parsed.completed) {
         completed = true
         finishReason = parsed.finishReason
-        emit({ type: 'done', requestId, finishReason })
+        if (toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
       }
       continue
     }
 
     const parsed = parseAnthropicEvent(payload, message.event)
     if (parsed.error) throw toGatewayError(parsed.error)
-    if (parsed.text) emit({ type: 'text-delta', requestId, delta: parsed.text })
+    if (parsed.text) {
+      text += parsed.text
+      emit({ type: 'text-delta', requestId, delta: parsed.text })
+    }
     if (parsed.reasoning) {
       emit({ type: 'reasoning-delta', requestId, delta: parsed.reasoning })
+    }
+    if (parsed.toolCallDelta) {
+      handleToolDelta(parsed.toolCallDelta)
     }
     emitNewCitations(
       parsed.citations,
@@ -586,10 +774,10 @@ async function consumeStream(
     finishReason = parsed.finishReason ?? finishReason
     if (parsed.completed) {
       completed = true
-      emit({ type: 'done', requestId, finishReason })
+      if (toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
     }
   }
-  return completed
+  return { completed, text, finishReason, toolCalls: Array.from(toolCallsMap.values()) }
 }
 
 function emitNewCitations(

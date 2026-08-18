@@ -37,6 +37,23 @@ pnpm dist
 
 提交改动前至少运行 `pnpm test` 和 `pnpm build`。协议、安全、存储相关改动必须补测试。
 
+## 📚 技术文档阅读与维护指南
+
+项目采用模块化技术文档结构，集中存放于 `docs/` 目录中。**所有在此仓库工作的编码智能体必须遵守以下文档指引**：
+
+1. **修改前阅读对应模块文档**：
+   - 涉及进程模型、IPC 桥接或外链生命周期时，先阅读 [`docs/architecture.md`](./docs/architecture.md)。
+   - 涉及存储 Schema、Vault 加密、主密钥封装或配额限制时，先阅读 [`docs/storage-and-vault.md`](./docs/storage-and-vault.md)。
+   - 涉及 OpenAI/Responses/Anthropic 协议构造、流式解析、思考模式或联网搜索时，先阅读 [`docs/gateway-and-protocols.md`](./docs/gateway-and-protocols.md)。
+   - 涉及 Agent 技能体系、Python 3 脚本规范或 Zip 导入导出时，先阅读 [`docs/skills-system.md`](./docs/skills-system.md)。
+   - 涉及 MCP 传输通道（Stdio/SSE）、BM25 工具检索或 Agent 多轮执行循环时，先阅读 [`docs/mcp-integration.md`](./docs/mcp-integration.md)。
+   - 涉及树状会话、LaTeX / Markdown 公式渲染或多模态附件时，先阅读 [`docs/ui-and-components.md`](./docs/ui-and-components.md)。
+   - 编写测试用例或调整构建流程时，先阅读 [`docs/development-and-testing.md`](./docs/development-and-testing.md)。
+2. **代码变更与文档同步更新**：
+   - 当重构、新增接口、变更字段或调整系统行为时，**必须同步更新 `docs/` 下对应的模块技术文档**。
+   - `README.md` 保持精简高阶概览，技术细节与深度设计维护在 `docs/` 中。
+   - 文档中的接口代码、Mermaid 流程图、配额数值必须与源码严格保持一致。
+
 ## 目录与职责
 
 ```text
@@ -50,6 +67,7 @@ src/electron/api/request-adapters.ts 三种请求格式的请求体构造
 src/electron/api/protocol-adapters.ts 三种 SSE/响应格式的统一解析
 src/electron/api/provider-policy.ts URL、鉴权和 provider 安全策略
 src/electron/api/context-window.ts  完整轮次裁剪（token 估算来自 shared/token-estimate）
+src/electron/mcp/                   MCP 协议层（stdio/sse 传输、client 连接池、tool-retriever 检索）
 src/electron/storage/default-skills.ts 5 个系统内置技能定义
 src/electron/storage/               加密 vault、skills CRUD、schema、配额和仓库操作
 src/renderer/src/App.tsx            renderer 状态与业务编排

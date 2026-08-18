@@ -3,11 +3,13 @@ import { dirname, join } from 'node:path'
 import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { ChatGateway } from './api/gateway'
 import { registerIpcHandlers } from './ipc/register-ipc'
+import { McpManager } from './mcp/mcp-manager'
 import { AppRepository } from './storage/app-repository'
 
 let mainWindow: BrowserWindow | undefined
 let repository: AppRepository | undefined
 let gateway: ChatGateway | undefined
+let mcpManager: McpManager | undefined
 let unregisterIpc: (() => void) | undefined
 
 function createWindow(): BrowserWindow {
@@ -64,17 +66,19 @@ async function start(): Promise<void> {
   configureSessionSecurity()
   repository = new AppRepository(app.getPath('userData'))
   await repository.initialize()
-  gateway = new ChatGateway(repository)
+  mcpManager = new McpManager(repository)
+  gateway = new ChatGateway(repository, mcpManager)
   openMainWindow()
 }
 
 function openMainWindow(): void {
-  if (!repository || !gateway) throw new Error('Application services are unavailable')
+  if (!repository || !gateway || !mcpManager) throw new Error('Application services are unavailable')
   const window = createWindow()
   mainWindow = window
-  unregisterIpc = registerIpcHandlers(window, repository, gateway)
+  unregisterIpc = registerIpcHandlers(window, repository, gateway, mcpManager)
   window.on('closed', () => {
     gateway?.cancelAll()
+    void mcpManager?.closeAll().catch(() => {})
     unregisterIpc?.()
     unregisterIpc = undefined
     if (mainWindow === window) mainWindow = undefined

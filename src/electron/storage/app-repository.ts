@@ -3,6 +3,8 @@ import type {
   ApiFormat,
   AppSettings,
   Conversation,
+  McpServerConfig,
+  McpServerInput,
   MessageAttachment,
   ModelConfig,
   ModelInput,
@@ -13,6 +15,7 @@ import type {
   SkillFile,
   SkillFileKind,
   SkillInput,
+  ToolCallExecution,
 } from '../../shared/types'
 import { EncryptedStore } from './encrypted-store'
 import { createOpenRouterAutoModel } from './default-models'
@@ -39,6 +42,7 @@ export interface VaultState {
   models: ModelConfig[]
   conversations: Conversation[]
   skills?: Skill[]
+  mcpServers?: McpServerConfig[]
 }
 
 const API_FORMATS = new Set<ApiFormat>([
@@ -50,6 +54,9 @@ const MAX_PROVIDERS = 100
 const MAX_MODELS = 2_000
 const MAX_CONVERSATIONS = 10_000
 const MAX_SKILLS = 500
+const MAX_MCP_SERVERS = 100
+const MAX_MCP_ARGS = 50
+const MAX_MCP_ENV_ENTRIES = 100
 const MAX_MESSAGES_PER_CONVERSATION = 20_000
 const MAX_MESSAGE_CHARACTERS = 2_000_000
 const MAX_CONVERSATION_CHARACTERS = 50_000_000
@@ -62,6 +69,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
+  mcpEnabled: true,
+  mcpToolRetrievalMode: 'auto',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
 }
@@ -326,6 +335,66 @@ export class AppRepository {
     })
   }
 
+  listMcpServers(): McpServerConfig[] {
+    return (this.store.read().mcpServers ?? []).map((s) => structuredClone(s))
+  }
+
+  getMcpServer(id: string): McpServerConfig | undefined {
+    return this.listMcpServers().find((server) => server.id === id)
+  }
+
+  async upsertMcpServer(input: McpServerInput): Promise<McpServerConfig> {
+    return this.store.mutate((draft) => {
+      const servers = draft.mcpServers ?? []
+      const existing = input.id ? servers.find((s) => s.id === input.id) : undefined
+      const timestamp = new Date().toISOString()
+      const candidate: McpServerConfig = {
+        id: input.id?.trim() || `mcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        name: input.name.trim(),
+        description: input.description?.trim() || undefined,
+        enabled: input.enabled ?? existing?.enabled ?? true,
+        transport: input.transport,
+        command: input.command?.trim() || undefined,
+        args: input.args,
+        env: input.env,
+        url: input.url?.trim() || undefined,
+        headers: input.headers,
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+      }
+      const validated = validateMcpServer(candidate)
+      if (existing) {
+        draft.mcpServers = servers.map((s) => (s.id === validated.id ? validated : s))
+      } else {
+        if (servers.length >= MAX_MCP_SERVERS) throw new Error('MCP Server 数量已达上限。')
+        draft.mcpServers = [...servers, validated]
+      }
+      return structuredClone(validated)
+    })
+  }
+
+  async removeMcpServer(id: string): Promise<void> {
+    return this.store.mutate((draft) => {
+      const servers = draft.mcpServers ?? []
+      draft.mcpServers = servers.filter((s) => s.id !== id)
+    })
+  }
+
+  async toggleMcpServer(id: string, enabled: boolean): Promise<McpServerConfig> {
+    return this.store.mutate((draft) => {
+      const servers = draft.mcpServers ?? []
+      const target = servers.find((s) => s.id === id)
+      if (!target) throw new Error('MCP 服务不存在。')
+      const updated: McpServerConfig = {
+        ...target,
+        enabled,
+        updatedAt: new Date().toISOString(),
+      }
+      draft.mcpServers = servers.map((s) => (s.id === id ? updated : s))
+      return structuredClone(updated)
+    })
+  }
+
   listConversations(): Conversation[] {
     return this.store
       .read()
@@ -430,6 +499,7 @@ function createDefaultVault(): VaultState {
     models: [createOpenRouterAutoModel(timestamp)],
     conversations: [],
     skills: structuredClone(DEFAULT_SKILLS),
+    mcpServers: [],
   }
 }
 
@@ -449,6 +519,9 @@ function validateVault(value: unknown): VaultState {
   const skills = value.skills !== undefined
     ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
     : structuredClone(DEFAULT_SKILLS)
+  const mcpServers = value.mcpServers !== undefined
+    ? parseStoredMcpServers(value.mcpServers)
+    : []
   return {
     schemaVersion: 1,
     settings: normalizeAppSettings(value.settings),
@@ -456,6 +529,7 @@ function validateVault(value: unknown): VaultState {
     models,
     conversations,
     skills,
+    mcpServers,
   }
 }
 
@@ -635,6 +709,123 @@ function validateSkill(value: unknown): Skill {
   }
 }
 
+function validateMcpServer(value: unknown): McpServerConfig {
+  if (!isRecord(value)) throw new Error('Invalid MCP server config')
+  requireNonEmptyString(value.id, 'mcp server id', 100)
+  requireNonEmptyString(value.name, 'mcp server name', 200)
+  if (value.description !== undefined && (typeof value.description !== 'string' || value.description.length > 2_000)) {
+    throw new Error('Invalid MCP server description')
+  }
+  if (typeof value.enabled !== 'boolean') {
+    throw new Error('Invalid MCP server enabled flag')
+  }
+  const transport = String(value.transport)
+  if (transport !== 'stdio' && transport !== 'sse') {
+    throw new Error('Invalid MCP server transport: must be stdio or sse')
+  }
+
+  let command: string | undefined
+  let args: string[] | undefined
+  let env: Record<string, string> | undefined
+  let url: string | undefined
+  let headers: Record<string, string> | undefined
+
+  if (transport === 'stdio') {
+    requireNonEmptyString(value.command, 'mcp server command', 500)
+    command = value.command.trim()
+    if (value.args !== undefined) {
+      if (!Array.isArray(value.args) || value.args.length > MAX_MCP_ARGS) {
+        throw new Error('Invalid MCP server args: too many arguments')
+      }
+      args = value.args.map((arg, idx) => {
+        if (typeof arg !== 'string' || arg.length > 8_192) {
+          throw new Error(`Invalid MCP server arg at index ${idx}`)
+        }
+        return arg
+      })
+    }
+    if (value.env !== undefined) {
+      if (!isRecord(value.env)) throw new Error('Invalid MCP server env')
+      const envEntries = Object.entries(value.env)
+      if (envEntries.length > MAX_MCP_ENV_ENTRIES) {
+        throw new Error('Too many environment variables for MCP server')
+      }
+      env = {}
+      for (const [k, v] of envEntries) {
+        const key = k.trim()
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+          throw new Error(`Invalid environment variable key: ${key}`)
+        }
+        if (typeof v !== 'string' || v.length > 8_192) {
+          throw new Error(`Invalid environment variable value for: ${key}`)
+        }
+        env[key] = v
+      }
+    }
+  } else {
+    requireNonEmptyString(value.url, 'mcp server url', 2_000)
+    url = normalizeBaseUrl(value.url)
+    if (value.headers !== undefined) {
+      headers = sanitizeHeaders(value.headers as Record<string, string>)
+    }
+  }
+
+  requireIsoDate(value.createdAt, 'mcp server createdAt')
+  requireIsoDate(value.updatedAt, 'mcp server updatedAt')
+
+  return {
+    id: value.id,
+    name: value.name,
+    description: value.description?.trim() || undefined,
+    enabled: value.enabled,
+    transport,
+    command,
+    args,
+    env,
+    url,
+    headers,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  }
+}
+
+function parseStoredMcpServers(value: unknown): McpServerConfig[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error('Invalid MCP servers in vault')
+  if (value.length > MAX_MCP_SERVERS) throw new Error('Too many MCP servers in vault')
+  return value.map(validateMcpServer)
+}
+
+function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new Error('Invalid tool executions')
+  if (value.length > 50) throw new Error('Too many tool executions')
+  if (value.length === 0) return undefined
+  return value.map((item) => {
+    if (!isRecord(item)) throw new Error('Invalid tool execution item')
+    requireNonEmptyString(item.id, 'tool execution id', 120)
+    requireNonEmptyString(item.toolName, 'tool execution toolName', 200)
+    const serverId = typeof item.serverId === 'string' && item.serverId.trim() ? item.serverId.trim() : undefined
+    const serverName = typeof item.serverName === 'string' && item.serverName.trim() ? item.serverName.trim() : undefined
+    if (!isRecord(item.args)) throw new Error('Invalid tool execution args')
+    const result = typeof item.result === 'string' ? item.result.slice(0, 1_000_000) : undefined
+    const isError = typeof item.isError === 'boolean' ? item.isError : undefined
+    const status = ['calling', 'executing', 'complete', 'error'].includes(String(item.status))
+      ? (item.status as ToolCallExecution['status'])
+      : 'complete'
+    return {
+      id: item.id,
+      toolName: item.toolName,
+      serverId,
+      serverName,
+      args: item.args as Record<string, unknown>,
+      result,
+      isError,
+      status,
+    }
+  })
+}
+
 function validateConversation(value: unknown): Conversation {
   if (!isRecord(value)) throw new Error('Invalid conversation')
   requireNonEmptyString(value.id, 'conversation id')
@@ -648,6 +839,9 @@ function validateConversation(value: unknown): Conversation {
   }
   const skillIds = Array.isArray(value.skillIds)
     ? value.skillIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)
+    : undefined
+  const mcpServerIds = Array.isArray(value.mcpServerIds)
+    ? value.mcpServerIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)
     : undefined
   const webSearchMode = parseOptionalWebSearchMode(
     value.webSearchMode,
@@ -677,6 +871,7 @@ function validateConversation(value: unknown): Conversation {
     const citations = parseStoredCitations(message.citations)
     const usage = parseStoredTokenUsage(message.usage)
     const attachments = parseStoredAttachments(message.attachments)
+    const toolExecutions = parseStoredToolExecutions(message.toolExecutions)
     const parentMessageId =
       message.parentMessageId === null
         ? null
@@ -693,6 +888,7 @@ function validateConversation(value: unknown): Conversation {
       usage,
       modelId: typeof message.modelId === 'string' && message.modelId.trim() ? message.modelId.trim() : undefined,
       attachments,
+      toolExecutions,
       createdAt: message.createdAt,
     } as Conversation['messages'][number]
   })
@@ -721,6 +917,7 @@ function validateConversation(value: unknown): Conversation {
     reasoningEnabled: value.reasoningEnabled,
     agentMode: value.agentMode,
     skillIds,
+    mcpServerIds,
     webSearchMode,
     messages,
     currentLeafId,

@@ -19,6 +19,7 @@ interface ComposerProps {
   disabled?: boolean
   draft: string
   agentMode?: boolean
+  mcpToolsCount?: number
   reasoningEnabled: boolean
   webSearchAvailable: boolean
   webSearchMode: WebSearchMode
@@ -28,6 +29,7 @@ interface ComposerProps {
   onDraftChange: (draft: string) => void
   onOpenContextSettings: () => void
   onOpenModelSettings: () => void
+  onOpenMcpSettings?: () => void
   onSend: () => void
   onSendWithTrim: () => void
   onStop: () => void
@@ -56,6 +58,7 @@ export function Composer({
   disabled,
   draft,
   agentMode = false,
+  mcpToolsCount,
   reasoningEnabled,
   webSearchAvailable,
   webSearchMode,
@@ -65,6 +68,7 @@ export function Composer({
   onDraftChange,
   onOpenContextSettings,
   onOpenModelSettings,
+  onOpenMcpSettings,
   onSend,
   onSendWithTrim,
   onStop,
@@ -276,12 +280,23 @@ export function Composer({
               className={`agent-pill ${agentMode ? 'is-active' : ''}`}
               disabled={disabled}
               onClick={onToggleAgentMode}
-              title={agentMode ? 'Agent 模式已开启（执行时注入已激活 Skills）' : '点击开启 Agent 智能体模式'}
+              title={agentMode ? 'Agent 模式已开启（执行时支持 Skills 与 MCP 工具调用）' : '点击开启 Agent 智能体模式'}
             >
               <Icon name="bot" size={15} />
               <span>Agent</span>
               {agentMode && <Icon name="check" size={13} />}
             </button>
+            {agentMode && mcpToolsCount !== undefined && mcpToolsCount > 0 && (
+              <button
+                className="mcp-indicator-pill"
+                disabled={disabled}
+                onClick={onOpenMcpSettings}
+                title={`MCP 外部工具: ${mcpToolsCount} 个已就绪。点击管理 MCP 服务与工具。`}
+              >
+                <Icon name="tool" size={14} />
+                <span>MCP · {mcpToolsCount}</span>
+              </button>
+            )}
             <button
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}
               disabled={!activeModel?.supportsReasoning || disabled}

@@ -3,6 +3,10 @@ import type { JSX } from 'react'
 import type {
   AppSettings,
   Conversation as StoredConversation,
+  McpServerConfig,
+  McpServerInput,
+  McpServerTestResult,
+  McpToolDefinition,
   Message,
   MessageAttachment,
   ModelInput,
@@ -10,6 +14,7 @@ import type {
   Skill,
   SkillInput,
   StreamEvent,
+  ToolCallExecution,
   WebCitation
 } from '../../shared/types'
 import { ChatContent } from './components/ChatContent'
@@ -130,6 +135,8 @@ export default function App(): JSX.Element {
   const [providers, setProviders] = useState<ProviderConfig[]>([])
   const [models, setModels] = useState<ModelConfig[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
+  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([])
+  const [mcpTools, setMcpTools] = useState<McpToolDefinition[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState('')
   const [activeModelId, setActiveModelId] = useState('')
@@ -264,7 +271,9 @@ export default function App(): JSX.Element {
         window.agentbox.providers.list(),
         window.agentbox.models.list(),
         window.agentbox.conversations.list(),
-        window.agentbox.skills.list()
+        window.agentbox.skills.list(),
+        window.agentbox.mcp.listServers(),
+        window.agentbox.mcp.listTools()
       ])
       const uiProviders: ProviderConfig[] = providerViews.map((provider) => ({
         ...provider,
@@ -485,6 +494,81 @@ export default function App(): JSX.Element {
       }))
       return
     }
+    
+    if (event.type === 'tool-call-start') {
+      replaceConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeStream!.conversationId) return conversation
+        return {
+          ...conversation,
+          messages: conversation.messages.map((message) => {
+            if (message.id !== activeStream!.assistantMessageId) return message
+            const existing = message.toolExecutions ?? []
+            if (existing.some((t) => t.id === event.callId)) return message
+            const newExecution: ToolCallExecution = {
+              id: event.callId,
+              toolName: event.toolName,
+              serverName: event.serverName,
+              args: {},
+              status: 'executing'
+            }
+            return {
+              ...message,
+              toolExecutions: [...existing, newExecution]
+            }
+          })
+        }
+      }))
+      return
+    }
+    if (event.type === 'tool-call-complete') {
+      replaceConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeStream!.conversationId) return conversation
+        return {
+          ...conversation,
+          messages: conversation.messages.map((message) => {
+            if (message.id !== activeStream!.assistantMessageId) return message
+            const existing = message.toolExecutions ?? []
+            return {
+              ...message,
+              toolExecutions: existing.map((exec) => {
+                if (exec.id !== event.callId) return exec
+                return {
+                  ...exec,
+                  toolName: event.toolName,
+                  args: event.args
+                }
+              })
+            }
+          })
+        }
+      }))
+      return
+    }
+    if (event.type === 'tool-result') {
+      replaceConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeStream!.conversationId) return conversation
+        return {
+          ...conversation,
+          messages: conversation.messages.map((message) => {
+            if (message.id !== activeStream!.assistantMessageId) return message
+            const existing = message.toolExecutions ?? []
+            return {
+              ...message,
+              toolExecutions: existing.map((exec) => {
+                if (exec.id !== event.callId) return exec
+                return {
+                  ...exec,
+                  result: event.result,
+                  isError: event.isError,
+                  status: event.isError ? 'error' : 'complete'
+                }
+              })
+            }
+          })
+        }
+      }))
+      return
+    }
     if (event.type === 'citation') {
       replaceConversations((current) => current.map((conversation) => {
         if (conversation.id !== activeStream!.conversationId) return conversation
@@ -640,6 +724,49 @@ export default function App(): JSX.Element {
     setSkills(reset)
     return reset
   }, [])
+
+  const handleUpsertMcpServer = useCallback(async (input: McpServerInput): Promise<McpServerConfig> => {
+    const saved = await window.agentbox.mcp.upsertServer(input)
+    const [servers, tools] = await Promise.all([
+      window.agentbox.mcp.listServers(),
+      window.agentbox.mcp.listTools()
+    ])
+    setMcpServers(servers)
+    setMcpTools(tools)
+    return saved
+  }, [])
+
+  const handleRemoveMcpServer = useCallback(async (id: string): Promise<void> => {
+    await window.agentbox.mcp.removeServer(id)
+    const [servers, tools] = await Promise.all([
+      window.agentbox.mcp.listServers(),
+      window.agentbox.mcp.listTools()
+    ])
+    setMcpServers(servers)
+    setMcpTools(tools)
+  }, [])
+
+  const handleToggleMcpServer = useCallback(async (id: string, enabled: boolean): Promise<McpServerConfig> => {
+    const updated = await window.agentbox.mcp.toggleServer(id, enabled)
+    const [servers, tools] = await Promise.all([
+      window.agentbox.mcp.listServers(),
+      window.agentbox.mcp.listTools()
+    ])
+    setMcpServers(servers)
+    setMcpTools(tools)
+    return updated
+  }, [])
+
+  const handleTestMcpServer = useCallback(async (input: McpServerInput): Promise<McpServerTestResult> => {
+    return window.agentbox.mcp.testServer(input)
+  }, [])
+
+  const handleListMcpTools = useCallback(async (serverId?: string): Promise<McpToolDefinition[]> => {
+    const tools = await window.agentbox.mcp.listTools(serverId)
+    setMcpTools(tools)
+    return tools
+  }, [])
+
 
   const handleWebSearchModeChange = (mode: WebSearchMode): void => {
     if (mode !== 'off' && !webSearchAvailable) {
@@ -1337,6 +1464,8 @@ export default function App(): JSX.Element {
             disabled={!activeModel}
             draft={draft}
             agentMode={agentMode}
+            mcpToolsCount={mcpTools.length}
+            onOpenMcpSettings={() => openSettings('mcp')}
             reasoningEnabled={reasoningEnabled}
             webSearchAvailable={webSearchAvailable}
             webSearchMode={webSearchMode}
@@ -1365,6 +1494,12 @@ export default function App(): JSX.Element {
         preferences={settings}
         providers={providers}
         skills={skills}
+        mcpServers={mcpServers}
+        onUpsertMcpServer={handleUpsertMcpServer}
+        onRemoveMcpServer={handleRemoveMcpServer}
+        onToggleMcpServer={handleToggleMcpServer}
+        onTestMcpServer={handleTestMcpServer}
+        onListMcpTools={handleListMcpTools}
         onClose={() => setSettingsOpen(false)}
         onClearData={handleClearAllData}
         onDiscoverModels={discoverModels}
