@@ -31,6 +31,14 @@ pnpm package
 pnpm dist
 ```
 
+Electron main 与 sandboxed preload 都显式输出 CommonJS：入口分别为
+`out/main/index.cjs` 和 `out/preload/index.cjs`。`package.json#main` 必须与 main
+产物同步。这里不能只依赖 `pnpm build` 验证；外置依赖在开发目录中可被正常
+解析，但 Windows 的 ESM main 打入 `app.asar` 后可能无法解析 `ajv` 等传统
+CommonJS 包入口。因此调整 Electron/Vite 配置、入口文件或运行时依赖后，还要
+执行 `pnpm package` 并实际启动 `release/win-unpacked/AgentBox.exe`，确认主窗口
+出现且 renderer 进程成功创建。
+
 ---
 
 ## 🧪 自动化测试体系（Vitest）

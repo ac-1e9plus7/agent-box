@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "A private, local-first desktop agent and multi-provider AI client.",
   "type": "module",
-  "main": "./out/main/index.js",
+  "main": "./out/main/index.cjs",
   "author": "AgentBox contributors",
   "license": "MIT",
   "scripts": {

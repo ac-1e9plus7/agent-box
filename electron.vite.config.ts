@@ -24,6 +24,13 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/electron/main.ts')
+        },
+        // Keep the packaged main process in CommonJS. Electron's ESM loader
+        // cannot reliably resolve legacy CommonJS package entry points (for
+        // example ajv's dist/ajv.js) from inside app.asar on Windows.
+        output: {
+          format: 'cjs',
+          entryFileNames: '[name].cjs'
         }
       }
     }

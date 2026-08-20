@@ -226,6 +226,7 @@ tests/                              协议、schema、配额、Skills 和纯函�
 ## 开发排障提示
 
 - `pnpm dev` 编译成功但新窗口立即退出时，先检查是否已有 AgentBox/Electron 实例持有 single-instance lock。
+- Electron 主进程必须以 CommonJS 输出到 `out/main/index.cjs`，并与 `package.json#main` 保持一致。不要把主进程改回 `index.js` ESM：开发构建和类型检查可能仍通过，但 Windows 打包进 `app.asar` 后，Electron 的 ESM loader 可能无法解析 `ajv` 等传统 CommonJS 包入口，启动时会在主进程抛出 `ERR_MODULE_NOT_FOUND`。调整构建配置或运行时依赖后，必须执行 `pnpm package` 并实际启动 `release/win-unpacked/AgentBox.exe`，确认出现 AgentBox 主窗口和 renderer 进程；不能只以 `pnpm build` 成功作为打包可用的依据。
 - 窗口空白且 `window.agentbox` 不存在时，检查 preload 是否仍输出并加载 `index.cjs`，不要关闭 sandbox。
 - 首次启动失败时检查 `safeStorage`/系统凭据后端，不要创建明文 fallback。
 - 修改应用图标后运行 `node scripts/generate-icons.mjs && node scripts/make-ico.mjs` 重新生成全套 PNG 与 ICO；`build/` 下的图标资产必须随仓库提交，否则打包缺图标。
