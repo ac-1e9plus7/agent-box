@@ -41,6 +41,7 @@ describe('MCP Schema & AppRepository Storage', () => {
       })
       expect(normalized.mcpEnabled).toBe(true)
       expect(normalized.mcpToolRetrievalMode).toBe('auto')
+      expect(normalized.mcpToolApprovalPolicy).toBe('sensitive')
     })
 
     it('respects explicitly set mcpEnabled and mcpToolRetrievalMode', () => {
@@ -52,10 +53,12 @@ describe('MCP Schema & AppRepository Storage', () => {
         defaultReasoningEffort: 'high',
         mcpEnabled: false,
         mcpToolRetrievalMode: 'all',
+        mcpToolApprovalPolicy: 'always',
         systemPrompt: 'test prompt',
       })
       expect(normalized.mcpEnabled).toBe(false)
       expect(normalized.mcpToolRetrievalMode).toBe('all')
+      expect(normalized.mcpToolApprovalPolicy).toBe('always')
     })
 
     it('rejects invalid mcpToolRetrievalMode', () => {
@@ -70,6 +73,18 @@ describe('MCP Schema & AppRepository Storage', () => {
           systemPrompt: '',
         }),
       ).toThrow('Invalid MCP tool retrieval mode')
+    })
+
+    it('rejects invalid MCP approval policy', () => {
+      expect(() => normalizeAppSettings({
+        theme: 'system',
+        sendShortcut: 'enter',
+        contextManagementMode: 'manual',
+        defaultReasoningEnabled: false,
+        defaultReasoningEffort: 'medium',
+        mcpToolApprovalPolicy: 'unsafe',
+        systemPrompt: '',
+      })).toThrow('Invalid MCP tool approval policy')
     })
   })
 
@@ -122,6 +137,28 @@ describe('MCP Schema & AppRepository Storage', () => {
       expect(server.transport).toBe('sse')
       expect(server.url).toBe('http://127.0.0.1:8080/sse')
       expect(server.headers).toEqual({ 'X-Custom-Auth': 'token123' })
+    })
+
+    it('supports modern HTTP transport and keeps MCP credentials write-only across IPC views', async () => {
+      const server = await repo.upsertMcpServer({
+        name: 'Modern MCP',
+        transport: 'http',
+        url: 'https://mcp.example.com/mcp',
+        headers: { Authorization: 'Bearer secret-token', 'x-api-key': 'secret-key' },
+      })
+      expect(server.headers?.Authorization).toBe('Bearer secret-token')
+      const view = repo.listMcpServerViews().find((item) => item.id === server.id)!
+      expect(view.headers?.Authorization).not.toContain('secret-token')
+      expect(view.headers?.['x-api-key']).not.toContain('secret-key')
+
+      await repo.upsertMcpServer({
+        id: server.id,
+        name: server.name,
+        transport: 'http',
+        url: server.url,
+        headers: view.headers,
+      })
+      expect(repo.getMcpServer(server.id)?.headers).toEqual(server.headers)
     })
 
     it('rejects stdio server with missing command or invalid env key', async () => {
@@ -245,6 +282,26 @@ describe('MCP Schema & AppRepository Storage', () => {
                 status: 'complete',
               },
             ],
+            agentTrace: [
+              { type: 'assistant_text', turn: 1, text: 'I will inspect the directory.' },
+              {
+                type: 'tool_call',
+                turn: 1,
+                callId: 'call_123',
+                toolName: 'list_directory',
+                modelToolName: 'mcp_fs_list_directory',
+                serverName: 'Filesystem Server',
+                args: { path: '.' },
+              },
+              {
+                type: 'tool_result',
+                turn: 1,
+                callId: 'call_123',
+                toolName: 'list_directory',
+                result: '["file1.txt", "file2.txt"]',
+              },
+              { type: 'assistant_text', turn: 2, text: 'Here are the files.' },
+            ],
             createdAt: new Date().toISOString(),
           },
         ],
@@ -257,6 +314,12 @@ describe('MCP Schema & AppRepository Storage', () => {
       expect(conversation.messages[1]?.toolExecutions?.[0]?.toolName).toBe('list_directory')
       expect(conversation.messages[1]?.toolExecutions?.[0]?.args).toEqual({ path: '.' })
       expect(conversation.messages[1]?.toolExecutions?.[0]?.status).toBe('complete')
+      expect(conversation.messages[1]?.agentTrace?.map((item) => item.type)).toEqual([
+        'assistant_text',
+        'tool_call',
+        'tool_result',
+        'assistant_text',
+      ])
     })
   })
 })

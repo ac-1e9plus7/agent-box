@@ -1,6 +1,6 @@
 # 4. Agent 技能（Skills）系统
 
-AgentBox 的技能系统允许用户通过结构化文档与执行脚本，为大模型注入行业专家级工作流与规范。
+AgentBox 的技能系统允许用户通过结构化文档与参考脚本，为大模型注入行业专家级工作流与规范。脚本源码不会被应用隐式执行。
 
 ---
 
@@ -19,8 +19,8 @@ skill-package/
     └── validator.py
 ```
 
-### 优先采用 Python 3 规范
-- 在需要执行沙箱算法、数据清洗、正则校验与格式化时，**优先编写 Python 3 脚本**（`scripts/*.py`），确保跨平台一致性与可维护性。
+### Python 3 参考脚本规范
+- `scripts/*.py` 和 Shell 文件是被选中技能的参考实现。只有在用户启用了明确的受限执行工具并通过权限策略后，Agent 才能请求执行；否则模型必须把它们视为不可执行的参考代码。
 
 ---
 
@@ -46,6 +46,6 @@ skill-package/
 ## ⚡ Gateway 动态提示词注入（Prompt Augmentation）
 
 当开启会话的 **Agent 模式** 时：
-1. `ChatGateway` 扫描所有处于启用状态（`enabled: true`）的技能。
-2. 将技能的主指令（`SKILL.md`）、Python 3 脚本（`scripts/*.py`）与参考标准（`references/*.md`）组装为清晰的结构化 XML/Markdown 块。
-3. 作为 System Instructions 注入到每次 API 请求的顶部，赋予模型专家级推理与执行能力。
+1. `ChatGateway` 扫描处于启用状态（`enabled: true`）的技能，并仅注入名称、描述构成的轻量目录。
+2. 显式选择技能时直接加载；否则根据当前用户问题检索最多 2 个相关技能。
+3. 仅把命中技能的 `SKILL.md`、参考文档和参考脚本注入 System Instructions，避免所有技能同时占用上下文或产生角色冲突。

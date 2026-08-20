@@ -47,6 +47,10 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (!['auto', 'all'].includes(String(mcpToolRetrievalMode))) {
     throw new Error('Invalid MCP tool retrieval mode')
   }
+  const mcpToolApprovalPolicy = value.mcpToolApprovalPolicy ?? 'sensitive'
+  if (!['always', 'sensitive', 'never'].includes(String(mcpToolApprovalPolicy))) {
+    throw new Error('Invalid MCP tool approval policy')
+  }
   const proxy = normalizeProxy(value.proxy)
   const settings: AppSettings = {
     theme: value.theme as AppSettings['theme'],
@@ -60,6 +64,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     defaultAgentMode: Boolean(value.defaultAgentMode),
     mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
     mcpToolRetrievalMode: mcpToolRetrievalMode as AppSettings['mcpToolRetrievalMode'],
+    mcpToolApprovalPolicy: mcpToolApprovalPolicy as AppSettings['mcpToolApprovalPolicy'],
     systemPrompt: value.systemPrompt,
     proxy,
   }

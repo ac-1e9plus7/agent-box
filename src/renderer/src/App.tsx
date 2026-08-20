@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type {
+  AgentTraceItem,
   AppSettings,
   Conversation as StoredConversation,
   McpServerConfig,
@@ -56,6 +57,9 @@ const emptySettings: AppSettings = {
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
+  mcpEnabled: true,
+  mcpToolRetrievalMode: 'auto',
+  mcpToolApprovalPolicy: 'sensitive',
   contextManagementMode: 'manual',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' }
@@ -69,6 +73,117 @@ interface ActiveStream {
 
 function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
+}
+
+function appendAssistantTrace(
+  trace: AgentTraceItem[] | undefined,
+  turn: number,
+  delta: string,
+): AgentTraceItem[] {
+  const next = [...(trace || [])]
+  const last = next.at(-1)
+  if (last?.type === 'assistant_text' && last.turn === turn) {
+    next[next.length - 1] = { ...last, text: last.text + delta }
+  } else {
+    next.push({ type: 'assistant_text', turn, text: delta })
+  }
+  return next
+}
+
+function appendToolCallTrace(
+  trace: AgentTraceItem[] | undefined,
+  turn: number,
+  callId: string,
+  toolName: string,
+  modelToolName: string,
+  serverName: string | undefined,
+  args: Record<string, unknown>,
+): AgentTraceItem[] {
+  const next = [...(trace || [])]
+  const item: AgentTraceItem = {
+    type: 'tool_call',
+    turn,
+    callId,
+    toolName,
+    modelToolName,
+    serverName,
+    args,
+  }
+  const index = next.findIndex((entry) => entry.type === 'tool_call' && entry.callId === callId)
+  if (index >= 0) next[index] = { ...(next[index] as Extract<AgentTraceItem, { type: 'tool_call' }>), ...item }
+  else next.push(item)
+  return next
+}
+
+function appendThinkingTrace(
+  trace: AgentTraceItem[] | undefined,
+  turn: number,
+  blockIndex: number,
+  thinkingDelta: string,
+  signatureDelta?: string,
+): AgentTraceItem[] {
+  const next = [...(trace || [])]
+  const index = next.findIndex((entry) => (
+    entry.type === 'assistant_thinking' && entry.turn === turn && entry.blockIndex === blockIndex
+  ))
+  if (index >= 0) {
+    const current = next[index] as Extract<AgentTraceItem, { type: 'assistant_thinking' }>
+    next[index] = {
+      ...current,
+      thinking: current.thinking + thinkingDelta,
+      signature: `${current.signature || ''}${signatureDelta || ''}` || undefined,
+    }
+  } else {
+    next.push({
+      type: 'assistant_thinking',
+      turn,
+      blockIndex,
+      thinking: thinkingDelta,
+      signature: signatureDelta,
+    })
+  }
+  return next
+}
+
+function appendProviderItemTrace(
+  trace: AgentTraceItem[] | undefined,
+  turn: number,
+  item: Record<string, unknown>,
+): AgentTraceItem[] {
+  const next = [...(trace || [])]
+  const itemId = typeof item.id === 'string' ? item.id : undefined
+  const index = itemId
+    ? next.findIndex((entry) => entry.type === 'provider_item' && entry.item.id === itemId)
+    : -1
+  const traceItem: AgentTraceItem = { type: 'provider_item', turn, format: 'openai-responses', item }
+  if (index >= 0) next[index] = traceItem
+  else next.push(traceItem)
+  return next
+}
+
+function appendToolResultTrace(
+  trace: AgentTraceItem[] | undefined,
+  turn: number,
+  callId: string,
+  toolName: string,
+  event: Extract<StreamEvent, { type: 'tool-result' }>,
+): AgentTraceItem[] {
+  const next = [...(trace || [])]
+  const item: AgentTraceItem = {
+    type: 'tool_result',
+    turn,
+    callId,
+    toolName,
+    result: event.result,
+    resultContent: event.resultContent,
+    structuredResult: event.structuredResult,
+    resultTruncated: event.resultTruncated,
+    isError: event.isError,
+  }
+  const index = next.findIndex((entry) => entry.type === 'tool_result' && entry.callId === callId)
+  if (index >= 0) next[index] = item
+  else next.push(item)
+  return next
 }
 
 function toUiConversation(conversation: StoredConversation): Conversation {
@@ -479,6 +594,19 @@ export default function App(): JSX.Element {
     }
     if (!activeStream) return
 
+    if (event.type === 'agent-provider-item') {
+      replaceConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeStream!.conversationId) return conversation
+        return {
+          ...conversation,
+          messages: conversation.messages.map((message) => message.id === activeStream!.assistantMessageId
+            ? { ...message, agentTrace: appendProviderItemTrace(message.agentTrace, event.turn, event.item) }
+            : message)
+        }
+      }))
+      return
+    }
+
     if (event.type === 'text-delta' || event.type === 'reasoning-delta') {
       replaceConversations((current) => current.map((conversation) => {
         if (conversation.id !== activeStream!.conversationId) return conversation
@@ -487,8 +615,24 @@ export default function App(): JSX.Element {
           messages: conversation.messages.map((message) => {
             if (message.id !== activeStream!.assistantMessageId) return message
             return event.type === 'text-delta'
-              ? { ...message, content: message.content + event.delta }
-              : { ...message, reasoning: (message.reasoning ?? '') + event.delta }
+              ? {
+                ...message,
+                content: message.content + event.delta,
+                agentTrace: appendAssistantTrace(message.agentTrace, event.turn ?? 1, event.delta),
+              }
+              : {
+                ...message,
+                reasoning: (message.reasoning ?? '') + event.delta,
+                agentTrace: event.thinkingBlockIndex === undefined
+                  ? message.agentTrace
+                  : appendThinkingTrace(
+                    message.agentTrace,
+                    event.turn ?? 1,
+                    event.thinkingBlockIndex,
+                    event.delta,
+                    event.signatureDelta,
+                  ),
+              }
           })
         }
       }))
@@ -507,13 +651,46 @@ export default function App(): JSX.Element {
             const newExecution: ToolCallExecution = {
               id: event.callId,
               toolName: event.toolName,
+              modelToolName: event.modelToolName,
               serverName: event.serverName,
+              turn: event.turn,
               args: {},
-              status: 'executing'
+              status: 'calling'
             }
             return {
               ...message,
               toolExecutions: [...existing, newExecution]
+            }
+          })
+        }
+      }))
+      return
+    }
+    if (event.type === 'tool-approval-required') {
+      replaceConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeStream!.conversationId) return conversation
+        return {
+          ...conversation,
+          messages: conversation.messages.map((message) => {
+            if (message.id !== activeStream!.assistantMessageId) return message
+            const existing = message.toolExecutions ?? []
+            const nextExecution: ToolCallExecution = {
+              id: event.callId,
+              toolName: event.toolName,
+              modelToolName: event.modelToolName,
+              serverName: event.serverName,
+              turn: event.turn,
+              args: event.args,
+              riskLevel: event.riskLevel,
+              approvalReason: event.reason,
+              status: 'awaiting-approval'
+            }
+            return {
+              ...message,
+              toolExecutions: existing.some((execution) => execution.id === event.callId)
+                ? existing.map((execution) => execution.id === event.callId ? { ...execution, ...nextExecution } : execution)
+                : [...existing, nextExecution],
+              agentTrace: appendToolCallTrace(message.agentTrace, event.turn, event.callId, event.toolName, event.modelToolName, event.serverName, event.args)
             }
           })
         }
@@ -528,16 +705,15 @@ export default function App(): JSX.Element {
           messages: conversation.messages.map((message) => {
             if (message.id !== activeStream!.assistantMessageId) return message
             const existing = message.toolExecutions ?? []
+            const modelToolName = event.modelToolName
+              || existing.find((execution) => execution.id === event.callId)?.modelToolName
+              || event.toolName
             return {
               ...message,
-              toolExecutions: existing.map((exec) => {
-                if (exec.id !== event.callId) return exec
-                return {
-                  ...exec,
-                  toolName: event.toolName,
-                  args: event.args
-                }
-              })
+              toolExecutions: existing.map((exec) => exec.id === event.callId
+                ? { ...exec, toolName: event.toolName, modelToolName, turn: event.turn ?? exec.turn, args: event.args, status: 'executing' as const }
+                : exec),
+              agentTrace: appendToolCallTrace(message.agentTrace, event.turn ?? 1, event.callId, event.toolName, modelToolName, undefined, event.args)
             }
           })
         }
@@ -552,17 +728,22 @@ export default function App(): JSX.Element {
           messages: conversation.messages.map((message) => {
             if (message.id !== activeStream!.assistantMessageId) return message
             const existing = message.toolExecutions ?? []
+            const execution = existing.find((item) => item.id === event.callId)
             return {
               ...message,
-              toolExecutions: existing.map((exec) => {
-                if (exec.id !== event.callId) return exec
-                return {
-                  ...exec,
+              toolExecutions: existing.map((item) => item.id === event.callId
+                ? {
+                  ...item,
                   result: event.result,
+                  resultContent: event.resultContent,
+                  structuredResult: event.structuredResult,
+                  resultTruncated: event.resultTruncated,
                   isError: event.isError,
-                  status: event.isError ? 'error' : 'complete'
+                  turn: event.turn ?? item.turn,
+                  status: event.denied ? 'denied' as const : event.isError ? 'error' as const : 'complete' as const
                 }
-              })
+                : item),
+              agentTrace: appendToolResultTrace(message.agentTrace, event.turn ?? execution?.turn ?? 1, event.callId, event.toolName, event)
             }
           })
         }
@@ -683,6 +864,17 @@ export default function App(): JSX.Element {
       void persistConversation(nextConversation)
     }
   }
+
+  const handleMcpServerSelectionChange = useCallback((serverIds: string[]): void => {
+    if (!activeConversation) return
+    const nextConversation: Conversation = {
+      ...activeConversation,
+      mcpServerIds: serverIds,
+      updatedAt: new Date().toISOString()
+    }
+    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    void persistConversation(nextConversation)
+  }, [activeConversation, persistConversation, replaceConversations])
 
   const handleToggleReasoning = (): void => {
     if (!activeModel?.supportsReasoning) return
@@ -904,6 +1096,7 @@ export default function App(): JSX.Element {
         messages: requestMessages,
         agentMode: nextConversation.agentMode ?? agentMode,
         skillIds: nextConversation.skillIds,
+        mcpServerIds: nextConversation.mcpServerIds,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -936,6 +1129,19 @@ export default function App(): JSX.Element {
       showToast(`无法停止生成：${normalizeError(error)}`)
     }
   }
+
+  const handleToolApproval = useCallback(async (callId: string, approved: boolean): Promise<void> => {
+    const stream = activeStreamsRef.current.get(activeConversationId)
+    if (!stream?.requestId) {
+      showToast('该工具审批请求已结束。')
+      return
+    }
+    try {
+      await window.agentbox.chat.resolveToolApproval(stream.requestId, callId, approved)
+    } catch (error) {
+      showToast(`无法提交工具审批：${normalizeError(error)}`)
+    }
+  }, [activeConversationId, showToast])
 
   const handleRegenerate = async (targetAssistantId?: string, allowContextTrimming = false): Promise<void> => {
     if (!activeModel || !activeConversation || streamingConversationIds.has(activeConversation.id)) return
@@ -1028,6 +1234,7 @@ export default function App(): JSX.Element {
         messages: requestMessages,
         agentMode: nextConversation.agentMode ?? agentMode,
         skillIds: nextConversation.skillIds,
+        mcpServerIds: nextConversation.mcpServerIds,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -1182,6 +1389,7 @@ export default function App(): JSX.Element {
         messages: requestMessages,
         agentMode: nextConversation.agentMode ?? agentMode,
         skillIds: nextConversation.skillIds,
+        mcpServerIds: nextConversation.mcpServerIds,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -1451,6 +1659,7 @@ export default function App(): JSX.Element {
             onRegenerate={(targetAssistantId) => void handleRegenerate(targetAssistantId)}
             onSwitchVersion={handleSwitchVersion}
             onSuggestion={setDraft}
+            onResolveToolApproval={(callId, approved) => void handleToolApproval(callId, approved)}
           />
           <Composer
             activeModel={activeModel}
@@ -1465,7 +1674,10 @@ export default function App(): JSX.Element {
             draft={draft}
             agentMode={agentMode}
             mcpToolsCount={mcpTools.length}
+            mcpServers={mcpServers}
+            selectedMcpServerIds={activeConversation?.mcpServerIds}
             onOpenMcpSettings={() => openSettings('mcp')}
+            onMcpServerSelectionChange={handleMcpServerSelectionChange}
             reasoningEnabled={reasoningEnabled}
             webSearchAvailable={webSearchAvailable}
             webSearchMode={webSearchMode}

@@ -78,6 +78,8 @@ const agentboxApi: AgentboxAPI = {
     stream: (request: ChatRequest) => ipcRenderer.invoke(IPC_CHANNELS.chatStart, request),
     cancel: (requestId: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.chatCancel, requestId),
+    resolveToolApproval: (requestId: string, callId: string, approved: boolean) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatResolveToolApproval, requestId, callId, approved),
     onEvent: (listener: (event: StreamEvent) => void) => {
       streamListeners.add(listener)
       return () => streamListeners.delete(listener)

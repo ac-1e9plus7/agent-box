@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, CSSProperties, DragEvent, JSX } from 'react'
-import type { MessageAttachment } from '../../../shared/types'
+import type { McpServerConfig, MessageAttachment } from '../../../shared/types'
 import type { ModelConfig, WebSearchMode } from '../types'
 import { formatFileSize, processSelectedFiles } from '../file-helper'
 import { handleComposerKeyDown } from '../composer-helper'
@@ -20,6 +20,8 @@ interface ComposerProps {
   draft: string
   agentMode?: boolean
   mcpToolsCount?: number
+  mcpServers?: McpServerConfig[]
+  selectedMcpServerIds?: string[]
   reasoningEnabled: boolean
   webSearchAvailable: boolean
   webSearchMode: WebSearchMode
@@ -30,6 +32,7 @@ interface ComposerProps {
   onOpenContextSettings: () => void
   onOpenModelSettings: () => void
   onOpenMcpSettings?: () => void
+  onMcpServerSelectionChange?: (serverIds: string[]) => void
   onSend: () => void
   onSendWithTrim: () => void
   onStop: () => void
@@ -59,6 +62,8 @@ export function Composer({
   draft,
   agentMode = false,
   mcpToolsCount,
+  mcpServers = [],
+  selectedMcpServerIds,
   reasoningEnabled,
   webSearchAvailable,
   webSearchMode,
@@ -69,6 +74,7 @@ export function Composer({
   onOpenContextSettings,
   onOpenModelSettings,
   onOpenMcpSettings,
+  onMcpServerSelectionChange,
   onSend,
   onSendWithTrim,
   onStop,
@@ -97,6 +103,8 @@ export function Composer({
   const webSearchDescription = webSearchAvailable
     ? '联网搜索可能额外计费，并会将查询发送给搜索服务。“原生优先”不受支持时会自动回退。'
     : '当前仅 OpenRouter 连接支持联网搜索。'
+  const enabledMcpServers = mcpServers.filter((server) => server.enabled)
+  const effectiveMcpServerIds = selectedMcpServerIds ?? enabledMcpServers.map((server) => server.id)
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -286,16 +294,34 @@ export function Composer({
               <span>Agent</span>
               {agentMode && <Icon name="check" size={13} />}
             </button>
-            {agentMode && mcpToolsCount !== undefined && mcpToolsCount > 0 && (
-              <button
-                className="mcp-indicator-pill"
-                disabled={disabled}
-                onClick={onOpenMcpSettings}
-                title={`MCP 外部工具: ${mcpToolsCount} 个已就绪。点击管理 MCP 服务与工具。`}
-              >
-                <Icon name="tool" size={14} />
-                <span>MCP · {mcpToolsCount}</span>
-              </button>
+            {agentMode && enabledMcpServers.length > 0 && (
+              <details className="mcp-conversation-selector">
+                <summary className="mcp-indicator-pill" title="选择本会话允许使用的 MCP 服务">
+                  <Icon name="tool" size={14} />
+                  <span>MCP · {effectiveMcpServerIds.length}/{enabledMcpServers.length}</span>
+                  <Icon name="chevron-down" size={12} />
+                </summary>
+                <div className="mcp-conversation-menu">
+                  <strong>本会话允许的 MCP 服务</strong>
+                  {enabledMcpServers.map((server) => (
+                    <label key={server.id}>
+                      <input
+                        type="checkbox"
+                        checked={effectiveMcpServerIds.includes(server.id)}
+                        onChange={(event) => {
+                          const next = event.target.checked
+                            ? [...new Set([...effectiveMcpServerIds, server.id])]
+                            : effectiveMcpServerIds.filter((id) => id !== server.id)
+                          onMcpServerSelectionChange?.(next)
+                        }}
+                      />
+                      <span>{server.name}</span>
+                    </label>
+                  ))}
+                  <small>{mcpToolsCount ?? 0} 个工具已发现；未选中的服务不会暴露给模型。</small>
+                  <button type="button" onClick={onOpenMcpSettings}>管理 MCP 服务</button>
+                </div>
+              </details>
             )}
             <button
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}
@@ -356,4 +382,3 @@ export function Composer({
     </div>
   )
 }
-

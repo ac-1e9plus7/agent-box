@@ -23,6 +23,7 @@ interface ChatContentProps {
   onRegenerate: (messageId?: string) => void
   onSwitchVersion?: (messageId: string) => void
   onSuggestion: (prompt: string) => void
+  onResolveToolApproval?: (callId: string, approved: boolean) => void
 }
 
 function formatTime(timestamp: string): string {
@@ -93,10 +94,18 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
   )
 }
 
-function ToolExecutionItem({ execution }: { execution: ToolCallExecution }): JSX.Element {
-  const isExecuting = execution.status === 'executing'
-  const isError = execution.isError || execution.status === 'error'
-  const [open, setOpen] = useState(isExecuting || isError)
+function ToolExecutionItem({
+  execution,
+  onResolveApproval
+}: {
+  execution: ToolCallExecution
+  onResolveApproval?: (callId: string, approved: boolean) => void
+}): JSX.Element {
+  const awaitingApproval = execution.status === 'awaiting-approval'
+  const isExecuting = execution.status === 'calling' || execution.status === 'executing'
+  const isDenied = execution.status === 'denied'
+  const isError = execution.isError || execution.status === 'error' || isDenied
+  const [open, setOpen] = useState(isExecuting || awaitingApproval || isError)
 
   const argsStr = useMemo(() => {
     try {
@@ -107,7 +116,7 @@ function ToolExecutionItem({ execution }: { execution: ToolCallExecution }): JSX
   }, [execution.args])
 
   return (
-    <details className={`tool-execution-card ${isError ? 'is-error' : isExecuting ? 'is-executing' : 'is-complete'}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details className={`tool-execution-card ${awaitingApproval ? 'is-awaiting' : isError ? 'is-error' : isExecuting ? 'is-executing' : 'is-complete'}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
       <summary className="tool-execution-header">
         <div className="tool-execution-title">
           <Icon name="tool" size={14} />
@@ -120,12 +129,18 @@ function ToolExecutionItem({ execution }: { execution: ToolCallExecution }): JSX
               <i className="spinner" /> 执行中…
             </span>
           )}
+          {awaitingApproval && (
+            <span className="tool-status-badge awaiting">等待确认</span>
+          )}
           {execution.status === 'complete' && !isError && (
             <span className="tool-status-badge complete">
               <Icon name="check" size={12} /> 执行完成
             </span>
           )}
-          {isError && (
+          {isDenied && (
+            <span className="tool-status-badge error"><Icon name="close" size={12} /> 已拒绝</span>
+          )}
+          {isError && !isDenied && (
             <span className="tool-status-badge error">
               <Icon name="close" size={12} /> 执行失败
             </span>
@@ -134,6 +149,18 @@ function ToolExecutionItem({ execution }: { execution: ToolCallExecution }): JSX
         </div>
       </summary>
       <div className="tool-execution-body">
+        {awaitingApproval && (
+          <div className="tool-approval-block" role="alert">
+            <div>
+              <strong>{execution.riskLevel === 'sensitive' ? '敏感工具调用' : '工具调用确认'}</strong>
+              <span>{execution.approvalReason || '请确认是否允许执行该工具。'}</span>
+            </div>
+            <div className="tool-approval-actions">
+              <button className="secondary-button" onClick={() => onResolveApproval?.(execution.id, false)}>拒绝</button>
+              <button className="primary-button" onClick={() => onResolveApproval?.(execution.id, true)}>允许本次</button>
+            </div>
+          </div>
+        )}
         {Boolean(argsStr && argsStr !== '{}') && (
           <div className="tool-param-block">
             <span className="tool-block-label">输入参数:</span>
@@ -151,17 +178,17 @@ function ToolExecutionItem({ execution }: { execution: ToolCallExecution }): JSX
   )
 }
 
-function ToolExecutionList({ executions }: { executions?: ToolCallExecution[] }): JSX.Element | null {
+function ToolExecutionList({ executions, onResolveApproval }: { executions?: ToolCallExecution[]; onResolveApproval?: (callId: string, approved: boolean) => void }): JSX.Element | null {
   if (!executions || executions.length === 0) return null
   return (
     <div className="tool-executions-container">
       <div className="tool-executions-heading">
         <Icon name="tool" size={13} />
-        <span>已执行 {executions.length} 个 MCP 工具调用</span>
+        <span>MCP 工具交互 {executions.length} 项</span>
       </div>
       <div className="tool-executions-list">
         {executions.map((exec) => (
-          <ToolExecutionItem key={exec.id} execution={exec} />
+          <ToolExecutionItem key={exec.id} execution={exec} onResolveApproval={onResolveApproval} />
         ))}
       </div>
     </div>
@@ -413,7 +440,8 @@ function AssistantMessage({
   canRegenerate,
   onDelete,
   onRegenerate,
-  onSwitchVersion
+  onSwitchVersion,
+  onResolveToolApproval
 }: {
   message: ChatMessage
   allMessages?: ChatMessage[]
@@ -422,6 +450,7 @@ function AssistantMessage({
   onDelete?: (messageId: string) => void
   onRegenerate: (messageId?: string) => void
   onSwitchVersion?: (messageId: string) => void
+  onResolveToolApproval?: (callId: string, approved: boolean) => void
 }): JSX.Element {
   const isStreaming = message.status === 'streaming'
   const reasoningUsage = reasoningUsageLabel(message.usage)
@@ -464,7 +493,7 @@ function AssistantMessage({
             </span>
           </div>
         )}
-        <ToolExecutionList executions={message.toolExecutions} />
+        <ToolExecutionList executions={message.toolExecutions} onResolveApproval={onResolveToolApproval} />
         {message.content.trim() ? <MessageBody content={message.content} /> : isStreaming ? (
           <div className="typing-indicator" aria-label="正在回复"><i /><i /><i /></div>
         ) : message.status !== 'error' && (message.citations?.length ?? 0) > 0 ? (
@@ -574,7 +603,8 @@ export function ChatContent({
   onEditMessage,
   onRegenerate,
   onSwitchVersion,
-  onSuggestion
+  onSuggestion,
+  onResolveToolApproval
 }: ChatContentProps): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null)
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null)
@@ -604,6 +634,7 @@ export function ChatContent({
                 onDelete={onDeleteMessage}
                 onRegenerate={onRegenerate}
                 onSwitchVersion={onSwitchVersion}
+                onResolveToolApproval={onResolveToolApproval}
               />
             )
           }

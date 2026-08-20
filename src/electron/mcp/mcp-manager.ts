@@ -1,57 +1,57 @@
+import { ProxyAgent } from 'undici'
 import type { McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition } from '../../shared/types'
 import { AppRepository } from '../storage/app-repository'
-import { McpClient } from './mcp-client'
+import { McpClient, type McpToolExecutionResult } from './mcp-client'
+
+const MCP_SERVER_CONCURRENCY = 8
 
 export class McpManager {
   private readonly clients = new Map<string, McpClient>()
+  private proxyAgent: ProxyAgent | undefined
+  private proxyUrl: string | undefined
 
   constructor(private readonly repository: AppRepository) {}
 
   private getOrCreateClient(config: McpServerConfig): McpClient {
     const existing = this.clients.get(config.id)
     if (existing) {
-      const c = existing.serverConfig
+      const current = existing.serverConfig
       if (
-        c.transport === config.transport &&
-        c.command === config.command &&
-        c.url === config.url &&
-        JSON.stringify(c.args) === JSON.stringify(config.args) &&
-        JSON.stringify(c.env) === JSON.stringify(config.env) &&
-        JSON.stringify(c.headers) === JSON.stringify(config.headers)
-      ) {
-        return existing
-      }
-      void existing.close().catch(() => {})
+        current.enabled === config.enabled &&
+        current.transport === config.transport &&
+        current.command === config.command &&
+        current.url === config.url &&
+        JSON.stringify(current.args) === JSON.stringify(config.args) &&
+        JSON.stringify(current.env) === JSON.stringify(config.env) &&
+        JSON.stringify(current.headers) === JSON.stringify(config.headers)
+      ) return existing
+      void existing.close().catch(() => undefined)
       this.clients.delete(config.id)
     }
 
-    const client = new McpClient(config)
+    const client = new McpClient(
+      config,
+      (input, init) => this.fetchWithProxy(input, init),
+      () => console.info(`MCP tool list changed: ${config.name} (${config.id})`),
+    )
     this.clients.set(config.id, client)
     return client
   }
 
   async listAllTools(serverIds?: string[]): Promise<McpToolDefinition[]> {
-    const settings = this.repository.getSettings()
-    if (settings.mcpEnabled === false) return []
-
-    const allServers = this.repository.listMcpServers().filter((s) => s.enabled)
-    const targetServers = serverIds?.length
-      ? allServers.filter((s) => serverIds.includes(s.id))
-      : allServers
-
-    if (targetServers.length === 0) return []
-
-    const toolPromises = targetServers.map(async (server) => {
+    if (this.repository.getSettings().mcpEnabled === false) return []
+    const allServers = this.repository.listMcpServers().filter((server) => server.enabled)
+    const targetServers = serverIds === undefined
+      ? allServers
+      : allServers.filter((server) => serverIds.includes(server.id))
+    const results = await mapWithConcurrency(targetServers, MCP_SERVER_CONCURRENCY, async (server) => {
       try {
-        const client = this.getOrCreateClient(server)
-        return await client.listTools()
-      } catch (err) {
-        console.warn(`Failed to list tools for MCP server ${server.name} (${server.id}):`, err)
+        return await this.getOrCreateClient(server).listTools()
+      } catch (error) {
+        console.warn(`Failed to list tools for MCP server ${server.name} (${server.id}):`, error)
         return []
       }
     })
-
-    const results = await Promise.all(toolPromises)
     return results.flat()
   }
 
@@ -59,26 +59,26 @@ export class McpManager {
     serverId: string,
     toolName: string,
     args: Record<string, unknown>,
-  ): Promise<{ result: string; isError: boolean; serverName: string }> {
+    signal?: AbortSignal,
+  ): Promise<McpToolExecutionResult & { serverName: string }> {
+    if (this.repository.getSettings().mcpEnabled === false) {
+      return { result: 'MCP 已在全局设置中停用。', isError: true, serverName: 'Unknown' }
+    }
     const server = this.repository.getMcpServer(serverId)
-    if (!server) {
+    if (!server || !server.enabled) {
       return {
-        result: `MCP Server with id "${serverId}" not found.`,
+        result: `MCP Server with id "${serverId}" is unavailable or disabled.`,
         isError: true,
-        serverName: 'Unknown',
+        serverName: server?.name || 'Unknown',
       }
     }
-
     try {
-      const client = this.getOrCreateClient(server)
-      const res = await client.callTool(toolName, args)
+      const result = await this.getOrCreateClient(server).callTool(toolName, args, signal)
+      return { ...result, serverName: server.name }
+    } catch (error) {
+      if (signal?.aborted) throw signal.reason ?? error
       return {
-        ...res,
-        serverName: server.name,
-      }
-    } catch (err) {
-      return {
-        result: `Failed to execute tool ${toolName}: ${err instanceof Error ? err.message : String(err)}`,
+        result: `Failed to execute tool ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
         isError: true,
         serverName: server.name,
       }
@@ -87,6 +87,7 @@ export class McpManager {
 
   async testServer(input: McpServerInput): Promise<McpServerTestResult> {
     const startTime = performance.now()
+    const timestamp = new Date().toISOString()
     const tempConfig: McpServerConfig = {
       id: input.id || 'test-temp',
       name: input.name || 'Test Server',
@@ -97,38 +98,74 @@ export class McpManager {
       env: input.env,
       url: input.url,
       headers: input.headers,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
     }
-
-    const testClient = new McpClient(tempConfig)
+    const client = new McpClient(tempConfig, (request, init) => this.fetchWithProxy(request, init))
     try {
-      await testClient.connect()
-      const tools = await testClient.listTools()
-      const latencyMs = Math.round(performance.now() - startTime)
+      const connection = await client.connect()
+      const tools = await client.listTools()
+      const protocol = connection.protocolVersion ? `，协议 ${connection.protocolVersion}` : ''
       return {
         ok: true,
-        latencyMs,
+        latencyMs: Math.round(performance.now() - startTime),
         toolsCount: tools.length,
-        message: `连接成功 (已发现 ${tools.length} 个工具)`,
+        message: `连接成功（${connection.transport}${protocol}，已发现 ${tools.length} 个工具）`,
         tools,
       }
-    } catch (err) {
-      const latencyMs = Math.round(performance.now() - startTime)
+    } catch (error) {
       return {
         ok: false,
-        latencyMs,
+        latencyMs: Math.round(performance.now() - startTime),
         toolsCount: 0,
-        message: err instanceof Error ? err.message : '连接失败',
+        message: error instanceof Error ? error.message : '连接失败',
       }
     } finally {
-      await testClient.close().catch(() => {})
+      await client.close().catch(() => undefined)
     }
   }
 
   async closeAll(): Promise<void> {
-    const closePromises = Array.from(this.clients.values()).map((c) => c.close().catch(() => {}))
+    await Promise.all(Array.from(this.clients.values()).map((client) => client.close().catch(() => undefined)))
     this.clients.clear()
-    await Promise.all(closePromises)
+    if (this.proxyAgent) await this.proxyAgent.close().catch(() => undefined)
+    this.proxyAgent = undefined
+    this.proxyUrl = undefined
   }
+
+  private async fetchWithProxy(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const { proxy } = this.repository.getSettings()
+    if (proxy.mode !== 'custom' || !proxy.url) {
+      if (this.proxyAgent) void this.proxyAgent.close().catch(() => undefined)
+      this.proxyAgent = undefined
+      this.proxyUrl = undefined
+      return fetch(input, init)
+    }
+    if (!this.proxyAgent || this.proxyUrl !== proxy.url) {
+      if (this.proxyAgent) void this.proxyAgent.close().catch(() => undefined)
+      this.proxyAgent = new ProxyAgent(proxy.url)
+      this.proxyUrl = proxy.url
+    }
+    const options = { ...(init || {}) } as RequestInit & { dispatcher?: ProxyAgent }
+    options.dispatcher = this.proxyAgent
+    return fetch(input, options)
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  values: T[],
+  concurrency: number,
+  mapper: (value: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(values.length)
+  let nextIndex = 0
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex
+      nextIndex += 1
+      results[index] = await mapper(values[index]!)
+    }
+  })
+  await Promise.all(workers)
+  return results
 }

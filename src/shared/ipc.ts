@@ -27,6 +27,7 @@ export const IPC_CHANNELS = {
   dataClearConversations: 'data:clear-conversations',
   chatStart: 'chat:start',
   chatCancel: 'chat:cancel',
+  chatResolveToolApproval: 'chat:resolve-tool-approval',
   chatEvent: 'chat:event',
   appGetInfo: 'app:get-info',
 } as const

@@ -15,11 +15,11 @@
 - 🔒 **本地加密与强沙箱隔离**：渲染进程完全沙箱化，API Key 绝不暴露给前端；数据通过操作系统凭据封装主密钥，采用 **AES-256-GCM** 全程本地加密落盘。
 - 🌐 **多协议与多服务商支持**：将“模型”、“供应商连接”与“协议格式”彻底解耦。统一支持 **OpenAI Chat Completions**、**OpenAI Responses** 与 **Anthropic Messages**，预设 [OpenRouter](https://openrouter.ai/) 与 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 本地高速连接。
 - 🛠️ **MCP (Model Context Protocol) 外部工具集成**：
-  - 支持 **Stdio**（本地命令行子进程）与 **SSE**（网络服务）双传输通道。
+  - 基于官方 MCP TypeScript SDK，支持 **Stdio** 与 **Streamable HTTP**，并兼容旧式 HTTP+SSE 服务。
   - 内置 **BM25 智能工具检索**，根据问题意图动态筛选 Top-K 工具注入上下文，防止 Token 膨胀。
-  - 支持最多 6 轮 **Agent 自主多轮执行循环**，并在聊天气泡中实时渲染交互式折叠卡片。
+  - 支持最多 6 轮 **Agent 自主多轮执行循环**、会话级服务白名单、敏感操作审批与交互式调用卡片。
 - 🧩 **Agent 多文件技能（Skills）系统**：
-  - 采用 Markdown 规范 + **Python 3 / Shell 执行脚本** 标准，通过 Prompt Augmentation 动态注入专家级能力。
+  - 采用 Markdown 规范 + **Python 3 / Shell 参考脚本** 标准，通过按需检索和 Prompt Augmentation 注入专家能力；脚本不会被隐式执行。
   - 支持以 **.zip 压缩包** 形式一键导出与导入外部技能，内置 5 大专业领域预置技能。
 - 📐 **Markdown 与 LaTeX 数学公式渲染**：聊天气泡支持自然换行；全面支持行内公式、独立块级公式、矩阵/方程组对齐环境与代码块高亮，具备横向滚动防溢出。
 - 🖼️ **多模态与智能附件**：支持文件拖拽、剪贴板粘贴与图片智能尺寸优化（最大 2048px），原生适配各协议图片/文档块并提供高清灯箱预览。

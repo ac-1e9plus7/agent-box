@@ -36,8 +36,9 @@ export interface ProxyConfig {
   url: string
 }
 
-export type McpTransportType = 'stdio' | 'sse'
+export type McpTransportType = 'stdio' | 'http' | 'sse'
 export type McpToolRetrievalMode = 'auto' | 'all'
+export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'never'
 
 export interface AppSettings {
   theme: ThemeMode
@@ -50,6 +51,8 @@ export interface AppSettings {
   defaultAgentMode?: boolean
   mcpEnabled?: boolean
   mcpToolRetrievalMode?: McpToolRetrievalMode
+  /** Defaults to `sensitive`: only explicitly read-only, closed-world tools run automatically. */
+  mcpToolApprovalPolicy?: McpToolApprovalPolicy
   systemPrompt: string
   proxy: ProxyConfig
 }
@@ -78,8 +81,10 @@ export interface McpServerInput {
   command?: string
   args?: string[]
   env?: Record<string, string>
+  clearEnv?: boolean
   url?: string
   headers?: Record<string, string>
+  clearHeaders?: boolean
 }
 
 export interface McpToolParameterSchema {
@@ -92,8 +97,18 @@ export interface McpToolParameterSchema {
 
 export interface McpToolDefinition {
   name: string
+  /** Unique provider-safe name exposed to the model. */
+  modelName?: string
   description?: string
   inputSchema: McpToolParameterSchema
+  outputSchema?: McpToolParameterSchema
+  annotations?: {
+    title?: string
+    readOnlyHint?: boolean
+    destructiveHint?: boolean
+    idempotentHint?: boolean
+    openWorldHint?: boolean
+  }
   serverId: string
   serverName: string
 }
@@ -239,13 +254,52 @@ export interface MessageAttachment {
 export interface ToolCallExecution {
   id: string
   toolName: string
+  modelToolName?: string
   serverId?: string
   serverName?: string
+  turn?: number
   args: Record<string, unknown>
   result?: string
+  resultContent?: McpToolResultContent[]
+  structuredResult?: Record<string, unknown>
+  resultTruncated?: boolean
   isError?: boolean
-  status: 'calling' | 'executing' | 'complete' | 'error'
+  riskLevel?: 'low' | 'sensitive'
+  approvalReason?: string
+  status: 'calling' | 'awaiting-approval' | 'executing' | 'complete' | 'denied' | 'error'
 }
+
+export type McpToolResultContent =
+  | { type: 'text'; text: string }
+  | { type: 'image' | 'audio'; data?: string; mimeType: string }
+  | { type: 'resource'; uri: string; mimeType?: string; text?: string; blob?: string }
+  | { type: 'resource_link'; uri: string; name: string; description?: string; mimeType?: string }
+
+export type AgentTraceItem =
+  | { type: 'assistant_text'; turn: number; text: string }
+  | { type: 'assistant_thinking'; turn: number; blockIndex: number; thinking: string; signature?: string }
+  | { type: 'provider_item'; turn: number; format: 'openai-responses'; item: Record<string, unknown> }
+  | {
+      type: 'tool_call'
+      turn: number
+      callId: string
+      toolName: string
+      modelToolName: string
+      serverId?: string
+      serverName?: string
+      args: Record<string, unknown>
+    }
+  | {
+      type: 'tool_result'
+      turn: number
+      callId: string
+      toolName: string
+      result: string
+      resultContent?: McpToolResultContent[]
+      structuredResult?: Record<string, unknown>
+      resultTruncated?: boolean
+      isError?: boolean
+    }
 
 export interface Message {
   id: string
@@ -258,6 +312,8 @@ export interface Message {
   modelId?: string
   attachments?: MessageAttachment[]
   toolExecutions?: ToolCallExecution[]
+  /** Ordered protocol-neutral ledger used to replay multi-turn agent interactions. */
+  agentTrace?: AgentTraceItem[]
   createdAt: string
 }
 
@@ -319,13 +375,15 @@ export interface ChatError {
 
 export type StreamEvent =
   | { type: 'start'; requestId: string }
-  | { type: 'text-delta'; requestId: string; delta: string }
-  | { type: 'reasoning-delta'; requestId: string; delta: string }
+  | { type: 'text-delta'; requestId: string; delta: string; turn?: number }
+  | { type: 'reasoning-delta'; requestId: string; delta: string; turn?: number; thinkingBlockIndex?: number; signatureDelta?: string }
+  | { type: 'agent-provider-item'; requestId: string; turn: number; format: 'openai-responses'; item: Record<string, unknown> }
   | { type: 'citation'; requestId: string; citation: WebCitation }
-  | { type: 'tool-call-start'; requestId: string; callId: string; toolName: string; serverName?: string }
-  | { type: 'tool-call-args'; requestId: string; callId: string; delta: string }
-  | { type: 'tool-call-complete'; requestId: string; callId: string; toolName: string; args: Record<string, unknown> }
-  | { type: 'tool-result'; requestId: string; callId: string; toolName: string; result: string; isError?: boolean }
+  | { type: 'tool-call-start'; requestId: string; callId: string; toolName: string; modelToolName?: string; serverName?: string; turn?: number }
+  | { type: 'tool-call-args'; requestId: string; callId: string; delta: string; turn?: number }
+  | { type: 'tool-approval-required'; requestId: string; callId: string; toolName: string; modelToolName: string; serverName?: string; args: Record<string, unknown>; riskLevel: 'low' | 'sensitive'; reason: string; turn: number }
+  | { type: 'tool-call-complete'; requestId: string; callId: string; toolName: string; modelToolName?: string; args: Record<string, unknown>; turn?: number }
+  | { type: 'tool-result'; requestId: string; callId: string; toolName: string; result: string; resultContent?: McpToolResultContent[]; structuredResult?: Record<string, unknown>; resultTruncated?: boolean; isError?: boolean; denied?: boolean; turn?: number }
   | { type: 'usage'; requestId: string; usage: TokenUsage }
   | { type: 'done'; requestId: string; finishReason?: string }
   | { type: 'error'; requestId: string; error: ChatError }
@@ -391,6 +449,7 @@ export interface AgentboxAPI {
   chat: {
     stream(request: ChatRequest): Promise<{ requestId: string }>
     cancel(requestId: string): Promise<void>
+    resolveToolApproval(requestId: string, callId: string, approved: boolean): Promise<void>
     onEvent(listener: (event: StreamEvent) => void): () => void
   }
   app: {

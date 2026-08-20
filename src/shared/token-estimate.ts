@@ -31,7 +31,13 @@ export function estimateTextTokens(text: string): number {
  * Estimates the on-the-wire token cost of a message. `reasoning` is never sent
  * to the provider, so it is intentionally excluded from the estimate.
  */
-export function estimateMessageTokens(message: Pick<Message, 'content'> & { attachments?: Message['attachments'] }): number {
+export function estimateMessageTokens(
+  message: Pick<Message, 'content'> & {
+    attachments?: Message['attachments']
+    toolExecutions?: Message['toolExecutions']
+    agentTrace?: Message['agentTrace']
+  },
+): number {
   let total = PER_MESSAGE_OVERHEAD + estimateTextTokens(message.content)
   if (message.attachments?.length) {
     for (const attachment of message.attachments) {
@@ -44,5 +50,39 @@ export function estimateMessageTokens(message: Pick<Message, 'content'> & { atta
       }
     }
   }
+  if (message.agentTrace?.length) {
+    for (const item of message.agentTrace) {
+      // assistant_text is already represented by message.content.
+      if (item.type === 'assistant_text') continue
+      if (item.type === 'assistant_thinking') {
+        total += estimateTextTokens(item.thinking) + estimateTextTokens(item.signature || '') + 12
+      } else if (item.type === 'provider_item') {
+        total += estimateTextTokens(safeJson(item.item)) + 12
+      } else if (item.type === 'tool_call') {
+        total += estimateTextTokens(item.modelToolName) + estimateTextTokens(safeJson(item.args)) + 16
+      } else {
+        total += estimateTextTokens(item.result) + estimateTextTokens(safeJson(item.structuredResult)) + 16
+        for (const content of item.resultContent || []) {
+          if (content.type === 'image') total += 1_000
+          else if (content.type === 'audio') total += 2_000
+        }
+      }
+    }
+  } else if (message.toolExecutions?.length) {
+    for (const execution of message.toolExecutions) {
+      total += estimateTextTokens(execution.modelToolName || execution.toolName)
+      total += estimateTextTokens(safeJson(execution.args))
+      total += estimateTextTokens(execution.result || '') + 16
+    }
+  }
   return total
+}
+
+function safeJson(value: unknown): string {
+  if (value === undefined) return ''
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return ''
+  }
 }

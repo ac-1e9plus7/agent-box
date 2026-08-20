@@ -278,10 +278,11 @@ icon: "code"
       ]
       const prompt = buildAgentSystemPrompt(activeSkills, '全局系统指令')
       expect(prompt).toContain('【Agent 智能体模式已启用】')
-      expect(prompt).toContain('优先使用 Python 3 脚本')
+      expect(prompt).toContain('Python 3 参考脚本（未自动执行）')
+      expect(prompt).toContain('不得声称已经执行脚本')
       expect(prompt).toContain('[技能 1: 代码助手]')
       expect(prompt).toContain('生成健壮高质量的 TypeScript 和 Python 代码。')
-      expect(prompt).toContain('## 附带 Python 3 执行/工具脚本:')
+      expect(prompt).toContain('## 附带 Python 3 参考脚本（未自动执行）:')
       expect(prompt).toContain('scripts/verify.py')
       expect(prompt).toContain('def verify(x):')
       expect(prompt).toContain('## 附带参考文档:')

@@ -96,10 +96,10 @@ export function registerIpcHandlers(
   })
   register(IPC_CHANNELS.skillsResetDefaults, () => repository.resetDefaultSkills())
 
-  register(IPC_CHANNELS.mcpListServers, () => repository.listMcpServers())
+  register(IPC_CHANNELS.mcpListServers, () => repository.listMcpServerViews())
   register(IPC_CHANNELS.mcpUpsertServer, (_event, input: McpServerInput) => {
     assertRecord(input, 'MCP 服务配置')
-    return repository.upsertMcpServer(input)
+    return repository.upsertMcpServer(input).then((server) => repository.toMcpServerView(server))
   })
   register(IPC_CHANNELS.mcpRemoveServer, (_event, id: string) => {
     assertId(id)
@@ -108,11 +108,11 @@ export function registerIpcHandlers(
   register(IPC_CHANNELS.mcpToggleServer, (_event, id: string, enabled: boolean) => {
     assertId(id)
     if (typeof enabled !== 'boolean') throw new Error('Invalid enabled state')
-    return repository.toggleMcpServer(id, enabled)
+    return repository.toggleMcpServer(id, enabled).then((server) => repository.toMcpServerView(server))
   })
   register(IPC_CHANNELS.mcpTestServer, (_event, input: McpServerInput) => {
     assertRecord(input, 'MCP 服务配置')
-    return mcpManager.testServer(input)
+    return mcpManager.testServer(repository.buildMcpServerCandidate(input))
   })
   register(IPC_CHANNELS.mcpListTools, (_event, serverId?: string) => {
     if (serverId !== undefined) assertId(serverId)
@@ -151,6 +151,12 @@ export function registerIpcHandlers(
   register(IPC_CHANNELS.chatCancel, (_event, requestId: string) => {
     assertId(requestId)
     gateway.cancel(requestId)
+  })
+  register(IPC_CHANNELS.chatResolveToolApproval, (_event, requestId: string, callId: string, approved: boolean) => {
+    assertId(requestId)
+    assertId(callId)
+    if (typeof approved !== 'boolean') throw new Error('Invalid tool approval decision')
+    gateway.resolveToolApproval(requestId, callId, approved)
   })
 
   register(IPC_CHANNELS.appGetInfo, () => ({
@@ -231,4 +237,3 @@ export {
   unmaskProxyUrl,
   isTrustedMainPage,
 }
-

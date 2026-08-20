@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -41,6 +41,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     tempDirectory = mkdtempSync(join(tmpdir(), 'agentbox-gateway-mcp-test-'))
     repo = new AppRepository(tempDirectory)
     await repo.initialize()
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'never' })
 
     // Add a model and provider
     const provider = await repo.upsertProvider({
@@ -69,6 +70,10 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     if (mcpManager) await mcpManager.closeAll()
     if (repo) repo.destroy()
     rmSync(tempDirectory, { recursive: true, force: true })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('runs multi-turn tool execution loop when model requests a tool call', async () => {
@@ -169,7 +174,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
         {
           id: 'msg-user-1',
           role: 'user',
-          content: 'What is 20 + 22?',
+          content: 'Use calculate_sum to calculate 20 + 22.',
           createdAt: new Date().toISOString(),
         },
       ],
@@ -195,6 +200,102 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     expect(events.some((e) => e.type === 'text-delta' && (e as any).delta === 'The calculation result is 42.')).toBe(true)
     expect(events.some((e) => e.type === 'done')).toBe(true)
 
-    globalFetch.mockRestore()
+  })
+
+  it('waits for explicit approval before executing a sensitive tool', async () => {
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'always' })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
+      name: 'send_email',
+      modelName: 'mcp_mail_send_email',
+      description: 'Send an email',
+      inputSchema: {
+        type: 'object',
+        properties: { to: { type: 'string' } },
+        required: ['to'],
+      },
+      serverId: 'mail-server',
+      serverName: 'Mail',
+    }])
+    const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: 'sent',
+      isError: false,
+      serverName: 'Mail',
+    })
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount += 1
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-mail', function: { name: 'mcp_mail_send_email', arguments: '{"to":"a@example.com"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Email sent.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    let resolveApproval!: (event: Extract<StreamEvent, { type: 'tool-approval-required' }>) => void
+    const approval = new Promise<Extract<StreamEvent, { type: 'tool-approval-required' }>>((resolve) => {
+      resolveApproval = resolve
+    })
+    const events: StreamEvent[] = []
+    const stream = gateway.stream('req-approval', {
+      conversationId: 'conversation-approval',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-approval', role: 'user', content: 'Use send_email to contact a@example.com', createdAt: new Date().toISOString() }],
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => {
+      events.push(event)
+      if (event.type === 'tool-approval-required') resolveApproval(event)
+    })
+
+    const approvalEvent = await approval
+    expect(execute).not.toHaveBeenCalled()
+    expect(approvalEvent.args).toEqual({ to: 'a@example.com' })
+    gateway.resolveToolApproval('req-approval', 'call-mail', true)
+    await stream
+    expect(execute).toHaveBeenCalledTimes(1)
+    expect(events.some((event) => event.type === 'done')).toBe(true)
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'never' })
+  })
+
+  it('executes at most six tool turns and always emits a terminal event', async () => {
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'never' })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
+      name: 'loop_tool',
+      modelName: 'mcp_loop_tool',
+      description: 'Loop tool',
+      inputSchema: { type: 'object', properties: {} },
+      serverId: 'loop-server',
+      serverName: 'Loop',
+    }])
+    const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: 'continue',
+      isError: false,
+      serverName: 'Loop',
+    })
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount += 1
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call-loop-${fetchCount}`, function: { name: 'mcp_loop_tool', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+    const events: StreamEvent[] = []
+    await gateway.stream('req-loop-limit', {
+      conversationId: 'conversation-loop-limit',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-loop', role: 'user', content: 'Use loop_tool repeatedly', createdAt: new Date().toISOString() }],
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(fetchCount).toBe(7)
+    expect(execute).toHaveBeenCalledTimes(6)
+    expect(events.some((event) => event.type === 'done' && event.finishReason === 'tool_turn_limit')).toBe(true)
   })
 })

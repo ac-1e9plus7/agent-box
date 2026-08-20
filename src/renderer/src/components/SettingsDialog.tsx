@@ -1571,6 +1571,32 @@ export function SettingsDialog({
                       </button>
                     </div>
                   </div>
+                  <div className="settings-row">
+                    <div>
+                      <strong>工具调用审批策略</strong>
+                      <small>默认仅让明确声明为只读、非破坏且不访问开放网络的工具自动执行</small>
+                    </div>
+                    <div className="segmented-control">
+                      <button
+                        className={preferenceDraft.mcpToolApprovalPolicy === 'always' ? 'is-active' : ''}
+                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'always' }))}
+                      >
+                        每次确认
+                      </button>
+                      <button
+                        className={(preferenceDraft.mcpToolApprovalPolicy ?? 'sensitive') === 'sensitive' ? 'is-active' : ''}
+                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'sensitive' }))}
+                      >
+                        智能确认
+                      </button>
+                      <button
+                        className={preferenceDraft.mcpToolApprovalPolicy === 'never' ? 'is-active' : ''}
+                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'never' }))}
+                      >
+                        从不确认
+                      </button>
+                    </div>
+                  </div>
                 </section>
 
                 <div className="mcp-toolbar">
@@ -1614,7 +1640,7 @@ export function SettingsDialog({
                     <div className="mcp-empty">
                       <Icon name="tool" size={32} />
                       <p>未配置 MCP 服务</p>
-                      <small>点击上方「添加 MCP 服务」可接入本地命令行子进程或远程 SSE 工具服务</small>
+                      <small>点击上方「添加 MCP 服务」可接入本地命令行子进程或远程 Streamable HTTP 工具服务</small>
                     </div>
                   ) : (
                     filteredMcpServers.map((server) => {
@@ -1727,10 +1753,17 @@ export function SettingsDialog({
                             </button>
                             <button
                               type="button"
+                              className={editingMcpServer.transport === 'http' ? 'is-active' : ''}
+                              onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'http' })}
+                            >
+                              远程 HTTP（自动兼容）
+                            </button>
+                            <button
+                              type="button"
                               className={editingMcpServer.transport === 'sse' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'sse' })}
                             >
-                              网络 SSE 服务 (sse)
+                              旧版 SSE
                             </button>
                           </div>
                         </div>
@@ -1800,9 +1833,9 @@ export function SettingsDialog({
                         ) : (
                           <>
                             <label className="skill-form-field">
-                              <span>SSE 端点 URL</span>
+                              <span>{editingMcpServer.transport === 'sse' ? '旧版 SSE 端点 URL' : 'MCP HTTP 端点 URL'}</span>
                               <input
-                                placeholder="http://127.0.0.1:3000/sse 或 https://..."
+                                placeholder={editingMcpServer.transport === 'sse' ? 'http://127.0.0.1:3000/sse' : 'http://127.0.0.1:3000/mcp 或 https://.../mcp'}
                                 value={editingMcpServer.url || ''}
                                 onChange={(e) => setEditingMcpServer({ ...editingMcpServer, url: e.target.value })}
                               />

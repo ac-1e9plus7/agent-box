@@ -55,10 +55,10 @@ describe('retrieveRelevantTools', () => {
     },
   ]
 
-  it('returns all tools if count is less than or equal to maxTools', () => {
+  it('does not inject irrelevant tools merely because the catalog is small', () => {
     const small = sampleTools.slice(0, 3)
     const res = retrieveRelevantTools('anything', small, { maxTools: 5 })
-    expect(res).toHaveLength(3)
+    expect(res).toEqual([])
   })
 
   it('returns all tools when mode is all', () => {

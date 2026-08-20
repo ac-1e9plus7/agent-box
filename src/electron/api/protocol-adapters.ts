@@ -14,6 +14,7 @@ export interface ProtocolErrorData {
 export interface RawToolCallDelta {
   index?: number
   id?: string
+  itemId?: string
   name?: string
   argumentsDelta?: string
 }
@@ -22,7 +23,9 @@ export interface ParsedProtocolEvent {
   text?: string
   reasoning?: string
   citations?: WebCitation[]
-  toolCallDelta?: RawToolCallDelta
+  toolCallDeltas?: RawToolCallDelta[]
+  anthropicThinkingDelta?: { index: number; thinkingDelta?: string; signatureDelta?: string }
+  responseOutputItem?: Record<string, unknown>
   usage?: TokenUsage
   finishReason?: string
   completed?: boolean
@@ -57,25 +60,24 @@ export function parseChatCompletionEvent(value: unknown): ParsedProtocolEvent {
     value.annotations,
   )
 
-  let toolCallDelta: RawToolCallDelta | undefined
-  if (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0) {
-    const tc = delta.tool_calls[0]
-    if (isRecord(tc)) {
-      const func = isRecord(tc.function) ? tc.function : undefined
-      toolCallDelta = {
-        index: typeof tc.index === 'number' ? tc.index : 0,
-        id: typeof tc.id === 'string' ? tc.id : undefined,
+  const toolCallDeltas = Array.isArray(delta?.tool_calls)
+    ? delta.tool_calls.flatMap((value, fallbackIndex) => {
+      if (!isRecord(value)) return []
+      const func = isRecord(value.function) ? value.function : undefined
+      return [{
+        index: typeof value.index === 'number' ? value.index : fallbackIndex,
+        id: typeof value.id === 'string' ? value.id : undefined,
         name: typeof func?.name === 'string' ? func.name : undefined,
         argumentsDelta: typeof func?.arguments === 'string' ? func.arguments : undefined,
-      }
-    }
-  }
+      }]
+    })
+    : []
 
   return {
     text,
     reasoning,
     citations: citations.length ? citations : undefined,
-    toolCallDelta,
+    toolCallDeltas: toolCallDeltas.length ? toolCallDeltas : undefined,
     usage: parseUsage(value.usage),
     finishReason:
       typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
@@ -124,23 +126,35 @@ export function parseResponsesEvent(
   }
   if (type === 'response.function_call_arguments.delta') {
     return {
-      toolCallDelta: {
-        id: typeof value.item_id === 'string' ? value.item_id : undefined,
+      toolCallDeltas: [{
+        index: typeof value.output_index === 'number' ? value.output_index : undefined,
+        itemId: typeof value.item_id === 'string' ? value.item_id : undefined,
         argumentsDelta: typeof value.delta === 'string' ? value.delta : undefined,
-      },
+      }],
     }
   }
   if (type === 'response.output_item.added' && isRecord(value.item)) {
     const item = value.item
     if (item.type === 'function_call') {
       return {
-        toolCallDelta: {
-          id: typeof item.id === 'string' ? item.id : undefined,
+        toolCallDeltas: [{
+          index: typeof value.output_index === 'number' ? value.output_index : undefined,
+          itemId: typeof item.id === 'string' ? item.id : undefined,
+          id: typeof item.call_id === 'string'
+            ? item.call_id
+            : typeof item.id === 'string' ? item.id : undefined,
           name: typeof item.name === 'string' ? item.name : undefined,
           argumentsDelta: typeof item.arguments === 'string' ? item.arguments : undefined,
-        },
+        }],
       }
     }
+  }
+  if (
+    type === 'response.output_item.done' &&
+    isRecord(value.item) &&
+    value.item.type === 'reasoning'
+  ) {
+    return { responseOutputItem: value.item }
   }
   if (typeof type === 'string' && type.startsWith('response.reasoning') && delta) {
     // Covers response.reasoning.delta, response.reasoning_text.delta,
@@ -196,15 +210,22 @@ export function parseAnthropicEvent(
       return { text: block.text, citations: citations.length ? citations : undefined }
     }
     if (block.type === 'thinking' && typeof block.thinking === 'string') {
-      return { reasoning: block.thinking }
+      return {
+        reasoning: block.thinking,
+        anthropicThinkingDelta: {
+          index: typeof value.index === 'number' ? value.index : 0,
+          thinkingDelta: block.thinking,
+          signatureDelta: typeof block.signature === 'string' ? block.signature : undefined,
+        },
+      }
     }
     if (block.type === 'tool_use') {
       return {
-        toolCallDelta: {
+        toolCallDeltas: [{
           index: typeof value.index === 'number' ? value.index : 0,
           id: typeof block.id === 'string' ? block.id : undefined,
           name: typeof block.name === 'string' ? block.name : undefined,
-        },
+        }],
       }
     }
   }
@@ -224,14 +245,28 @@ export function parseAnthropicEvent(
       value.delta.type === 'thinking_delta' &&
       typeof value.delta.thinking === 'string'
     ) {
-      return { reasoning: value.delta.thinking }
+      return {
+        reasoning: value.delta.thinking,
+        anthropicThinkingDelta: {
+          index: typeof value.index === 'number' ? value.index : 0,
+          thinkingDelta: value.delta.thinking,
+        },
+      }
+    }
+    if (value.delta.type === 'signature_delta' && typeof value.delta.signature === 'string') {
+      return {
+        anthropicThinkingDelta: {
+          index: typeof value.index === 'number' ? value.index : 0,
+          signatureDelta: value.delta.signature,
+        },
+      }
     }
     if (value.delta.type === 'input_json_delta' && typeof value.delta.partial_json === 'string') {
       return {
-        toolCallDelta: {
+        toolCallDeltas: [{
           index: typeof value.index === 'number' ? value.index : 0,
           argumentsDelta: value.delta.partial_json,
-        },
+        }],
       }
     }
     if (citations.length) return { citations }

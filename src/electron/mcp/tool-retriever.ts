@@ -3,99 +3,96 @@ import type { McpToolDefinition, McpToolRetrievalMode } from '../../shared/types
 export interface ToolRetrievalOptions {
   mode?: McpToolRetrievalMode
   maxTools?: number
+  minScore?: number
 }
 
-/**
- * Pure tool retrieval algorithm using keyword overlap, name matching and TF-IDF/BM25 scoring.
- */
+/** BM25 retrieval over tool names, descriptions, server metadata and parameter schemas. */
 export function retrieveRelevantTools(
   query: string,
   tools: McpToolDefinition[],
   options: ToolRetrievalOptions = {},
 ): McpToolDefinition[] {
   const mode = options.mode ?? 'auto'
-  const maxTools = options.maxTools ?? 6
+  const maxTools = Math.max(1, options.maxTools ?? 6)
+  if (mode === 'all') return tools
 
-  if (tools.length <= maxTools || mode === 'all') {
-    return tools
+  const queryTerms = tokenize(query)
+  if (queryTerms.length === 0 || tools.length === 0) return []
+  const documents = tools.map(toolDocument)
+  const averageLength = documents.reduce((sum, document) => sum + document.length, 0) / documents.length
+  const documentFrequency = new Map<string, number>()
+  for (const document of documents) {
+    for (const term of new Set(document)) {
+      documentFrequency.set(term, (documentFrequency.get(term) || 0) + 1)
+    }
   }
 
-  const queryTerms = extractQueryTerms(query)
-  if (queryTerms.length === 0) {
-    return tools.slice(0, maxTools)
-  }
-
-  const scored = tools.map((tool) => ({
+  const scored = tools.map((tool, index) => ({
     tool,
-    score: scoreTool(tool, queryTerms, query),
+    score: bm25Score(
+      tool,
+      documents[index] || [],
+      queryTerms,
+      documentFrequency,
+      documents.length,
+      averageLength,
+      query,
+    ),
   }))
-
-  // Sort descending by score
-  scored.sort((a, b) => b.score - a.score)
-
-  const top = scored.slice(0, maxTools).map((item) => item.tool)
-  return top
+  scored.sort((left, right) => right.score - left.score || (left.tool.modelName || left.tool.name).localeCompare(right.tool.modelName || right.tool.name))
+  const minScore = options.minScore ?? 0.75
+  return scored.filter((item) => item.score >= minScore).slice(0, maxTools).map((item) => item.tool)
 }
 
-function extractQueryTerms(text: string): string[] {
-  const normalized = text.toLowerCase()
-  const words = normalized.match(/[\p{L}\p{N}_]+/gu) || []
-  const terms = new Set<string>()
-
-  for (const w of words) {
-    if (w.length >= 2) terms.add(w)
-    if (/[\u4e00-\u9fa5]/.test(w) && w.length >= 4) {
-      for (let i = 0; i < w.length - 1; i++) {
-        terms.add(w.slice(i, i + 2))
-      }
+export function tokenize(text: string): string[] {
+  const words = text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []
+  const terms: string[] = []
+  for (const word of words) {
+    if (word.length >= 2) terms.push(word)
+    if (/[\u4e00-\u9fa5]/.test(word) && word.length >= 2) {
+      for (let index = 0; index < word.length - 1; index += 1) terms.push(word.slice(index, index + 2))
     }
   }
-
-  return Array.from(terms)
+  return terms
 }
 
-function scoreTool(tool: McpToolDefinition, terms: string[], rawQuery: string): number {
+function toolDocument(tool: McpToolDefinition): string[] {
+  const properties = tool.inputSchema.properties || {}
+  const propertyText = Object.entries(properties).map(([name, schema]) => {
+    const description = typeof schema === 'object' && schema !== null && 'description' in schema
+      ? String((schema as Record<string, unknown>).description)
+      : ''
+    return `${name} ${description}`
+  }).join(' ')
+  return tokenize(`${tool.name} ${tool.name} ${tool.serverName} ${tool.description || ''} ${propertyText}`)
+}
+
+function bm25Score(
+  tool: McpToolDefinition,
+  document: string[],
+  queryTerms: string[],
+  frequencies: Map<string, number>,
+  totalDocuments: number,
+  averageLength: number,
+  rawQuery: string,
+): number {
+  const counts = new Map<string, number>()
+  for (const term of document) counts.set(term, (counts.get(term) || 0) + 1)
+  const k1 = 1.5
+  const b = 0.75
   let score = 0
-  const name = tool.name.toLowerCase()
-  const desc = (tool.description || '').toLowerCase()
-  const rawQueryLower = rawQuery.toLowerCase()
-
-  // 1. Direct tool name in query
-  if (rawQueryLower.includes(name)) {
-    score += 15.0
+  for (const term of new Set(queryTerms)) {
+    const tf = counts.get(term) || 0
+    if (!tf) continue
+    const df = frequencies.get(term) || 0
+    const idf = Math.log(1 + (totalDocuments - df + 0.5) / (df + 0.5))
+    const denominator = tf + k1 * (1 - b + b * (document.length / Math.max(1, averageLength)))
+    score += idf * ((tf * (k1 + 1)) / denominator)
   }
-  const nameParts = name.split(/[-_.]/).filter(Boolean)
-  for (const part of nameParts) {
-    if (part.length >= 2 && rawQueryLower.includes(part)) {
-      score += 4.0
-    }
+  const normalizedQuery = rawQuery.toLowerCase()
+  if (normalizedQuery.includes(tool.name.toLowerCase())) score += 8
+  for (const part of tool.name.toLowerCase().split(/[-_.]/).filter((item) => item.length >= 2)) {
+    if (normalizedQuery.includes(part)) score += 1.5
   }
-
-  // 2. Terms in name / description
-  for (const term of terms) {
-    if (name.includes(term)) {
-      score += 5.0
-    }
-    if (desc.includes(term)) {
-      score += 2.0
-    }
-  }
-
-  // 3. Terms in parameter properties
-  if (tool.inputSchema?.properties && typeof tool.inputSchema.properties === 'object') {
-    const props = Object.entries(tool.inputSchema.properties)
-    for (const [propName, propVal] of props) {
-      const pName = propName.toLowerCase()
-      const pDesc = typeof propVal === 'object' && propVal !== null && 'description' in propVal
-        ? String((propVal as Record<string, unknown>).description).toLowerCase()
-        : ''
-
-      for (const term of terms) {
-        if (pName.includes(term)) score += 1.5
-        if (pDesc.includes(term)) score += 1.0
-      }
-    }
-  }
-
   return score
 }

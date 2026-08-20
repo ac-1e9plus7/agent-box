@@ -109,26 +109,25 @@ export function toOpenAiMessages(messages: Message[]): Array<Record<string, unkn
       result.push({ role: 'system', content: message.content })
       continue
     }
-    if (message.role === 'assistant' && message.toolExecutions?.length) {
-      const toolCalls = message.toolExecutions.map((exec) => ({
-        id: exec.id,
-        type: 'function',
-        function: {
-          name: exec.toolName,
-          arguments: JSON.stringify(exec.args),
-        },
-      }))
-      result.push({
-        role: 'assistant',
-        content: message.content || null,
-        tool_calls: toolCalls,
-      })
-      for (const exec of message.toolExecutions) {
-        result.push({
-          role: 'tool',
-          tool_call_id: exec.id,
-          content: exec.result ?? '',
-        })
+    if (message.role === 'assistant' && hasAgentHistory(message)) {
+      for (const group of agentTurnGroups(message)) {
+        if (group.calls.length > 0) {
+          result.push({
+            role: 'assistant',
+            content: group.text || null,
+            tool_calls: group.calls.map((call) => ({
+              id: call.id,
+              type: 'function',
+              function: { name: call.modelToolName, arguments: JSON.stringify(call.args) },
+            })),
+          })
+          for (const call of group.calls) {
+            const toolResult = group.results.get(call.id)
+            result.push({ role: 'tool', tool_call_id: call.id, content: toolResult?.result ?? '' })
+          }
+        } else if (group.text) {
+          result.push({ role: 'assistant', content: group.text })
+        }
       }
       continue
     }
@@ -174,18 +173,33 @@ export function toResponsesInput(messages: Message[]): {
     .filter((message) => message.role === 'system')
     .map((message) => message.content)
     .join('\n\n')
-  const input = messages
-    .filter((message) => message.role !== 'system')
-    .map((message) => {
-      if (message.role === 'assistant') {
-        return {
-          type: 'message',
-          id: toResponsesMessageId(message.id),
-          role: 'assistant',
-          status: 'completed',
-          content: [{ type: 'output_text', text: message.content, annotations: [] }],
+  const input: Array<Record<string, unknown>> = []
+  for (const message of messages.filter((item) => item.role !== 'system')) {
+    if (message.role === 'assistant') {
+      if (hasAgentHistory(message)) {
+        for (const group of agentTurnGroups(message)) {
+          for (const item of group.providerItems) input.push(structuredClone(item))
+          if (group.text) input.push(toResponsesAssistantMessage(`${message.id}-${group.turn}`, group.text))
+          for (const call of group.calls) {
+            input.push({
+              type: 'function_call',
+              call_id: call.id,
+              name: call.modelToolName,
+              arguments: JSON.stringify(call.args),
+            })
+            const result = group.results.get(call.id)
+            input.push({
+              type: 'function_call_output',
+              call_id: call.id,
+              output: toResponsesToolOutput(result),
+            })
+          }
         }
+      } else {
+        input.push(toResponsesAssistantMessage(message.id, message.content))
       }
+      continue
+    }
       const contentList: Array<Record<string, unknown>> = []
       if (message.content) {
         contentList.push({ type: 'input_text', text: message.content })
@@ -210,12 +224,12 @@ export function toResponsesInput(messages: Message[]): {
       if (contentList.length === 0) {
         contentList.push({ type: 'input_text', text: message.content })
       }
-      return {
+      input.push({
         type: 'message',
         role: 'user',
         content: contentList,
-      }
-    })
+      })
+  }
   return { instructions, input }
 }
 
@@ -281,7 +295,7 @@ function applyOpenAiTools(
       tools.push({
         type: 'function',
         function: {
-          name: tool.name,
+          name: tool.modelName || tool.name,
           description: tool.description,
           parameters: tool.inputSchema,
         },
@@ -322,7 +336,7 @@ function applyResponsesTools(
     for (const tool of mcpTools) {
       tools.push({
         type: 'function',
-        name: tool.name,
+        name: tool.modelName || tool.name,
         description: tool.description,
         parameters: tool.inputSchema,
       })
@@ -361,7 +375,7 @@ function applyAnthropicTools(
   if (mcpTools?.length) {
     for (const tool of mcpTools) {
       tools.push({
-        name: tool.name,
+        name: tool.modelName || tool.name,
         description: tool.description,
         input_schema: tool.inputSchema,
       })
@@ -454,27 +468,34 @@ export function toAnthropicMessages(messages: Message[]): {
   const conversation: Array<{ role: 'user' | 'assistant'; content: string | Array<Record<string, unknown>> }> = []
   for (const message of messages) {
     if (message.role === 'system') continue
-    if (message.role === 'assistant' && message.toolExecutions?.length) {
-      const contentBlocks: Array<Record<string, unknown>> = []
-      if (message.content) {
-        contentBlocks.push({ type: 'text', text: message.content })
+    if (message.role === 'assistant' && hasAgentHistory(message)) {
+      for (const group of agentTurnGroups(message)) {
+        const contentBlocks: Array<Record<string, unknown>> = []
+        for (const block of group.thinking.sort((left, right) => left.blockIndex - right.blockIndex)) {
+          if (block.signature) {
+            contentBlocks.push({ type: 'thinking', thinking: block.thinking, signature: block.signature })
+          }
+        }
+        if (group.text) contentBlocks.push({ type: 'text', text: group.text })
+        for (const call of group.calls) {
+          contentBlocks.push({ type: 'tool_use', id: call.id, name: call.modelToolName, input: call.args })
+        }
+        if (contentBlocks.length) conversation.push({ role: 'assistant', content: contentBlocks })
+        if (group.calls.length) {
+          conversation.push({
+            role: 'user',
+            content: group.calls.map((call) => {
+              const result = group.results.get(call.id)
+              return {
+                type: 'tool_result',
+                tool_use_id: call.id,
+                content: toAnthropicToolResultContent(result),
+                is_error: result?.isError,
+              }
+            }),
+          })
+        }
       }
-      for (const exec of message.toolExecutions) {
-        contentBlocks.push({
-          type: 'tool_use',
-          id: exec.id,
-          name: exec.toolName,
-          input: exec.args,
-        })
-      }
-      const toolResults: Array<Record<string, unknown>> = message.toolExecutions.map((exec) => ({
-        type: 'tool_result',
-        tool_use_id: exec.id,
-        content: exec.result ?? '',
-        is_error: exec.isError,
-      }))
-      conversation.push({ role: 'assistant', content: contentBlocks })
-      conversation.push({ role: 'user', content: toolResults })
       continue
     }
     const formattedContent = toAnthropicContentBlocks(message)
@@ -501,6 +522,144 @@ export function toAnthropicMessages(messages: Message[]): {
 function toResponsesMessageId(id: string): string {
   const safeId = id.replace(/[^0-9A-Za-z_-]/g, '').slice(0, 120)
   return safeId.startsWith('msg_') ? safeId : `msg_${safeId || 'local'}`
+}
+
+interface AgentTurnCall {
+  id: string
+  toolName: string
+  modelToolName: string
+  args: Record<string, unknown>
+}
+
+interface AgentTurnResult {
+  result: string
+  resultContent?: import('../../shared/types').McpToolResultContent[]
+  structuredResult?: Record<string, unknown>
+  isError?: boolean
+}
+
+interface AgentTurnGroup {
+  turn: number
+  text: string
+  thinking: Array<{ blockIndex: number; thinking: string; signature?: string }>
+  providerItems: Record<string, unknown>[]
+  calls: AgentTurnCall[]
+  results: Map<string, AgentTurnResult>
+}
+
+function hasAgentHistory(message: Message): boolean {
+  return Boolean(message.agentTrace?.length || message.toolExecutions?.length)
+}
+
+function agentTurnGroups(message: Message): AgentTurnGroup[] {
+  const groups = new Map<number, AgentTurnGroup>()
+  const getGroup = (turn: number): AgentTurnGroup => {
+    let group = groups.get(turn)
+    if (!group) {
+      group = { turn, text: '', thinking: [], providerItems: [], calls: [], results: new Map() }
+      groups.set(turn, group)
+    }
+    return group
+  }
+
+  if (message.agentTrace?.length) {
+    for (const item of message.agentTrace) {
+      const group = getGroup(item.turn)
+      if (item.type === 'assistant_text') group.text += item.text
+      else if (item.type === 'assistant_thinking') {
+        const existing = group.thinking.find((block) => block.blockIndex === item.blockIndex)
+        if (existing) {
+          existing.thinking += item.thinking
+          existing.signature = `${existing.signature || ''}${item.signature || ''}` || undefined
+        } else {
+          group.thinking.push({ blockIndex: item.blockIndex, thinking: item.thinking, signature: item.signature })
+        }
+      } else if (item.type === 'tool_call') {
+        group.calls.push({
+          id: item.callId,
+          toolName: item.toolName,
+          modelToolName: item.modelToolName,
+          args: item.args,
+        })
+      } else if (item.type === 'provider_item') {
+        group.providerItems.push(item.item)
+      } else {
+        group.results.set(item.callId, {
+          result: item.result,
+          resultContent: item.resultContent,
+          structuredResult: item.structuredResult,
+          isError: item.isError,
+        })
+      }
+    }
+    return Array.from(groups.values()).sort((left, right) => left.turn - right.turn)
+  }
+
+  for (const execution of message.toolExecutions || []) {
+    const group = getGroup(execution.turn || 1)
+    group.calls.push({
+      id: execution.id,
+      toolName: execution.toolName,
+      modelToolName: execution.modelToolName || execution.toolName,
+      args: execution.args,
+    })
+    group.results.set(execution.id, {
+      result: execution.result || '',
+      resultContent: execution.resultContent,
+      structuredResult: execution.structuredResult,
+      isError: execution.isError,
+    })
+  }
+  if (message.content) {
+    const lastTurn = Math.max(0, ...groups.keys()) + 1
+    getGroup(lastTurn).text = message.content
+  }
+  return Array.from(groups.values()).sort((left, right) => left.turn - right.turn)
+}
+
+function toResponsesAssistantMessage(id: string, text: string): Record<string, unknown> {
+  return {
+    type: 'message',
+    id: toResponsesMessageId(id),
+    role: 'assistant',
+    status: 'completed',
+    content: [{ type: 'output_text', text, annotations: [] }],
+  }
+}
+
+function toResponsesToolOutput(result?: AgentTurnResult): string | Array<Record<string, unknown>> {
+  if (!result?.resultContent?.some((item) => item.type === 'image' && item.data)) {
+    return result?.result || ''
+  }
+  const content: Array<Record<string, unknown>> = []
+  for (const item of result.resultContent) {
+    if (item.type === 'text') content.push({ type: 'input_text', text: item.text })
+    else if (item.type === 'image' && item.data) {
+      content.push({ type: 'input_image', image_url: `data:${item.mimeType};base64,${item.data}` })
+    } else if (item.type === 'resource' && item.text) {
+      content.push({ type: 'input_text', text: item.text })
+    }
+  }
+  if (result.structuredResult) content.push({ type: 'input_text', text: JSON.stringify(result.structuredResult) })
+  return content.length ? content : result.result
+}
+
+function toAnthropicToolResultContent(result?: AgentTurnResult): string | Array<Record<string, unknown>> {
+  if (!result?.resultContent?.some((item) => item.type === 'image' && item.data)) {
+    return result?.result || ''
+  }
+  const content: Array<Record<string, unknown>> = []
+  for (const item of result.resultContent) {
+    if (item.type === 'text') content.push({ type: 'text', text: item.text })
+    else if (item.type === 'image' && item.data) {
+      content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: item.mimeType, data: item.data },
+      })
+    } else if (item.type === 'resource' && item.text) content.push({ type: 'text', text: item.text })
+  }
+  if (result.structuredResult) content.push({ type: 'text', text: JSON.stringify(result.structuredResult) })
+  return content.length ? content : result.result
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {

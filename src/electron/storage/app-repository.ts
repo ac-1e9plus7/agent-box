@@ -57,6 +57,7 @@ const MAX_SKILLS = 500
 const MAX_MCP_SERVERS = 100
 const MAX_MCP_ARGS = 50
 const MAX_MCP_ENV_ENTRIES = 100
+const MCP_SECRET_MASK = '••••••••'
 const MAX_MESSAGES_PER_CONVERSATION = 20_000
 const MAX_MESSAGE_CHARACTERS = 2_000_000
 const MAX_CONVERSATION_CHARACTERS = 50_000_000
@@ -71,6 +72,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultAgentMode: false,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
+  mcpToolApprovalPolicy: 'sensitive',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
 }
@@ -118,6 +120,13 @@ export class AppRepository {
       }
       if (patch.defaultAgentMode !== undefined) {
         next.defaultAgentMode = patch.defaultAgentMode
+      }
+      if (patch.mcpEnabled !== undefined) next.mcpEnabled = patch.mcpEnabled
+      if (patch.mcpToolRetrievalMode !== undefined) {
+        next.mcpToolRetrievalMode = patch.mcpToolRetrievalMode
+      }
+      if (patch.mcpToolApprovalPolicy !== undefined) {
+        next.mcpToolApprovalPolicy = patch.mcpToolApprovalPolicy
       }
       if (patch.systemPrompt !== undefined) next.systemPrompt = patch.systemPrompt
       if (patch.proxy !== undefined) next.proxy = patch.proxy
@@ -339,6 +348,14 @@ export class AppRepository {
     return (this.store.read().mcpServers ?? []).map((s) => structuredClone(s))
   }
 
+  listMcpServerViews(): McpServerConfig[] {
+    return this.listMcpServers().map(maskMcpServerSecrets)
+  }
+
+  toMcpServerView(server: McpServerConfig): McpServerConfig {
+    return maskMcpServerSecrets(server)
+  }
+
   getMcpServer(id: string): McpServerConfig | undefined {
     return this.listMcpServers().find((server) => server.id === id)
   }
@@ -347,18 +364,19 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const servers = draft.mcpServers ?? []
       const existing = input.id ? servers.find((s) => s.id === input.id) : undefined
+      const resolvedInput = resolveMcpInputSecrets(input, existing)
       const timestamp = new Date().toISOString()
       const candidate: McpServerConfig = {
-        id: input.id?.trim() || `mcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-        name: input.name.trim(),
-        description: input.description?.trim() || undefined,
-        enabled: input.enabled ?? existing?.enabled ?? true,
-        transport: input.transport,
-        command: input.command?.trim() || undefined,
-        args: input.args,
-        env: input.env,
-        url: input.url?.trim() || undefined,
-        headers: input.headers,
+        id: resolvedInput.id?.trim() || `mcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+        name: resolvedInput.name.trim(),
+        description: resolvedInput.description?.trim() || undefined,
+        enabled: resolvedInput.enabled ?? existing?.enabled ?? true,
+        transport: resolvedInput.transport,
+        command: resolvedInput.command?.trim() || undefined,
+        args: resolvedInput.args,
+        env: resolvedInput.env,
+        url: resolvedInput.url?.trim() || undefined,
+        headers: resolvedInput.headers,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
       }
@@ -371,6 +389,11 @@ export class AppRepository {
       }
       return structuredClone(validated)
     })
+  }
+
+  buildMcpServerCandidate(input: McpServerInput): McpServerInput {
+    const existing = input.id ? this.getMcpServer(input.id) : undefined
+    return resolveMcpInputSecrets(input, existing)
   }
 
   async removeMcpServer(id: string): Promise<void> {
@@ -720,8 +743,8 @@ function validateMcpServer(value: unknown): McpServerConfig {
     throw new Error('Invalid MCP server enabled flag')
   }
   const transport = String(value.transport)
-  if (transport !== 'stdio' && transport !== 'sse') {
-    throw new Error('Invalid MCP server transport: must be stdio or sse')
+  if (transport !== 'stdio' && transport !== 'http' && transport !== 'sse') {
+    throw new Error('Invalid MCP server transport: must be stdio, http, or sse')
   }
 
   let command: string | undefined
@@ -766,7 +789,7 @@ function validateMcpServer(value: unknown): McpServerConfig {
     requireNonEmptyString(value.url, 'mcp server url', 2_000)
     url = normalizeBaseUrl(value.url)
     if (value.headers !== undefined) {
-      headers = sanitizeHeaders(value.headers as Record<string, string>)
+      headers = sanitizeMcpHeaders(value.headers as Record<string, string>)
     }
   }
 
@@ -810,20 +833,115 @@ function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefi
     if (!isRecord(item.args)) throw new Error('Invalid tool execution args')
     const result = typeof item.result === 'string' ? item.result.slice(0, 1_000_000) : undefined
     const isError = typeof item.isError === 'boolean' ? item.isError : undefined
-    const status = ['calling', 'executing', 'complete', 'error'].includes(String(item.status))
+    const status = ['calling', 'awaiting-approval', 'executing', 'complete', 'denied', 'error'].includes(String(item.status))
       ? (item.status as ToolCallExecution['status'])
       : 'complete'
     return {
       id: item.id,
       toolName: item.toolName,
+      modelToolName: typeof item.modelToolName === 'string' ? item.modelToolName.slice(0, 64) : undefined,
       serverId,
       serverName,
-      args: item.args as Record<string, unknown>,
+      turn: Number.isInteger(item.turn) && Number(item.turn) > 0 ? Number(item.turn) : undefined,
+      args: parseStoredJsonRecord(item.args, 200_000),
       result,
+      resultContent: parseStoredToolResultContent(item.resultContent),
+      structuredResult: isRecord(item.structuredResult)
+        ? parseStoredJsonRecord(item.structuredResult, 100_000)
+        : undefined,
+      resultTruncated: typeof item.resultTruncated === 'boolean' ? item.resultTruncated : undefined,
       isError,
+      riskLevel: item.riskLevel === 'low' || item.riskLevel === 'sensitive' ? item.riskLevel : undefined,
+      approvalReason: typeof item.approvalReason === 'string' ? item.approvalReason.slice(0, 2_000) : undefined,
       status,
     }
   })
+}
+
+function parseStoredAgentTrace(value: unknown): import('../../shared/types').AgentTraceItem[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value) || value.length > 300) throw new Error('Invalid agent trace')
+  if (value.length === 0) return undefined
+  return value.map((item) => {
+    if (!isRecord(item) || !Number.isInteger(item.turn) || Number(item.turn) < 1) {
+      throw new Error('Invalid agent trace item')
+    }
+    const turn = Number(item.turn)
+    if (item.type === 'assistant_text' && typeof item.text === 'string') {
+      return { type: 'assistant_text', turn, text: item.text.slice(0, MAX_MESSAGE_CHARACTERS) }
+    }
+    if (item.type === 'assistant_thinking' && Number.isInteger(item.blockIndex) && typeof item.thinking === 'string') {
+      return {
+        type: 'assistant_thinking',
+        turn,
+        blockIndex: Number(item.blockIndex),
+        thinking: item.thinking.slice(0, MAX_MESSAGE_CHARACTERS),
+        signature: typeof item.signature === 'string' ? item.signature.slice(0, 100_000) : undefined,
+      }
+    }
+    if (item.type === 'provider_item' && item.format === 'openai-responses' && isRecord(item.item) && item.item.type === 'reasoning') {
+      return {
+        type: 'provider_item',
+        turn,
+        format: 'openai-responses',
+        item: parseStoredJsonRecord(item.item, 500_000),
+      }
+    }
+    if (item.type === 'tool_call' && typeof item.callId === 'string' && typeof item.toolName === 'string' && typeof item.modelToolName === 'string' && isRecord(item.args)) {
+      return {
+        type: 'tool_call',
+        turn,
+        callId: item.callId.slice(0, 200),
+        toolName: item.toolName.slice(0, 200),
+        modelToolName: item.modelToolName.slice(0, 64),
+        serverId: typeof item.serverId === 'string' ? item.serverId.slice(0, 100) : undefined,
+        serverName: typeof item.serverName === 'string' ? item.serverName.slice(0, 200) : undefined,
+        args: parseStoredJsonRecord(item.args, 200_000),
+      }
+    }
+    if (item.type === 'tool_result' && typeof item.callId === 'string' && typeof item.toolName === 'string' && typeof item.result === 'string') {
+      return {
+        type: 'tool_result',
+        turn,
+        callId: item.callId.slice(0, 200),
+        toolName: item.toolName.slice(0, 200),
+        result: item.result.slice(0, 100_000),
+        resultContent: parseStoredToolResultContent(item.resultContent),
+        structuredResult: isRecord(item.structuredResult)
+          ? parseStoredJsonRecord(item.structuredResult, 100_000)
+          : undefined,
+        resultTruncated: typeof item.resultTruncated === 'boolean' ? item.resultTruncated : undefined,
+        isError: typeof item.isError === 'boolean' ? item.isError : undefined,
+      }
+    }
+    throw new Error('Invalid agent trace item')
+  })
+}
+
+function parseStoredToolResultContent(value: unknown): import('../../shared/types').McpToolResultContent[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value) || value.length > 100) throw new Error('Invalid tool result content')
+  const parsed = value.flatMap((item): import('../../shared/types').McpToolResultContent[] => {
+    if (!isRecord(item)) return []
+    if (item.type === 'text' && typeof item.text === 'string') return [{ type: 'text', text: item.text.slice(0, 100_000) }]
+    if ((item.type === 'image' || item.type === 'audio') && typeof item.mimeType === 'string') {
+      return [{ type: item.type, mimeType: item.mimeType.slice(0, 100), data: typeof item.data === 'string' && item.data.length <= 2 * 1024 * 1024 ? item.data : undefined }]
+    }
+    if (item.type === 'resource' && typeof item.uri === 'string') {
+      return [{ type: 'resource', uri: item.uri.slice(0, 2_000), mimeType: typeof item.mimeType === 'string' ? item.mimeType.slice(0, 100) : undefined, text: typeof item.text === 'string' ? item.text.slice(0, 100_000) : undefined }]
+    }
+    if (item.type === 'resource_link' && typeof item.uri === 'string' && typeof item.name === 'string') {
+      return [{ type: 'resource_link', uri: item.uri.slice(0, 2_000), name: item.name.slice(0, 300), description: typeof item.description === 'string' ? item.description.slice(0, 4_000) : undefined, mimeType: typeof item.mimeType === 'string' ? item.mimeType.slice(0, 100) : undefined }]
+    }
+    return []
+  })
+  return parsed.length ? parsed : undefined
+}
+
+function parseStoredJsonRecord(value: Record<string, unknown>, maxCharacters: number): Record<string, unknown> {
+  const serialized = JSON.stringify(value)
+  if (serialized.length > maxCharacters) throw new Error('Stored JSON object is too large')
+  return JSON.parse(serialized) as Record<string, unknown>
 }
 
 function validateConversation(value: unknown): Conversation {
@@ -872,6 +990,7 @@ function validateConversation(value: unknown): Conversation {
     const usage = parseStoredTokenUsage(message.usage)
     const attachments = parseStoredAttachments(message.attachments)
     const toolExecutions = parseStoredToolExecutions(message.toolExecutions)
+    const agentTrace = parseStoredAgentTrace(message.agentTrace)
     const parentMessageId =
       message.parentMessageId === null
         ? null
@@ -889,6 +1008,7 @@ function validateConversation(value: unknown): Conversation {
       modelId: typeof message.modelId === 'string' && message.modelId.trim() ? message.modelId.trim() : undefined,
       attachments,
       toolExecutions,
+      agentTrace,
       createdAt: message.createdAt,
     } as Conversation['messages'][number]
   })
@@ -898,7 +1018,9 @@ function validateConversation(value: unknown): Conversation {
       message.content.length +
       (message.reasoning?.length ?? 0) +
       citationCharacterCount(message.citations) +
-      attachmentCharacterCount(message.attachments),
+      attachmentCharacterCount(message.attachments) +
+      JSON.stringify(message.agentTrace ?? []).length +
+      (message.agentTrace?.length ? 0 : JSON.stringify(message.toolExecutions ?? []).length),
     0,
   )
   if (totalCharacters > MAX_CONVERSATION_CHARACTERS) {
@@ -1030,6 +1152,59 @@ function sanitizeHeaders(value: Record<string, string>): Record<string, string> 
   return output
 }
 
+function sanitizeMcpHeaders(value: Record<string, string>): Record<string, string> {
+  if (!isRecord(value)) throw new Error('Invalid MCP headers')
+  const forbidden = new Set(['proxy-authorization', 'cookie', 'set-cookie', 'host', 'content-length'])
+  const output: Record<string, string> = {}
+  const entries = Object.entries(value)
+  if (entries.length > 32) throw new Error('Too many MCP headers')
+  for (const [rawName, rawValue] of entries) {
+    const name = rawName.trim()
+    if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
+      throw new Error(`不允许使用 MCP 请求头：${name}`)
+    }
+    if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 8_192) {
+      throw new Error(`MCP 请求头 ${name} 的值无效。`)
+    }
+    output[name] = rawValue
+  }
+  return output
+}
+
+function resolveMcpInputSecrets(
+  input: McpServerInput,
+  existing?: McpServerConfig,
+): McpServerInput {
+  const mergeMasked = (
+    incoming: Record<string, string> | undefined,
+    stored: Record<string, string> | undefined,
+    clear: boolean | undefined,
+  ): Record<string, string> | undefined => {
+    if (clear) return undefined
+    if (incoming === undefined) return stored ? structuredClone(stored) : undefined
+    return Object.fromEntries(Object.entries(incoming).map(([key, value]) => [
+      key,
+      value === MCP_SECRET_MASK && stored?.[key] !== undefined ? stored[key] : value,
+    ]))
+  }
+  return {
+    ...input,
+    env: mergeMasked(input.env, existing?.env, input.clearEnv),
+    headers: mergeMasked(input.headers, existing?.headers, input.clearHeaders),
+  }
+}
+
+function maskMcpServerSecrets(server: McpServerConfig): McpServerConfig {
+  const mask = (value?: Record<string, string>): Record<string, string> | undefined => value
+    ? Object.fromEntries(Object.keys(value).map((key) => [key, MCP_SECRET_MASK]))
+    : undefined
+  return {
+    ...structuredClone(server),
+    env: mask(server.env),
+    headers: mask(server.headers),
+  }
+}
+
 function parseStoredAttachments(
   value: unknown,
 ): MessageAttachment[] | undefined {
@@ -1116,6 +1291,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export {
   sanitizeHeaders,
+  sanitizeMcpHeaders,
   normalizeBaseUrl,
   sanitizeProviderRouting,
 }

@@ -70,6 +70,24 @@ process.stdin.on('data', (d) => {
 });
 `
 
+const paginatedServerScript = `
+process.stdin.on('data', (d) => {
+  for (const line of d.toString().split('\\n')) {
+    if (!line.trim()) continue;
+    const msg = JSON.parse(line);
+    if (msg.method === 'initialize') {
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2024-11-05', capabilities: { tools: { listChanged: true } }, serverInfo: { name: 'Paginated', version: '1.0.0' } } }) + '\\n');
+    } else if (msg.method === 'tools/list') {
+      const second = msg.params && msg.params.cursor === 'page-2';
+      process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: second
+        ? { tools: [{ name: 'second_tool', inputSchema: { type: 'object', properties: {} } }] }
+        : { tools: [{ name: 'first_tool', inputSchema: { type: 'object', properties: {} } }], nextCursor: 'page-2' }
+      }) + '\\n');
+    }
+  }
+});
+`
+
 describe('MCP Client & McpManager (Stdio Transport)', () => {
   let tempDirectory: string
   let repo: InstanceType<typeof AppRepository>
@@ -130,6 +148,26 @@ describe('MCP Client & McpManager (Stdio Transport)', () => {
     expect(result.toolsCount).toBe(1)
     expect(result.tools?.[0]?.name).toBe('calculate_sum')
     expect(result.latencyMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('walks every tools/list page and creates server-scoped model aliases', async () => {
+    const client = new McpClient({
+      id: 'paginated-server',
+      name: 'Paginated Server',
+      enabled: true,
+      transport: 'stdio',
+      command: process.execPath,
+      args: ['-e', paginatedServerScript],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    try {
+      const tools = await client.listTools()
+      expect(tools.map((tool) => tool.name)).toEqual(['first_tool', 'second_tool'])
+      expect(new Set(tools.map((tool) => tool.modelName)).size).toBe(2)
+    } finally {
+      await client.close()
+    }
   })
 
   it('aggregates tools and executes tool via McpManager', async () => {

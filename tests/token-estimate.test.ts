@@ -50,5 +50,18 @@ describe('shared token estimate', () => {
     })
     expect(withText).toBe(PER_MESSAGE_OVERHEAD + 0 + estimateTextTokens('const x = 1;') + 16)
   })
-})
 
+  it('includes tool calls, tool results, and provider continuation items', () => {
+    const plain = estimateMessageTokens({ content: 'done' })
+    const withTrace = estimateMessageTokens({
+      content: 'done',
+      agentTrace: [
+        { type: 'assistant_text', turn: 1, text: 'done' },
+        { type: 'provider_item', turn: 1, format: 'openai-responses', item: { type: 'reasoning', id: 'rs_1', encrypted_content: 'opaque' } },
+        { type: 'tool_call', turn: 1, callId: 'call-1', toolName: 'read_file', modelToolName: 'mcp_a_read_file', args: { path: 'README.md' } },
+        { type: 'tool_result', turn: 1, callId: 'call-1', toolName: 'read_file', result: 'file contents' },
+      ],
+    })
+    expect(withTrace).toBeGreaterThan(plain)
+  })
+})

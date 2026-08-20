@@ -30,7 +30,7 @@ graph TB
         Gateway --> ProxyDispatcher["undici ProxyAgent / fetch"]
 
         McpMgr --> StdioTrans["Stdio Transport (child_process)"]
-        McpMgr --> SseTrans["SSE Transport (HTTP Client)"]
+        McpMgr --> SseTrans["Streamable HTTP / Legacy SSE"]
 
         Repo --> EncStore["EncryptedStore & safeStorage"]
     end
