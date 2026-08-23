@@ -79,6 +79,19 @@ export interface RuntimeTestResult {
   message: string
 }
 
+export interface CondaEnvironment {
+  name: string
+  path: string
+  active: boolean
+}
+
+export interface CondaEnvironmentListResult {
+  ok: boolean
+  condaExecutable: string
+  environments: CondaEnvironment[]
+  message: string
+}
+
 export type McpTransportType = 'stdio' | 'http' | 'sse'
 export type McpToolRetrievalMode = 'auto' | 'all'
 export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'full-access'
@@ -93,6 +106,8 @@ export interface AppSettings {
   defaultReasoningEnabled: boolean
   defaultReasoningEffort: Exclude<ReasoningEffort, 'none'>
   defaultAgentMode?: boolean
+  /** Maximum consecutive tool-execution turns; defaults to 30 for legacy settings. */
+  agentToolTurnLimit?: number
   mcpEnabled?: boolean
   mcpToolRetrievalMode?: McpToolRetrievalMode
   /** Defaults to `sensitive`: only explicitly read-only, closed-world tools run automatically. */
@@ -285,6 +300,26 @@ export interface RemoteModel {
 
 export type MessageRole = 'system' | 'user' | 'assistant'
 
+export type AgentInterruptionReason =
+  | 'rate_limit'
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'tool_turn_limit'
+  | 'output_limit'
+  | 'api_error'
+  | 'unknown'
+
+export interface AgentInterruption {
+  reason: AgentInterruptionReason
+  message: string
+  occurredAt: string
+  errorCode?: string
+  status?: number
+  retryAfterSeconds?: number
+  finishReason?: string
+}
+
 export type MessageAttachmentType = 'image' | 'document' | 'text'
 
 export interface MessageAttachment {
@@ -374,6 +409,8 @@ export interface Message {
   toolExecutions?: ToolCallExecution[]
   /** Ordered protocol-neutral ledger used to replay multi-turn agent interactions. */
   agentTrace?: AgentTraceItem[]
+  /** Persisted checkpoint marker for an Agent response that can be resumed later. */
+  interruption?: AgentInterruption
   createdAt: string
 }
 
@@ -396,7 +433,7 @@ export interface Conversation {
   /**
    * Absolute local directory reference used as the filesystem and terminal scope.
    * Only this path string is persisted; project files are never copied into or encrypted by the vault.
-   */
+  */
   workingDirectory?: string
   /** Defaults to off when omitted by an older vault. */
   webSearchMode?: WebSearchMode
@@ -415,6 +452,8 @@ export interface ChatRequest {
   skillIds?: string[]
   mcpServerIds?: string[]
   workingDirectory?: string
+  /** Resume from the immediately preceding interrupted assistant checkpoint. */
+  resumeFromMessageId?: string
   /** Overrides the model default for this request. */
   webSearchMode?: WebSearchMode
   /** Explicitly opts this one request into complete-turn trimming. */
@@ -508,6 +547,7 @@ export interface AgentboxAPI {
   }
   runtimes: {
     test(kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string): Promise<RuntimeTestResult>
+    listCondaEnvironments(condaExecutable: string): Promise<CondaEnvironmentListResult>
   }
   conversations: {
     list(): Promise<Conversation[]>

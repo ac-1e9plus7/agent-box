@@ -21,6 +21,7 @@ interface ChatContentProps {
   onDeleteMessage?: (messageId: string) => void
   onEditMessage: (messageId: string, content: string, regenerate: boolean) => Promise<boolean>
   onRegenerate: (messageId?: string) => void
+  onResumeAgent: (messageId: string) => void
   onSwitchVersion?: (messageId: string) => void
   onSuggestion: (prompt: string) => void
   onResolveToolApproval?: (callId: string, approved: boolean) => void
@@ -463,8 +464,10 @@ function AssistantMessage({
   allMessages,
   model,
   canRegenerate,
+  canResumeAgent,
   onDelete,
   onRegenerate,
+  onResumeAgent,
   onSwitchVersion,
   onResolveToolApproval
 }: {
@@ -472,8 +475,10 @@ function AssistantMessage({
   allMessages?: ChatMessage[]
   model?: ModelConfig
   canRegenerate: boolean
+  canResumeAgent: boolean
   onDelete?: (messageId: string) => void
   onRegenerate: (messageId?: string) => void
+  onResumeAgent: (messageId: string) => void
   onSwitchVersion?: (messageId: string) => void
   onResolveToolApproval?: (callId: string, approved: boolean) => void
 }): JSX.Element {
@@ -573,45 +578,67 @@ function AssistantMessage({
           </div>
         )}
         {message.status === 'error' && (
-          <div className="message-error">
-            <Icon name="info" size={15} /> {message.error || '请求失败，请检查服务商与模型配置。'}
-            {total > 1 && (
-              <div className="message-pagination">
+          <div className={`message-error${message.interruption ? ' is-resumable' : ''}`}>
+            <Icon name="info" size={15} />
+            <span className="message-error-copy">
+              <span>{message.error || '请求失败，请检查服务商与模型配置。'}</span>
+              {message.interruption && (
+                <small>
+                  已保留中断现场
+                  {message.interruption.retryAfterSeconds !== undefined
+                    ? `；建议 ${message.interruption.retryAfterSeconds} 秒后继续`
+                    : '；可从失败点继续，或重新生成整条回复'}
+                </small>
+              )}
+            </span>
+            <div className="message-error-actions">
+              {total > 1 && (
+                <div className="message-pagination">
+                  <button
+                    aria-label="上一个回答"
+                    className="pagination-arrow"
+                    disabled={currentIndex === 0}
+                    onClick={() => {
+                      const target = siblings[currentIndex - 1]
+                      if (target) onSwitchVersion?.(target.id)
+                    }}
+                    title="上一个回答"
+                  >
+                    <Icon name="chevron-left" size={13} />
+                  </button>
+                  <span className="pagination-label">{currentIndex + 1} / {total}</span>
+                  <button
+                    aria-label="下一个回答"
+                    className="pagination-arrow"
+                    disabled={currentIndex === total - 1}
+                    onClick={() => {
+                      const target = siblings[currentIndex + 1]
+                      if (target) onSwitchVersion?.(target.id)
+                    }}
+                    title="下一个回答"
+                  >
+                    <Icon name="chevron-right" size={13} />
+                  </button>
+                </div>
+              )}
+              {canResumeAgent && (
                 <button
-                  aria-label="上一个回答"
-                  className="pagination-arrow"
-                  disabled={currentIndex === 0}
-                  onClick={() => {
-                    const target = siblings[currentIndex - 1]
-                    if (target) onSwitchVersion?.(target.id)
-                  }}
-                  title="上一个回答"
+                  className="message-error-retry message-error-resume"
+                  onClick={() => onResumeAgent(message.id)}
+                  title="保留已完成的工具结果，从中断位置继续"
                 >
-                  <Icon name="chevron-left" size={13} />
+                  <Icon name="refresh" size={14} /> 从中断处继续
                 </button>
-                <span className="pagination-label">{currentIndex + 1} / {total}</span>
-                <button
-                  aria-label="下一个回答"
-                  className="pagination-arrow"
-                  disabled={currentIndex === total - 1}
-                  onClick={() => {
-                    const target = siblings[currentIndex + 1]
-                    if (target) onSwitchVersion?.(target.id)
-                  }}
-                  title="下一个回答"
-                >
-                  <Icon name="chevron-right" size={13} />
+              )}
+              {showRegenerate && (
+                <button className="message-error-retry" onClick={() => onRegenerate(message.id)}>
+                  <Icon name="refresh" size={14} /> {message.interruption ? '重新生成' : '重试'}
                 </button>
-              </div>
-            )}
-            {showRegenerate && (
-              <button className="message-error-retry" onClick={() => onRegenerate(message.id)}>
-                <Icon name="refresh" size={14} /> 重试
+              )}
+              <button className="message-error-retry" onClick={() => onDelete?.(message.id)} title="删除此条错误信息">
+                <Icon name="trash" size={14} /> 删除
               </button>
-            )}
-            <button className="message-error-retry" onClick={() => onDelete?.(message.id)} title="删除此条错误信息">
-              <Icon name="trash" size={14} /> 删除
-            </button>
+            </div>
           </div>
         )}
       </div>
@@ -628,6 +655,7 @@ export function ChatContent({
   onDeleteMessage,
   onEditMessage,
   onRegenerate,
+  onResumeAgent,
   onSwitchVersion,
   onSuggestion,
   onResolveToolApproval
@@ -650,6 +678,9 @@ export function ChatContent({
           if (message.role === 'assistant') {
             const canRegenerate = !streaming
               && (message.status === 'complete' || message.status === 'error')
+            const canResumeAgent = !streaming
+              && Boolean(message.interruption)
+              && messages.at(-1)?.id === message.id
             return (
               <AssistantMessage
                 key={message.id}
@@ -657,8 +688,10 @@ export function ChatContent({
                 allMessages={allMessages}
                 model={models.find((model) => model.id === message.modelId)}
                 canRegenerate={canRegenerate}
+                canResumeAgent={canResumeAgent}
                 onDelete={onDeleteMessage}
                 onRegenerate={onRegenerate}
+                onResumeAgent={onResumeAgent}
                 onSwitchVersion={onSwitchVersion}
                 onResolveToolApproval={onResolveToolApproval}
               />

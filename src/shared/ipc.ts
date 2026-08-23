@@ -23,6 +23,7 @@ export const IPC_CHANNELS = {
   terminalTestShell: 'terminal:test-shell',
   workspaceSelectDirectory: 'workspace:select-directory',
   runtimeTest: 'runtime:test',
+  runtimeListCondaEnvironments: 'runtime:list-conda-environments',
   conversationsList: 'conversations:list',
   conversationsGet: 'conversations:get',
   conversationsSave: 'conversations:save',

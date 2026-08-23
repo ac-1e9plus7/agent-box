@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { isAbsolute, normalize } from 'node:path'
 import type {
+  AgentInterruption,
   ApiFormat,
   AppSettings,
   Conversation,
@@ -20,6 +21,7 @@ import type {
   ToolCallExecution,
 } from '../../shared/types'
 import { EncryptedStore } from './encrypted-store'
+import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
 import { createOpenRouterAutoModel } from './default-models'
 import { DEFAULT_SKILLS } from './default-skills'
 import { defaultDeveloperRuntimeSettings, normalizeAppSettings } from './settings-schema'
@@ -72,6 +74,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
+  agentToolTurnLimit: DEFAULT_AGENT_TOOL_TURN_LIMIT,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -126,6 +129,9 @@ export class AppRepository {
       }
       if (patch.defaultAgentMode !== undefined) {
         next.defaultAgentMode = patch.defaultAgentMode
+      }
+      if (patch.agentToolTurnLimit !== undefined) {
+        next.agentToolTurnLimit = patch.agentToolTurnLimit
       }
       if (patch.mcpEnabled !== undefined) next.mcpEnabled = patch.mcpEnabled
       if (patch.mcpToolRetrievalMode !== undefined) {
@@ -846,7 +852,7 @@ function parseStoredMcpServers(value: unknown): McpServerConfig[] {
 function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefined {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value)) throw new Error('Invalid tool executions')
-  if (value.length > 50) throw new Error('Too many tool executions')
+  if (value.length > 500) throw new Error('Too many tool executions')
   if (value.length === 0) return undefined
   return value.map((item) => {
     if (!isRecord(item)) throw new Error('Invalid tool execution item')
@@ -904,7 +910,7 @@ function parseStoredSkillActivations(value: unknown): SkillActivation[] | undefi
 
 function parseStoredAgentTrace(value: unknown): import('../../shared/types').AgentTraceItem[] | undefined {
   if (value === undefined || value === null) return undefined
-  if (!Array.isArray(value) || value.length > 300) throw new Error('Invalid agent trace')
+  if (!Array.isArray(value) || value.length > 2_000) throw new Error('Invalid agent trace')
   if (value.length === 0) return undefined
   return value.map((item) => {
     if (!isRecord(item) || !Number.isInteger(item.turn) || Number(item.turn) < 1) {
@@ -960,6 +966,38 @@ function parseStoredAgentTrace(value: unknown): import('../../shared/types').Age
     }
     throw new Error('Invalid agent trace item')
   })
+}
+
+function parseStoredAgentInterruption(value: unknown): AgentInterruption | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!isRecord(value)) throw new Error('Invalid Agent interruption')
+  if (![
+    'rate_limit',
+    'network',
+    'timeout',
+    'cancelled',
+    'tool_turn_limit',
+    'output_limit',
+    'api_error',
+    'unknown',
+  ].includes(String(value.reason))) throw new Error('Invalid Agent interruption reason')
+  requireNonEmptyString(value.message, 'Agent interruption message', 10_000)
+  requireIsoDate(value.occurredAt, 'Agent interruption occurredAt')
+  if (value.status !== undefined && (!Number.isInteger(value.status) || Number(value.status) < 100 || Number(value.status) > 599)) {
+    throw new Error('Invalid Agent interruption status')
+  }
+  if (value.retryAfterSeconds !== undefined && (!Number.isFinite(value.retryAfterSeconds) || Number(value.retryAfterSeconds) < 0 || Number(value.retryAfterSeconds) > 86_400)) {
+    throw new Error('Invalid Agent interruption retry delay')
+  }
+  return {
+    reason: value.reason as AgentInterruption['reason'],
+    message: value.message,
+    occurredAt: value.occurredAt,
+    errorCode: typeof value.errorCode === 'string' ? value.errorCode.slice(0, 200) : undefined,
+    status: value.status === undefined ? undefined : Number(value.status),
+    retryAfterSeconds: value.retryAfterSeconds === undefined ? undefined : Number(value.retryAfterSeconds),
+    finishReason: typeof value.finishReason === 'string' ? value.finishReason.slice(0, 200) : undefined,
+  }
 }
 
 function parseStoredToolResultContent(value: unknown): import('../../shared/types').McpToolResultContent[] | undefined {
@@ -1039,6 +1077,8 @@ function validateConversation(value: unknown): Conversation {
     const skillActivations = parseStoredSkillActivations(message.skillActivations)
     const toolExecutions = parseStoredToolExecutions(message.toolExecutions)
     const agentTrace = parseStoredAgentTrace(message.agentTrace)
+    const interruption = parseStoredAgentInterruption(message.interruption)
+    if (interruption && message.role !== 'assistant') throw new Error('Only assistant messages can store Agent interruptions')
     const parentMessageId =
       message.parentMessageId === null
         ? null
@@ -1058,6 +1098,7 @@ function validateConversation(value: unknown): Conversation {
       skillActivations,
       toolExecutions,
       agentTrace,
+      interruption,
       createdAt: message.createdAt,
     } as Conversation['messages'][number]
   })
@@ -1070,6 +1111,7 @@ function validateConversation(value: unknown): Conversation {
       attachmentCharacterCount(message.attachments) +
       JSON.stringify(message.skillActivations ?? []).length +
       JSON.stringify(message.agentTrace ?? []).length +
+      (message.interruption?.message.length ?? 0) +
       (message.agentTrace?.length ? 0 : JSON.stringify(message.toolExecutions ?? []).length),
     0,
   )

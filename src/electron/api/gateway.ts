@@ -17,6 +17,7 @@ import type {
   WebCitation,
 } from '../../shared/types'
 import { estimateTextTokens } from '../../shared/token-estimate'
+import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
 import { McpManager } from '../mcp/mcp-manager'
 import { retrieveRelevantTools } from '../mcp/tool-retriever'
 import { evaluateToolApproval, validateToolArguments } from '../mcp/tool-policy'
@@ -36,6 +37,7 @@ import {
 import { buildRequestBody, RequestAdapterError } from './request-adapters'
 import { executeCode, type ExecutableLanguage } from './code-executor'
 import { executeTerminalCommand } from './terminal-shell'
+import { readWorkspaceFile, writeWorkspaceFile } from './workspace-files'
 import {
   buildSkillRetrievalQuery,
   retrieveExplicitlyMentionedSkills,
@@ -66,6 +68,11 @@ const CODE_RUNNER_MODEL_NAME = 'agentbox_run_code'
 const TERMINAL_RUNNER_SERVER_ID = 'agentbox-integrated-terminal'
 const TERMINAL_RUNNER_TOOL_NAME = 'run_terminal'
 const TERMINAL_RUNNER_MODEL_NAME = 'agentbox_run_terminal'
+const WORKSPACE_FILES_SERVER_ID = 'agentbox-workspace-files'
+const WORKSPACE_READ_FILE_TOOL_NAME = 'read_file'
+const WORKSPACE_READ_FILE_MODEL_NAME = 'agentbox_read_file'
+const WORKSPACE_WRITE_FILE_TOOL_NAME = 'write_file'
+const WORKSPACE_WRITE_FILE_MODEL_NAME = 'agentbox_write_file'
 
 export class GatewayError extends Error {
   constructor(
@@ -177,6 +184,8 @@ export class ChatGateway {
       )
       const settings = this.repository.getSettings()
       const isAgentMode = Boolean(request.agentMode)
+      const resumeFromMessageId = resolveResumeFromMessageId(request, requestMessages, isAgentMode)
+      if (resumeFromMessageId) ensureVisibleResumeCheckpoint(requestMessages, resumeFromMessageId)
       const lastUserMessage = requestMessages.filter((message) => message.role === 'user').at(-1)?.content || ''
       const skillRoutingQuery = buildSkillRetrievalQuery(requestMessages)
       let allMcpTools: McpToolDefinition[] = []
@@ -207,6 +216,7 @@ export class ChatGateway {
         const internalTools = [
           createSkillLoaderTool(enabledSkills),
           createCodeRunnerTool(enabledSkills),
+          ...createWorkspaceFileTools(workingDirectory),
           createTerminalRunnerTool(),
         ].filter((tool): tool is McpToolDefinition => Boolean(tool))
         effectiveAgentTools = [...effectiveMcpTools, ...internalTools]
@@ -216,6 +226,7 @@ export class ChatGateway {
           effectiveAgentTools,
           enabledSkills,
           workingDirectory,
+          resumeFromMessageId,
         )
         for (const skill of activeSkills) {
           emit({
@@ -248,13 +259,13 @@ export class ChatGateway {
         contextMode,
       )
 
-      const MAX_AGENT_TOOL_TURNS = 6
+      const maxAgentToolTurns = settings.agentToolTurnLimit ?? DEFAULT_AGENT_TOOL_TURN_LIMIT
       let currentTurnMessages = prepared.messages
       let turn = 0
       let toolTurns = 0
       let reachedTerminalState = false
 
-      while (turn < MAX_AGENT_TOOL_TURNS + 1) {
+      while (turn < maxAgentToolTurns + 1) {
         turn++
         resetStallTimer()
 
@@ -320,7 +331,7 @@ export class ChatGateway {
         pauseStallTimer()
 
         if (streamResult.toolCalls.length > 0 && isAgentMode) {
-          if (toolTurns >= MAX_AGENT_TOOL_TURNS) {
+          if (toolTurns >= maxAgentToolTurns) {
             for (const rawCall of streamResult.toolCalls) {
               const tool = effectiveAgentTools.find((item) => (item.modelName || item.name) === rawCall.name)
               emit({
@@ -328,7 +339,7 @@ export class ChatGateway {
                 requestId,
                 callId: rawCall.id,
                 toolName: tool?.name || rawCall.name,
-                result: `已达到 ${MAX_AGENT_TOOL_TURNS} 轮 Agent 工具执行上限，本次调用未执行。`,
+                result: `已达到 ${maxAgentToolTurns} 轮 Agent 工具执行上限，本次调用未执行。`,
                 isError: true,
                 turn,
               })
@@ -373,7 +384,15 @@ export class ChatGateway {
             const isSkillLoader = toolDef?.serverId === SKILL_LOADER_SERVER_ID
             const isCodeRunner = toolDef?.serverId === CODE_RUNNER_SERVER_ID
             const isTerminalRunner = toolDef?.serverId === TERMINAL_RUNNER_SERVER_ID
-            const isInternalTool = isSkillLoader || isCodeRunner || isTerminalRunner
+            const isWorkspaceFileReader = toolDef?.serverId === WORKSPACE_FILES_SERVER_ID
+              && toolDef.name === WORKSPACE_READ_FILE_TOOL_NAME
+            const isWorkspaceFileWriter = toolDef?.serverId === WORKSPACE_FILES_SERVER_ID
+              && toolDef.name === WORKSPACE_WRITE_FILE_TOOL_NAME
+            const isInternalTool = isSkillLoader
+              || isCodeRunner
+              || isTerminalRunner
+              || isWorkspaceFileReader
+              || isWorkspaceFileWriter
             const failure = !toolDef
               ? '模型请求了本轮未授权或不存在的工具，调用已拒绝。'
               : argumentError
@@ -591,6 +610,54 @@ export class ChatGateway {
               )
               continue
             }
+            if (isWorkspaceFileReader || isWorkspaceFileWriter) {
+              const execResult = isWorkspaceFileReader
+                ? await readWorkspaceFile(workingDirectory, {
+                    path: String(parsedArgs.path || ''),
+                    startLine: typeof parsedArgs.start_line === 'number' ? parsedArgs.start_line : undefined,
+                    maxLines: typeof parsedArgs.max_lines === 'number' ? parsedArgs.max_lines : undefined,
+                  }, controller.signal)
+                : await writeWorkspaceFile(workingDirectory, {
+                    path: String(parsedArgs.path || ''),
+                    content: String(parsedArgs.content ?? ''),
+                    mode: typeof parsedArgs.mode === 'string'
+                      ? parsedArgs.mode as 'create' | 'overwrite' | 'append'
+                      : undefined,
+                    createParentDirectories: typeof parsedArgs.create_parent_directories === 'boolean'
+                      ? parsedArgs.create_parent_directories
+                      : undefined,
+                  }, controller.signal)
+              emit({
+                type: 'tool-result',
+                requestId,
+                callId: rawCall.id,
+                toolName: toolDef.name,
+                result: execResult.result,
+                resultTruncated: execResult.truncated,
+                isError: execResult.isError,
+                turn,
+              })
+              toolExecutions.push({
+                id: rawCall.id,
+                toolName: toolDef.name,
+                modelToolName: toolDef.modelName || toolDef.name,
+                serverId: toolDef.serverId,
+                serverName: toolDef.serverName,
+                turn,
+                args: parsedArgs,
+                result: execResult.result,
+                resultTruncated: execResult.truncated,
+                isError: execResult.isError,
+                riskLevel: approval.riskLevel,
+                approvalReason: approval.reason,
+                status: execResult.isError ? 'error' : 'complete',
+              })
+              agentTrace.push(
+                { type: 'tool_call', turn, callId: rawCall.id, toolName: toolDef.name, modelToolName: toolDef.modelName || toolDef.name, serverId: toolDef.serverId, serverName: toolDef.serverName, args: parsedArgs },
+                { type: 'tool_result', turn, callId: rawCall.id, toolName: toolDef.name, result: execResult.result, resultTruncated: execResult.truncated, isError: execResult.isError },
+              )
+              continue
+            }
             const execResult = await this.mcpManager!.executeTool(
               toolDef.serverId,
               toolDef.name,
@@ -644,7 +711,7 @@ export class ChatGateway {
           if (skillLoadedThisTurn) {
             replaceConfiguredSystemPrompt(
               nextTurnMessages,
-              buildAgentSystemPrompt(activeSkills, settings.systemPrompt, effectiveAgentTools, enabledSkills, workingDirectory),
+              buildAgentSystemPrompt(activeSkills, settings.systemPrompt, effectiveAgentTools, enabledSkills, workingDirectory, resumeFromMessageId),
             )
           }
           currentTurnMessages = prepareMessagesForContext(
@@ -906,18 +973,82 @@ function createTerminalRunnerTool(): McpToolDefinition {
   }
 }
 
+function createWorkspaceFileTools(workingDirectory?: string): McpToolDefinition[] {
+  if (!workingDirectory) return []
+  return [
+    {
+      name: WORKSPACE_READ_FILE_TOOL_NAME,
+      modelName: WORKSPACE_READ_FILE_MODEL_NAME,
+      description: '读取当前会话工作目录内的 UTF-8 文本文件。path 必须是相对工作目录的路径；支持按行分段读取。优先使用此工具读取源码和配置文件，避免通过 Shell 输出导致转义或截断。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', minLength: 1, maxLength: 4_096, description: '相对于当前工作目录的文件路径。' },
+          start_line: { type: 'integer', minimum: 1, description: '从第几行开始读取，默认为 1。' },
+          max_lines: { type: 'integer', minimum: 1, maximum: 2_000, description: '最多读取多少行，默认为 400。' },
+        },
+        required: ['path'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: '读取工作区文件',
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+      serverId: WORKSPACE_FILES_SERVER_ID,
+      serverName: 'AgentBox Workspace Files',
+    },
+    {
+      name: WORKSPACE_WRITE_FILE_TOOL_NAME,
+      modelName: WORKSPACE_WRITE_FILE_MODEL_NAME,
+      description: '将文本直接写入当前会话工作目录内的文件，不经过 Shell，因此换行、引号、反引号和 $ 等代码字符不会被二次解释。path 必须是相对路径；可自动创建父目录。写入后应按需调用读取工具验证。',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', minLength: 1, maxLength: 4_096, description: '相对于当前工作目录的目标文件路径。' },
+          content: { type: 'string', maxLength: 100_000, description: '要按 UTF-8 原样写入的完整文本内容；超长文件请拆分后使用 append。' },
+          mode: {
+            type: 'string',
+            enum: ['create', 'overwrite', 'append'],
+            description: 'create 仅新建、overwrite 覆盖或新建（默认）、append 追加。',
+          },
+          create_parent_directories: { type: 'boolean', description: '父目录不存在时是否自动创建，默认为 true。' },
+        },
+        required: ['path', 'content'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: '写入工作区文件',
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: false,
+      },
+      serverId: WORKSPACE_FILES_SERVER_ID,
+      serverName: 'AgentBox Workspace Files',
+    },
+  ]
+}
+
 function buildAgentSystemPrompt(
   skills: Skill[],
   userSystemPrompt: string,
   mcpTools?: McpToolDefinition[],
   availableSkills: Skill[] = skills,
   workingDirectory?: string,
+  resumeFromMessageId?: string,
 ): string {
   const activeSkills = skills.filter((skill) => skill.enabled)
-  const externalTools = (mcpTools ?? []).filter((tool) => ![SKILL_LOADER_SERVER_ID, CODE_RUNNER_SERVER_ID, TERMINAL_RUNNER_SERVER_ID].includes(tool.serverId))
+  const externalTools = (mcpTools ?? []).filter((tool) => ![
+    SKILL_LOADER_SERVER_ID,
+    CODE_RUNNER_SERVER_ID,
+    TERMINAL_RUNNER_SERVER_ID,
+    WORKSPACE_FILES_SERVER_ID,
+  ].includes(tool.serverId))
   const skillLoaderAvailable = (mcpTools ?? []).some((tool) => tool.serverId === SKILL_LOADER_SERVER_ID)
   const codeRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === CODE_RUNNER_SERVER_ID)
   const terminalRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === TERMINAL_RUNNER_SERVER_ID)
+  const workspaceFilesAvailable = (mcpTools ?? []).some((tool) => tool.serverId === WORKSPACE_FILES_SERVER_ID)
   const parts: string[] = []
 
   parts.push(
@@ -932,6 +1063,16 @@ function buildAgentSystemPrompt(
 
   if (workingDirectory) {
     parts.push(`=== 当前会话工作目录 ===\n${workingDirectory}\n所有终端命令、项目操作和相对路径都必须以该目录为边界。`)
+  }
+
+  if (resumeFromMessageId) {
+    parts.push(
+      `=== 从中断现场继续 ===\n用户正在继续消息 ${resumeFromMessageId} 中意外中断的 Agent 工作。前序 assistant 的 agentTrace、工具调用结果和部分文本是本次执行的检查点：\n` +
+      '1. 先检查已完成步骤、失败结果和最后一个未完成目标，再从中断点继续，不要从头重复整个任务。\n' +
+      '2. 已成功的工具调用视为已完成；对结果未知或可能产生副作用的中断操作，先读取或检查当前状态，再决定是否重试，避免重复写入或重复执行。\n' +
+      '3. 用户的“go / 继续 / 重试”等短指令只表示恢复原任务，不替换原始目标。\n' +
+      '4. 如果中断原因仍存在，清楚说明阻塞点并保留可再次继续的现场。',
+    )
   }
 
   if (externalTools.length > 0) {
@@ -951,7 +1092,13 @@ function buildAgentSystemPrompt(
 
   if (terminalRunnerAvailable) {
     parts.push(
-      `=== 集成终端 ===\n- \`${TERMINAL_RUNNER_MODEL_NAME}\`: 通过用户配置的跨平台 Shell 执行命令。命令可能产生系统副作用，必须准确展示待执行内容并遵循审批结果。`,
+      `=== 集成终端 ===\n- \`${TERMINAL_RUNNER_MODEL_NAME}\`: 通过用户配置的跨平台 Shell 执行编译器、包管理器和其他系统命令。命令可能产生系统副作用，必须准确展示待执行内容并遵循审批结果。若工作区文件工具可用，不要用 Shell 拼接多行代码或文本文件。`,
+    )
+  }
+
+  if (workspaceFilesAvailable) {
+    parts.push(
+      `=== 工作区文件工具 ===\n- \`${WORKSPACE_READ_FILE_MODEL_NAME}\`: 分段读取工作目录中的 UTF-8 文本文件。\n- \`${WORKSPACE_WRITE_FILE_MODEL_NAME}\`: 直接创建、覆盖或追加文本文件。\n所有 path 都必须相对于当前工作目录。写入代码和多行文本时优先使用文件工具，禁止为了写文件而拼接 Shell echo、here-string 或重定向命令；重要写入完成后重新读取相关片段验证。`,
     )
   }
 
@@ -1069,6 +1216,14 @@ function validateChatRequest(request: ChatRequest): Message[] {
     throw new GatewayError('Agent 模式配置无效。', 'invalid_request')
   }
   if (
+    request.resumeFromMessageId !== undefined
+    && (typeof request.resumeFromMessageId !== 'string'
+      || !request.resumeFromMessageId.trim()
+      || request.resumeFromMessageId.length > 500)
+  ) {
+    throw new GatewayError('Agent 恢复检查点无效。', 'invalid_request')
+  }
+  if (
     request.skillIds !== undefined &&
     (!Array.isArray(request.skillIds) ||
       request.skillIds.some((id) => typeof id !== 'string' || id.length > 100))
@@ -1161,6 +1316,41 @@ function validateChatRequest(request: ChatRequest): Message[] {
   return sanitizedMessages
 }
 
+function resolveResumeFromMessageId(
+  request: ChatRequest,
+  messages: Message[],
+  agentMode: boolean,
+): string | undefined {
+  const resumeFromMessageId = request.resumeFromMessageId?.trim()
+  if (!resumeFromMessageId) return undefined
+  if (!agentMode) throw new GatewayError('继续 Agent 执行时必须开启 Agent 模式。', 'invalid_request')
+  const conversationalMessages = messages.filter((message) => message.role !== 'system')
+  const latestUser = conversationalMessages.at(-1)
+  const checkpoint = conversationalMessages.at(-2)
+  const originalCheckpoint = request.messages.find((message) => message.id === resumeFromMessageId)
+  if (
+    latestUser?.role !== 'user'
+    || checkpoint?.role !== 'assistant'
+    || checkpoint.id !== resumeFromMessageId
+    || !originalCheckpoint?.interruption
+  ) {
+    throw new GatewayError('Agent 恢复检查点必须是当前用户指令之前的最后一条助手消息。', 'invalid_request')
+  }
+  return resumeFromMessageId
+}
+
+function ensureVisibleResumeCheckpoint(messages: Message[], resumeFromMessageId: string): void {
+  const checkpoint = messages.find((message) => message.id === resumeFromMessageId && message.role === 'assistant')
+  if (
+    checkpoint
+    && !checkpoint.content.trim()
+    && !checkpoint.agentTrace?.length
+    && !checkpoint.toolExecutions?.length
+  ) {
+    checkpoint.content = '[Agent execution was interrupted before producing visible output or completing a tool call.]'
+  }
+}
+
 function sanitizeRequestAttachments(value: unknown): Message['attachments'] {
   if (value === undefined) return undefined
   if (!Array.isArray(value) || value.length > 20) throw new GatewayError('附件列表无效。', 'invalid_request')
@@ -1188,7 +1378,7 @@ function sanitizeRequestAttachments(value: unknown): Message['attachments'] {
 
 function sanitizeRequestToolExecutions(value: unknown): ToolCallExecution[] | undefined {
   if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.length > 100) throw new GatewayError('工具调用历史无效。', 'invalid_request')
+  if (!Array.isArray(value) || value.length > 500) throw new GatewayError('工具调用历史无效。', 'invalid_request')
   return value.map((execution) => {
     if (
       !isRecord(execution) ||
@@ -1224,7 +1414,7 @@ function sanitizeRequestToolExecutions(value: unknown): ToolCallExecution[] | un
 
 function sanitizeRequestAgentTrace(value: unknown): AgentTraceItem[] | undefined {
   if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.length > 300) throw new GatewayError('Agent 事件历史无效。', 'invalid_request')
+  if (!Array.isArray(value) || value.length > 2_000) throw new GatewayError('Agent 事件历史无效。', 'invalid_request')
   return value.map((item) => {
     if (!isRecord(item) || !Number.isInteger(item.turn) || Number(item.turn) < 1) {
       throw new GatewayError('Agent 事件历史格式无效。', 'invalid_request')

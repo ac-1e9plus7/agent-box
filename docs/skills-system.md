@@ -54,4 +54,5 @@ skill-package/
 4. 若初始路由不足，模型可调用只读内部工具 `agentbox_load_skill` 按 ID 加载目录中的其他技能；加载后 Gateway 会重建下一轮 System Instructions。
 5. 每次自动、显式或模型按需激活都会发送 `skill-activated` 事件，并在回答中展示激活来源。技能脚本仍不会被隐式执行。
 6. 代码或数据技能需要实算时可调用 `agentbox_run_code`；只有成功工具结果才能作为“已执行”的证据。
-7. 需要包管理器、编译器或系统命令时可调用 `agentbox_run_terminal`。该工具使用“设置 → 通用 → Integrated terminal shell”中的跨平台 Shell 配置，并遵循敏感工具审批策略。
+7. 需要读取或输出工作目录中的源码、配置和多行文本时，优先调用 `agentbox_read_file` / `agentbox_write_file`；文件内容直接经本机 API 处理，不通过 Shell 转义，写入操作遵循敏感工具审批策略。
+8. 需要包管理器、编译器或系统命令时可调用 `agentbox_run_terminal`。该工具使用“设置 → 通用 → Integrated terminal shell”中的跨平台 Shell 配置，并遵循敏感工具审批策略。

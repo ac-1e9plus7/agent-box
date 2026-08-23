@@ -11,6 +11,19 @@ const legacySettings = {
 }
 
 describe('settings schema migration', () => {
+  it('defaults legacy settings to thirty Agent tool turns', () => {
+    expect(normalizeAppSettings(legacySettings).agentToolTurnLimit).toBe(30)
+  })
+
+  it('accepts a custom Agent tool turn limit and rejects unsafe values', () => {
+    expect(normalizeAppSettings({ ...legacySettings, agentToolTurnLimit: 45 }).agentToolTurnLimit).toBe(45)
+    for (const agentToolTurnLimit of [0, 101, 1.5, '30']) {
+      expect(() => normalizeAppSettings({ ...legacySettings, agentToolTurnLimit })).toThrow(
+        'Agent 工具调用轮次必须是 1-100 之间的整数',
+      )
+    }
+  })
+
   it('migrates legacy vault settings to manual context management', () => {
     expect(normalizeAppSettings(legacySettings).contextManagementMode).toBe('manual')
   })

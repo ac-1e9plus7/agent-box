@@ -8,8 +8,13 @@ import type {
   SettingsSection,
   WebSearchMode
 } from '../types'
-import type { DeveloperRuntimeKind, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, RuntimeTestResult, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
+import type { CondaEnvironmentListResult, DeveloperRuntimeKind, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, RuntimeTestResult, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
 import { exportSkillToZip, parseSkillFromZip } from '../../../shared/skill-zip'
+import {
+  DEFAULT_AGENT_TOOL_TURN_LIMIT,
+  MAX_AGENT_TOOL_TURN_LIMIT,
+  MIN_AGENT_TOOL_TURN_LIMIT,
+} from '../../../shared/agent-limits'
 import { API_FORMAT_LABELS } from '../types'
 import { stepTokenValue } from '../token-step'
 import { isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../web-search'
@@ -48,6 +53,7 @@ interface SettingsDialogProps {
   onTestTerminalShell?: (config: IntegratedTerminalShellConfig) => Promise<TerminalShellTestResult>
   onSelectDirectory?: (initialPath?: string) => Promise<string | undefined>
   onTestRuntime?: (kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string) => Promise<RuntimeTestResult>
+  onListCondaEnvironments?: (condaExecutable: string) => Promise<CondaEnvironmentListResult>
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
@@ -207,6 +213,56 @@ function TokenStepper({
   )
 }
 
+function AgentTurnLimitInput({
+  onChange,
+  value,
+}: {
+  onChange: (value: number) => void
+  value: number
+}): JSX.Element {
+  const [inputValue, setInputValue] = useState(String(value))
+
+  useEffect(() => {
+    setInputValue(String(value))
+  }, [value])
+
+  const commit = (): void => {
+    const parsed = Number(inputValue)
+    if (!Number.isInteger(parsed)) {
+      setInputValue(String(value))
+      return
+    }
+    const normalized = Math.min(
+      MAX_AGENT_TOOL_TURN_LIMIT,
+      Math.max(MIN_AGENT_TOOL_TURN_LIMIT, parsed),
+    )
+    setInputValue(String(normalized))
+    onChange(normalized)
+  }
+
+  return (
+    <label className="agent-turn-limit-control">
+      <input
+        aria-label="Agent 工具调用轮次上限"
+        max={MAX_AGENT_TOOL_TURN_LIMIT}
+        min={MIN_AGENT_TOOL_TURN_LIMIT}
+        onBlur={commit}
+        onChange={(event) => setInputValue(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur()
+          if (event.key === 'Escape') {
+            setInputValue(String(value))
+            event.preventDefault()
+          }
+        }}
+        type="number"
+        value={inputValue}
+      />
+      <span>轮</span>
+    </label>
+  )
+}
+
 export function SettingsDialog({
   initialSection,
   models,
@@ -231,7 +287,8 @@ export function SettingsDialog({
   onListMcpTools,
   onTestTerminalShell,
   onSelectDirectory,
-  onTestRuntime
+  onTestRuntime,
+  onListCondaEnvironments,
 }: SettingsDialogProps): JSX.Element | null {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection)
   const [modelDrafts, setModelDrafts] = useState<ModelConfig[]>(models)
@@ -256,6 +313,9 @@ export function SettingsDialog({
   const [testingTerminalShell, setTestingTerminalShell] = useState(false)
   const [runtimeTestResults, setRuntimeTestResults] = useState<Partial<Record<DeveloperRuntimeKind, RuntimeTestResult>>>({})
   const [testingRuntime, setTestingRuntime] = useState<DeveloperRuntimeKind | null>(null)
+  const [condaEnvironmentResult, setCondaEnvironmentResult] = useState<CondaEnvironmentListResult | null>(null)
+  const [loadingCondaEnvironments, setLoadingCondaEnvironments] = useState(false)
+  const [condaEnvironmentRefresh, setCondaEnvironmentRefresh] = useState(0)
 
   // Skills UI state
   const [editingSkill, setEditingSkill] = useState<SkillInput | null>(null)
@@ -291,6 +351,73 @@ export function SettingsDialog({
     preferenceDraft.integratedTerminalShell.mode,
     preferenceDraft.integratedTerminalShell.executable,
     preferenceDraft.integratedTerminalShell.args.join('\0'),
+  ])
+
+  useEffect(() => {
+    if (
+      !open
+      || preferenceDraft.developerRuntimes.python.mode !== 'conda'
+      || !onListCondaEnvironments
+    ) {
+      setCondaEnvironmentResult(null)
+      setLoadingCondaEnvironments(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setLoadingCondaEnvironments(true)
+      void onListCondaEnvironments(
+        preferenceDraft.developerRuntimes.python.condaExecutable.trim() || 'conda',
+      ).then((result) => {
+        if (cancelled) return
+        setCondaEnvironmentResult(result)
+        if (!result.ok || result.environments.length === 0) return
+
+        setPreferenceDraft((current) => {
+          const configured = current.developerRuntimes.python.environment
+          const matched = result.environments.find((environment) => (
+            environment.path === configured || environment.name === configured
+          )) ?? result.environments.find((environment) => (
+            environment.path.toLowerCase() === configured.toLowerCase()
+            || environment.name.toLowerCase() === configured.toLowerCase()
+          ))
+          if (configured && !matched) return current
+          const environment = matched
+            ?? result.environments.find((candidate) => candidate.active)
+            ?? result.environments[0]
+          if (!environment || configured === environment.path) return current
+          return {
+            ...current,
+            developerRuntimes: {
+              ...current.developerRuntimes,
+              python: { ...current.developerRuntimes.python, environment: environment.path },
+            },
+          }
+        })
+      }).catch((error: unknown) => {
+        if (cancelled) return
+        setCondaEnvironmentResult({
+          ok: false,
+          condaExecutable: preferenceDraft.developerRuntimes.python.condaExecutable,
+          environments: [],
+          message: error instanceof Error ? error.message : '读取 Conda 环境失败。',
+        })
+      }).finally(() => {
+        if (!cancelled) setLoadingCondaEnvironments(false)
+      })
+    }, 350)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [
+    condaEnvironmentRefresh,
+    onListCondaEnvironments,
+    open,
+    preferenceDraft.developerRuntimes.python.condaExecutable,
+    preferenceDraft.developerRuntimes.python.mode,
   ])
 
   useEffect(() => {
@@ -1063,6 +1190,13 @@ export function SettingsDialog({
                     />
                   </div>
                   <div className="settings-row">
+                    <div><strong>Agent 工具调用轮次</strong><small>范围 1–100，默认 {DEFAULT_AGENT_TOOL_TURN_LIMIT}；提高上限会增加耗时和 API 费用</small></div>
+                    <AgentTurnLimitInput
+                      onChange={(agentToolTurnLimit) => setPreferenceDraft((current) => ({ ...current, agentToolTurnLimit }))}
+                      value={preferenceDraft.agentToolTurnLimit ?? DEFAULT_AGENT_TOOL_TURN_LIMIT}
+                    />
+                  </div>
+                  <div className="settings-row">
                     <div><strong>新会话默认思考</strong><small>支持推理的模型将自动开启</small></div>
                     <SettingsToggle
                       checked={preferenceDraft.defaultReasoningEnabled}
@@ -1374,7 +1508,98 @@ export function SettingsDialog({
                     {preferenceDraft.developerRuntimes.python.mode === 'auto' && <p className="runtime-mode-hint">依次检测工作目录的 .venv/venv、VIRTUAL_ENV、CONDA_PREFIX，再回退到系统 Python 3。</p>}
                     {preferenceDraft.developerRuntimes.python.mode === 'system' && <label><FieldLabel hint="可选；留空时自动尝试 python3/python/py -3">系统 Python 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
                     {preferenceDraft.developerRuntimes.python.mode === 'venv' && <label><FieldLabel hint="venv 根目录，Windows 使用 Scripts/python.exe，macOS/Linux 使用 bin/python">venv 路径</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.python.environment); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: path } } })) }}><Icon name="folder" size={13} /></button></div></label>}
-                    {preferenceDraft.developerRuntimes.python.mode === 'conda' && <><label><FieldLabel hint="Conda 环境名称或绝对 prefix 路径">Conda 环境</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /></label><label><FieldLabel hint="默认 conda；也可指定 conda.exe/conda 的完整路径">Conda 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.condaExecutable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, condaExecutable: event.target.value } } }))} /></label></>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'conda' && (
+                      <>
+                        <label>
+                          <FieldLabel hint="默认 conda；也可粘贴 conda.exe/conda 的完整路径">
+                            Conda 可执行文件
+                          </FieldLabel>
+                          <div className="runtime-path-input">
+                            <input
+                              className="mono-input"
+                              placeholder="conda 或 C:\\...\\conda.exe"
+                              value={preferenceDraft.developerRuntimes.python.condaExecutable}
+                              onChange={(event) => setPreferenceDraft((current) => ({
+                                ...current,
+                                developerRuntimes: {
+                                  ...current.developerRuntimes,
+                                  python: {
+                                    ...current.developerRuntimes.python,
+                                    condaExecutable: event.target.value,
+                                  },
+                                },
+                              }))}
+                            />
+                            <button
+                              aria-label="刷新 Conda 环境"
+                              className="secondary-button"
+                              disabled={loadingCondaEnvironments}
+                              onClick={() => setCondaEnvironmentRefresh((current) => current + 1)}
+                              title="重新读取 Conda 环境"
+                              type="button"
+                            >
+                              <Icon name="refresh" size={13} />
+                            </button>
+                          </div>
+                          <small className={`runtime-field-status ${condaEnvironmentResult?.ok ? 'is-ok' : condaEnvironmentResult ? 'is-error' : ''}`}>
+                            {loadingCondaEnvironments
+                              ? '正在读取 Conda 环境…'
+                              : condaEnvironmentResult?.message ?? '输入后将自动检测 Conda。'}
+                          </small>
+                        </label>
+                        <label>
+                          <FieldLabel hint="检测到有效 Conda 后可直接选择；保存实际的环境 prefix 路径">
+                            Conda 环境
+                          </FieldLabel>
+                          {condaEnvironmentResult?.ok && condaEnvironmentResult.environments.length > 0 ? (
+                            <select
+                              className="mono-input runtime-environment-select"
+                              value={preferenceDraft.developerRuntimes.python.environment}
+                              onChange={(event) => setPreferenceDraft((current) => ({
+                                ...current,
+                                developerRuntimes: {
+                                  ...current.developerRuntimes,
+                                  python: {
+                                    ...current.developerRuntimes.python,
+                                    environment: event.target.value,
+                                  },
+                                },
+                              }))}
+                            >
+                              {preferenceDraft.developerRuntimes.python.environment
+                                && !condaEnvironmentResult.environments.some((environment) => (
+                                  environment.path === preferenceDraft.developerRuntimes.python.environment
+                                )) && (
+                                  <option value={preferenceDraft.developerRuntimes.python.environment}>
+                                    当前配置（未在环境列表中）— {preferenceDraft.developerRuntimes.python.environment}
+                                  </option>
+                                )}
+                              {condaEnvironmentResult.environments.map((environment) => (
+                                <option key={environment.path} value={environment.path}>
+                                  {environment.name}{environment.active ? '（当前）' : ''} — {environment.path}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              className="mono-input"
+                              placeholder="环境名称或绝对 prefix 路径"
+                              value={preferenceDraft.developerRuntimes.python.environment}
+                              onChange={(event) => setPreferenceDraft((current) => ({
+                                ...current,
+                                developerRuntimes: {
+                                  ...current.developerRuntimes,
+                                  python: {
+                                    ...current.developerRuntimes.python,
+                                    environment: event.target.value,
+                                  },
+                                },
+                              }))}
+                            />
+                          )}
+                        </label>
+                      </>
+                    )}
                     {preferenceDraft.developerRuntimes.python.mode === 'custom' && <label><FieldLabel>Python 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
                   </div>
                   <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === 'python'} onClick={() => void testRuntime('python')}>{testingRuntime === 'python' ? '检测中…' : '检测 Python'}</button>{runtimeTestResults.python && <span className={runtimeTestResults.python.ok ? 'is-ok' : 'is-error'}>{runtimeTestResults.python.message}</span>}</div>

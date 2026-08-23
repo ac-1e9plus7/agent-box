@@ -2,10 +2,13 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, normalize, posix, win32 } from 'node:path'
 import type {
+  CondaEnvironment,
+  CondaEnvironmentListResult,
   DeveloperRuntimeKind,
   DeveloperRuntimeSettings,
   RuntimeTestResult,
 } from '../../shared/types'
+import { normalizeRuntimePathInput } from '../runtime-path'
 
 export interface ResolvedRuntime {
   kind: DeveloperRuntimeKind
@@ -14,6 +17,7 @@ export interface ResolvedRuntime {
   version: string
   home?: string
   environmentPath?: string
+  environmentType?: 'venv' | 'conda'
 }
 
 const runtimeCache = new Map<string, Promise<ResolvedRuntime | undefined>>()
@@ -74,7 +78,7 @@ export async function buildDeveloperEnvironment(
   if (jdk?.home) env.JAVA_HOME = jdk.home
   if (go?.home) env.GOROOT = go.home
   if (python?.environmentPath) {
-    if (settings.python.mode === 'conda' || basename(python.environmentPath).toLowerCase().includes('conda')) {
+    if (python.environmentType === 'conda') {
       env.CONDA_PREFIX = python.environmentPath
     } else {
       env.VIRTUAL_ENV = python.environmentPath
@@ -88,6 +92,79 @@ export function pythonExecutableInEnvironment(environmentPath: string, platform:
   return platform === 'win32'
     ? win32.join(environmentPath, 'Scripts', 'python.exe')
     : posix.join(environmentPath, 'bin', 'python')
+}
+
+export function pythonExecutableInCondaEnvironment(environmentPath: string, platform: NodeJS.Platform): string {
+  return platform === 'win32'
+    ? win32.join(environmentPath, 'python.exe')
+    : posix.join(environmentPath, 'bin', 'python')
+}
+
+export async function listCondaEnvironments(condaExecutableInput: string): Promise<CondaEnvironmentListResult> {
+  const condaExecutable = normalizeRuntimePathInput(condaExecutableInput || 'conda') || 'conda'
+  const result = await captureProcess(condaExecutable, ['env', 'list', '--json'], 5_000)
+  if (!result.ok) {
+    const detail = result.output.split(/\r?\n/).find(Boolean)?.trim()
+    return {
+      ok: false,
+      condaExecutable,
+      environments: [],
+      message: detail ? `无法读取 Conda 环境：${detail}` : '未找到可用的 Conda 可执行文件。',
+    }
+  }
+
+  try {
+    const environments = parseCondaEnvironments(result.stdout || result.output, process.platform)
+    return {
+      ok: true,
+      condaExecutable,
+      environments,
+      message: environments.length > 0
+        ? `已发现 ${environments.length} 个 Conda 环境。`
+        : 'Conda 可用，但没有返回任何环境。',
+    }
+  } catch {
+    return {
+      ok: false,
+      condaExecutable,
+      environments: [],
+      message: 'Conda 返回了无法解析的环境列表。',
+    }
+  }
+}
+
+export function parseCondaEnvironments(output: string, platform: NodeJS.Platform): CondaEnvironment[] {
+  const parsed = JSON.parse(output) as {
+    active_prefix?: unknown
+    envs?: unknown
+    root_prefix?: unknown
+  }
+  if (!Array.isArray(parsed.envs)) throw new Error('Invalid Conda environment list')
+
+  const pathApi = platform === 'win32' ? win32 : posix
+  const comparable = (value: string): string => platform === 'win32' ? value.toLowerCase() : value
+  const rootPrefix = typeof parsed.root_prefix === 'string'
+    ? comparable(pathApi.normalize(parsed.root_prefix))
+    : undefined
+  const activePrefix = typeof parsed.active_prefix === 'string'
+    ? comparable(pathApi.normalize(parsed.active_prefix))
+    : undefined
+  const seen = new Set<string>()
+  const environments: CondaEnvironment[] = []
+
+  for (const entry of parsed.envs) {
+    if (typeof entry !== 'string' || !entry.trim()) continue
+    const path = pathApi.normalize(entry)
+    const key = comparable(path)
+    if (seen.has(key)) continue
+    seen.add(key)
+    environments.push({
+      name: rootPrefix === key ? 'base' : pathApi.basename(path),
+      path,
+      active: activePrefix === key,
+    })
+  }
+  return environments
 }
 
 async function resolveRuntimeUncached(
@@ -128,28 +205,28 @@ async function resolvePythonRuntime(
 ): Promise<ResolvedRuntime | undefined> {
   const config = settings.python
   if (config.mode === 'venv') {
-    return probePythonEnvironment(config.environment)
+    return probePythonEnvironment(config.environment, 'venv')
   }
   if (config.mode === 'conda') {
     const prefix = isAbsolute(config.environment)
       ? config.environment
       : await findCondaEnvironment(config.condaExecutable || 'conda', config.environment)
-    return prefix ? probePythonEnvironment(prefix) : undefined
+    return prefix ? probePythonEnvironment(prefix, 'conda') : undefined
   }
   if (config.mode === 'custom') {
     return probeCandidates('python', [config.executable], ['--version'])
   }
 
-  const environments = config.mode === 'auto'
+  const environments: Array<{ path: string; layout: 'venv' | 'conda' }> = config.mode === 'auto'
     ? [
-        workingDirectory ? join(workingDirectory, '.venv') : '',
-        workingDirectory ? join(workingDirectory, 'venv') : '',
-        process.env.VIRTUAL_ENV || '',
-        process.env.CONDA_PREFIX || '',
+        { path: workingDirectory ? join(workingDirectory, '.venv') : '', layout: 'venv' },
+        { path: workingDirectory ? join(workingDirectory, 'venv') : '', layout: 'venv' },
+        { path: process.env.VIRTUAL_ENV || '', layout: 'venv' },
+        { path: process.env.CONDA_PREFIX || '', layout: 'conda' },
       ]
     : []
-  for (const environment of environments.filter(Boolean)) {
-    const runtime = await probePythonEnvironment(environment)
+  for (const environment of environments.filter(({ path }) => Boolean(path))) {
+    const runtime = await probePythonEnvironment(environment.path, environment.layout)
     if (runtime) return runtime
   }
   const candidates = config.executable
@@ -165,28 +242,27 @@ async function resolvePythonRuntime(
   return undefined
 }
 
-async function probePythonEnvironment(environmentPath: string): Promise<ResolvedRuntime | undefined> {
+async function probePythonEnvironment(
+  environmentPath: string,
+  layout: 'venv' | 'conda',
+): Promise<ResolvedRuntime | undefined> {
   const normalized = normalize(environmentPath)
-  const executable = pythonExecutableInEnvironment(normalized, process.platform)
+  const executable = layout === 'conda'
+    ? pythonExecutableInCondaEnvironment(normalized, process.platform)
+    : pythonExecutableInEnvironment(normalized, process.platform)
   const runtime = await probeRuntime('python', executable, ['--version'])
-  return runtime ? { ...runtime, environmentPath: normalized } : undefined
+  return runtime ? { ...runtime, environmentPath: normalized, environmentType: layout } : undefined
 }
 
 async function findCondaEnvironment(condaExecutable: string, environment: string): Promise<string | undefined> {
-  const result = await captureProcess(condaExecutable, ['env', 'list', '--json'], 5_000)
+  const result = await listCondaEnvironments(condaExecutable)
   if (!result.ok) return undefined
-  try {
-    const parsed = JSON.parse(result.output) as { envs?: unknown }
-    if (!Array.isArray(parsed.envs)) return undefined
-    const target = process.platform === 'win32' ? environment.toLowerCase() : environment
-    return parsed.envs.find((entry): entry is string => {
-      if (typeof entry !== 'string') return false
-      const name = basename(entry)
-      return (process.platform === 'win32' ? name.toLowerCase() : name) === target
-    })
-  } catch {
-    return undefined
-  }
+  const target = process.platform === 'win32' ? environment.toLowerCase() : environment
+  return result.environments.find((entry) => {
+    const name = process.platform === 'win32' ? entry.name.toLowerCase() : entry.name
+    const path = process.platform === 'win32' ? entry.path.toLowerCase() : entry.path
+    return name === target || path === target
+  })?.path
 }
 
 async function probeCandidates(
@@ -216,21 +292,38 @@ async function probeRuntime(
   return { kind, executable, prefixArgs, version }
 }
 
-function captureProcess(command: string, args: string[], timeoutMs: number): Promise<{ ok: boolean; output: string }> {
+function captureProcess(
+  command: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ ok: boolean; output: string; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
-    let output = ''
+    let stdout = ''
+    let stderr = ''
     let settled = false
     const finish = (ok: boolean) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
-      resolve({ ok, output: output.trim() })
+      const normalizedStdout = stdout.trim()
+      const normalizedStderr = stderr.trim()
+      resolve({
+        ok,
+        stdout: normalizedStdout,
+        stderr: normalizedStderr,
+        output: [normalizedStdout, normalizedStderr].filter(Boolean).join('\n'),
+      })
     }
-    const append = (chunk: Buffer) => { output += chunk.toString('utf8').slice(0, 20_000 - output.length) }
+    const appendStdout = (chunk: Buffer) => {
+      if (stdout.length < 100_000) stdout += chunk.toString('utf8').slice(0, 100_000 - stdout.length)
+    }
+    const appendStderr = (chunk: Buffer) => {
+      if (stderr.length < 20_000) stderr += chunk.toString('utf8').slice(0, 20_000 - stderr.length)
+    }
     const timer = setTimeout(() => { child.kill(); finish(false) }, timeoutMs)
-    child.stdout?.on('data', append)
-    child.stderr?.on('data', append)
+    child.stdout?.on('data', appendStdout)
+    child.stderr?.on('data', appendStderr)
     child.once('error', () => finish(false))
     child.once('close', (code) => finish(code === 0))
   })

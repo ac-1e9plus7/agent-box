@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type {
+  AgentInterruption,
   AgentTraceItem,
   AppSettings,
   Conversation as StoredConversation,
@@ -45,6 +46,8 @@ import {
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
 import { runStreamWithReplay } from './stream-helper'
+import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import { interruptionFromStreamEvent, resolveNaturalAgentResumeMessageId } from './agent-continuation'
 import {
   cleanGeneratedTitle,
   cleanManualTitle,
@@ -58,6 +61,7 @@ const emptySettings: AppSettings = {
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
+  agentToolTurnLimit: DEFAULT_AGENT_TOOL_TURN_LIMIT,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -79,6 +83,7 @@ interface ActiveStream {
   requestId: string
   conversationId: string
   assistantMessageId: string
+  agentMode: boolean
 }
 
 interface CreateConversationOptions {
@@ -86,6 +91,12 @@ interface CreateConversationOptions {
   modelId?: string
   preserveComposer?: boolean
   workingDirectory: string
+}
+
+interface SendOptions {
+  content?: string
+  preserveComposer?: boolean
+  resumeFromMessageId?: string
 }
 
 function createId(prefix: string): string {
@@ -203,6 +214,47 @@ function appendToolResultTrace(
   return next
 }
 
+function checkpointInterruptedMessage(
+  message: ChatMessage,
+  interruption: AgentInterruption,
+): ChatMessage {
+  const pendingExecutions = (message.toolExecutions ?? []).filter((execution) => (
+    execution.status === 'calling'
+    || execution.status === 'awaiting-approval'
+    || execution.status === 'executing'
+  ))
+  if (pendingExecutions.length === 0) {
+    return { ...message, interruption, status: 'error', error: interruption.message }
+  }
+
+  const trace = [...(message.agentTrace ?? [])]
+  const interruptedResult = `Agent 执行在工具完成前中断：${interruption.message}`
+  for (const execution of pendingExecutions) {
+    const hasCall = trace.some((item) => item.type === 'tool_call' && item.callId === execution.id)
+    const hasResult = trace.some((item) => item.type === 'tool_result' && item.callId === execution.id)
+    if (hasCall && !hasResult) {
+      trace.push({
+        type: 'tool_result',
+        turn: execution.turn ?? 1,
+        callId: execution.id,
+        toolName: execution.toolName,
+        result: interruptedResult,
+        isError: true,
+      })
+    }
+  }
+  return {
+    ...message,
+    agentTrace: trace.length > 0 ? trace : undefined,
+    toolExecutions: (message.toolExecutions ?? []).map((execution) => pendingExecutions.some((item) => item.id === execution.id)
+      ? { ...execution, result: interruptedResult, isError: true, status: 'error' as const }
+      : execution),
+    interruption,
+    status: 'error',
+    error: interruption.message,
+  }
+}
+
 function toUiConversation(conversation: StoredConversation): Conversation {
   const normalizedMessages = ensureMessageTree(conversation.messages)
   return {
@@ -211,7 +263,8 @@ function toUiConversation(conversation: StoredConversation): Conversation {
     messages: normalizedMessages.map((message) => ({
       ...message,
       modelId: message.role === 'assistant' ? conversation.modelId : undefined,
-      status: 'complete'
+      error: message.interruption?.message,
+      status: message.interruption ? 'error' : 'complete'
     }))
   }
 }
@@ -620,23 +673,29 @@ export default function App(): JSX.Element {
 
     const next = replaceConversations((current) => current.map((conversation) => {
       if (conversation.id !== targetConvId) return conversation
+      const interruption = interruptionFromStreamEvent(event, activeStream.agentMode)
       return {
         ...conversation,
         updatedAt: new Date().toISOString(),
         messages: conversation.messages.map((message) => (
           message.id === targetAssistantId
-            ? {
-              ...message,
-              status: event.type === 'error' ? 'error' : 'complete',
-              error: event.type === 'error' ? event.error.message : undefined
-            }
+            ? interruption
+              ? checkpointInterruptedMessage(message, interruption)
+              : {
+                ...message,
+                interruption: undefined,
+                status: event.type === 'error' ? 'error' : 'complete',
+                error: event.type === 'error' ? event.error.message : undefined
+              }
             : message
         ))
       }
     }))
     const completedConversation = next.find((conversation) => conversation.id === targetConvId)
+    const completedAssistant = completedConversation?.messages.find((message) => message.id === targetAssistantId)
     if (completedConversation) void persistConversation(completedConversation)
     if (event.type === 'error') showToast(event.error.message)
+    else if (completedAssistant?.interruption) showToast(completedAssistant.interruption.message)
     activeStreamsRef.current.delete(targetConvId)
     setStreamingConversationIds((prev) => {
       const nextSet = new Set(prev)
@@ -649,6 +708,7 @@ export default function App(): JSX.Element {
     if (
       event.type === 'done' &&
       event.finishReason !== 'cancelled' &&
+      !completedAssistant?.interruption &&
       completedConversation &&
       !manualRenamedRef.current.has(completedConversation.id) &&
       !autoRenamingRef.current.has(completedConversation.id) &&
@@ -1104,6 +1164,10 @@ export default function App(): JSX.Element {
     window.agentbox.runtimes.test(kind, runtimes, workingDirectory)
   ), [])
 
+  const handleListCondaEnvironments = useCallback((condaExecutable: string) => (
+    window.agentbox.runtimes.listCondaEnvironments(condaExecutable)
+  ), [])
+
 
   const handleWebSearchModeChange = (mode: WebSearchMode): void => {
     if (mode !== 'off' && !webSearchAvailable) {
@@ -1144,9 +1208,10 @@ export default function App(): JSX.Element {
     return true
   }, [activeProvider, showToast])
 
-  const handleSend = async (allowContextTrimming = false): Promise<void> => {
-    const content = draft.trim()
-    const currentAttachments = [...attachments]
+  const handleSend = async (allowContextTrimming = false, options?: SendOptions): Promise<void> => {
+    const usesExplicitContent = options?.content !== undefined
+    const content = (options?.content ?? draft).trim()
+    const currentAttachments = usesExplicitContent ? [] : [...attachments]
     if ((!content && currentAttachments.length === 0) || !activeModel) return
 
     if (activeConversation && streamingConversationIds.has(activeConversation.id)) return
@@ -1161,19 +1226,35 @@ export default function App(): JSX.Element {
       return
     }
 
-    if (contextProjection?.blocked && (!allowContextTrimming || !contextProjection.canTrimOnce)) {
-      showToast(contextProjection.message)
-      return
-    }
-    if (!guardWebSearchAvailable()) return
-    if (!guardProviderKey()) return
-
     const conversation = activeConversation
 
     if (streamingConversationIds.has(conversation.id)) return
 
     const activeChain = getActiveMessageChain(conversation)
     const lastActiveMessage = activeChain[activeChain.length - 1]
+    const explicitResumeMessage = options?.resumeFromMessageId
+      ? lastActiveMessage?.role === 'assistant'
+        && lastActiveMessage.id === options.resumeFromMessageId
+        && Boolean(lastActiveMessage.interruption)
+        ? lastActiveMessage
+        : undefined
+      : undefined
+    if (options?.resumeFromMessageId && !explicitResumeMessage) {
+      showToast('只能从当前分支最后一条中断的 Agent 回复继续。')
+      return
+    }
+    const resumeFromMessageId = explicitResumeMessage?.id
+      ?? resolveNaturalAgentResumeMessageId(activeChain, content, currentAttachments.length > 0)
+    const sendProjection = usesExplicitContent
+      ? projectContext(visibleMessages, content, settings, activeModel, currentAttachments)
+      : contextProjection
+    if (sendProjection?.blocked && (!allowContextTrimming || !sendProjection.canTrimOnce)) {
+      showToast(sendProjection.message)
+      return
+    }
+    if (!guardWebSearchAvailable()) return
+    if (!guardProviderKey()) return
+
     const timestamp = new Date().toISOString()
 
     const userMessage: ChatMessage = {
@@ -1201,6 +1282,7 @@ export default function App(): JSX.Element {
       title: conversation.messages.length === 0 ? makeTitle(fallbackTitle) : conversation.title,
       modelId: activeModel.id,
       reasoningEnabled,
+      agentMode: resumeFromMessageId ? true : conversation.agentMode ?? agentMode,
       webSearchMode,
       messages: [...conversation.messages, userMessage, assistantMessage],
       currentLeafId: assistantMessage.id,
@@ -1208,13 +1290,17 @@ export default function App(): JSX.Element {
     }
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    setDraft('')
-    setAttachments([])
+    if (!options?.preserveComposer) {
+      setDraft('')
+      setAttachments([])
+    }
+    if (resumeFromMessageId) setAgentMode(true)
     setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
     activeStreamsRef.current.set(nextConversation.id, {
       requestId: '',
       conversationId: nextConversation.id,
-      assistantMessageId: assistantMessage.id
+      assistantMessageId: assistantMessage.id,
+      agentMode: Boolean(nextConversation.agentMode),
     })
 
     const requestMessages: Message[] = [...activeChain, userMessage].map(
@@ -1229,8 +1315,10 @@ export default function App(): JSX.Element {
       replaceConversations((current) => current.map((item) => (
         item.id === conversation.id ? conversation : item
       )))
-      setDraft(content)
-      setAttachments(currentAttachments)
+      if (!options?.preserveComposer) {
+        setDraft(content)
+        setAttachments(currentAttachments)
+      }
       activeStreamsRef.current.delete(nextConversation.id)
       setStreamingConversationIds((prev) => {
         const nextSet = new Set(prev)
@@ -1249,6 +1337,7 @@ export default function App(): JSX.Element {
         skillIds: nextConversation.skillIds,
         mcpServerIds: nextConversation.mcpServerIds,
         workingDirectory: nextConversation.workingDirectory,
+        resumeFromMessageId,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -1268,6 +1357,14 @@ export default function App(): JSX.Element {
         error: { message: normalizeError(error) }
       })
     }
+  }
+
+  const handleResumeAgentExecution = async (assistantMessageId: string): Promise<void> => {
+    await handleSend(false, {
+      content: '继续之前中断的工作',
+      preserveComposer: true,
+      resumeFromMessageId: assistantMessageId,
+    })
   }
 
   const handleStop = async (conversationId?: string): Promise<void> => {
@@ -1355,7 +1452,8 @@ export default function App(): JSX.Element {
     activeStreamsRef.current.set(nextConversation.id, {
       requestId: '',
       conversationId: nextConversation.id,
-      assistantMessageId: assistantMessage.id
+      assistantMessageId: assistantMessage.id,
+      agentMode: Boolean(nextConversation.agentMode ?? agentMode),
     })
 
     const requestMessages: Message[] = ancestors.map(
@@ -1511,7 +1609,8 @@ export default function App(): JSX.Element {
     activeStreamsRef.current.set(nextConversation.id, {
       requestId: '',
       conversationId: nextConversation.id,
-      assistantMessageId: assistantMessage.id
+      assistantMessageId: assistantMessage.id,
+      agentMode: Boolean(nextConversation.agentMode ?? agentMode),
     })
 
     const requestMessages: Message[] = historyForPrompt.map(
@@ -1817,6 +1916,7 @@ export default function App(): JSX.Element {
             onDeleteMessage={(messageId) => void handleDeleteMessage(messageId)}
             onEditMessage={(messageId, content, regenerate) => handleEditMessage(messageId, content, regenerate)}
             onRegenerate={(targetAssistantId) => void handleRegenerate(targetAssistantId)}
+            onResumeAgent={(assistantMessageId) => void handleResumeAgentExecution(assistantMessageId)}
             onSwitchVersion={handleSwitchVersion}
             onSuggestion={setDraft}
             onResolveToolApproval={(callId, approved) => void handleToolApproval(callId, approved)}
@@ -1879,6 +1979,7 @@ export default function App(): JSX.Element {
         onTestTerminalShell={handleTestTerminalShell}
         onSelectDirectory={handleSelectDirectory}
         onTestRuntime={handleTestRuntime}
+        onListCondaEnvironments={handleListCondaEnvironments}
         onClose={() => setSettingsOpen(false)}
         onClearData={handleClearAllData}
         onDiscoverModels={discoverModels}

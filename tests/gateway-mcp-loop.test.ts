@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { ChatRequest, StreamEvent } from '../src/shared/types'
@@ -318,6 +318,97 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       && !event.isError)).toBe(true)
   })
 
+  it('writes and reads workspace files without shell escaping', async () => {
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const executeMcp = vi.spyOn(mcpManager, 'executeTool')
+    const content = 'const template = `value: ${input}`\nconsole.log("你好", template)\n'
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount += 1
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-write-file', function: { name: 'agentbox_write_file', arguments: JSON.stringify({ path: 'generated/example.ts', content, mode: 'overwrite' }) } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      if (fetchCount === 2) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-read-file', function: { name: 'agentbox_read_file', arguments: JSON.stringify({ path: 'generated/example.ts' }) } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'File created and verified.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    await gateway.stream('req-workspace-file', {
+      conversationId: 'conversation-workspace-file',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-workspace-file', role: 'user', content: '请将代码写入 generated/example.ts 并复核', createdAt: new Date().toISOString() }],
+      workingDirectory: tempDirectory,
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(fetchCount).toBe(3)
+    expect(executeMcp).not.toHaveBeenCalled()
+    expect(readFileSync(join(tempDirectory, 'generated', 'example.ts'), 'utf8')).toBe(content)
+    expect(events.some((event) => event.type === 'tool-result'
+      && event.callId === 'call-write-file'
+      && !event.isError)).toBe(true)
+    expect(events.some((event) => event.type === 'tool-result'
+      && event.callId === 'call-read-file'
+      && event.result.includes('console.log("你好", template)')
+      && !event.isError)).toBe(true)
+  })
+
+  it('replays an interrupted Agent checkpoint when the user continues', async () => {
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    let requestBody = ''
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      requestBody = String(init?.body || '')
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Resumed from the saved checkpoint.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const checkpointId = 'assistant-interrupted-checkpoint'
+    const events: StreamEvent[] = []
+    await gateway.stream('req-resume-checkpoint', {
+      conversationId: 'conversation-resume-checkpoint',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [
+        { id: 'user-original', role: 'user', content: 'Create the project files', createdAt: new Date().toISOString() },
+        {
+          id: checkpointId,
+          role: 'assistant',
+          content: 'Created the first file.',
+          agentTrace: [
+            { type: 'tool_call', turn: 1, callId: 'write-one', toolName: 'write_file', modelToolName: 'agentbox_write_file', args: { path: 'one.ts', content: 'export {}' } },
+            { type: 'tool_result', turn: 1, callId: 'write-one', toolName: 'write_file', result: 'file written' },
+          ],
+          interruption: { reason: 'network', message: 'network disconnected', occurredAt: new Date().toISOString() },
+          createdAt: new Date().toISOString(),
+        },
+        { id: 'user-resume', role: 'user', content: '继续', createdAt: new Date().toISOString() },
+      ],
+      workingDirectory: tempDirectory,
+      resumeFromMessageId: checkpointId,
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(requestBody).toContain('从中断现场继续')
+    expect(requestBody).toContain('file written')
+    expect(requestBody).toContain('不要从头重复整个任务')
+    expect(events.some((event) => event.type === 'text-delta' && event.delta.includes('saved checkpoint'))).toBe(true)
+  })
+
   it('waits for explicit approval before executing a sensitive tool', async () => {
     vi.useFakeTimers()
     await repo.updateSettings({ mcpToolApprovalPolicy: 'always' })
@@ -406,7 +497,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     await expect(waiting).resolves.toBe(true)
   })
 
-  it('executes at most six tool turns and always emits a terminal event', async () => {
+  it('executes at most thirty tool turns by default and always emits a terminal event', async () => {
     await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
       name: 'loop_tool',
@@ -438,8 +529,47 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       reasoningEnabled: false,
     }, (event) => events.push(event))
 
-    expect(fetchCount).toBe(7)
-    expect(execute).toHaveBeenCalledTimes(6)
+    expect(fetchCount).toBe(31)
+    expect(execute).toHaveBeenCalledTimes(30)
     expect(events.some((event) => event.type === 'done' && event.finishReason === 'tool_turn_limit')).toBe(true)
+  })
+
+  it('respects a user-configured Agent tool turn limit', async () => {
+    await repo.updateSettings({ agentToolTurnLimit: 2, mcpToolApprovalPolicy: 'full-access' })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
+      name: 'configured_loop_tool',
+      modelName: 'mcp_configured_loop_tool',
+      description: 'Configured loop tool',
+      inputSchema: { type: 'object', properties: {} },
+      serverId: 'configured-loop-server',
+      serverName: 'Configured Loop',
+    }])
+    const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: 'continue',
+      isError: false,
+      serverName: 'Configured Loop',
+    })
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount += 1
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call-configured-${fetchCount}`, function: { name: 'mcp_configured_loop_tool', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    await gateway.stream('req-configured-loop-limit', {
+      conversationId: 'conversation-configured-loop-limit',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-configured-loop', role: 'user', content: 'Use configured_loop_tool repeatedly', createdAt: new Date().toISOString() }],
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(fetchCount).toBe(3)
+    expect(execute).toHaveBeenCalledTimes(2)
+    expect(events.some((event) => event.type === 'done' && event.finishReason === 'tool_turn_limit')).toBe(true)
+    await repo.updateSettings({ agentToolTurnLimit: 30 })
   })
 })

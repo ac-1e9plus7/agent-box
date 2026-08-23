@@ -361,6 +361,41 @@ describe('AppRepository business constraints and relational integrity', () => {
     expect(saved.messages[0]?.skillActivations?.[0]?.source).toBe('explicit')
   })
 
+  it('persists resumable Agent interruption checkpoints', async () => {
+    const saved = await repo.saveConversation({
+      id: 'interrupted-agent',
+      title: 'Interrupted Agent',
+      modelId: 'openrouter-auto',
+      agentMode: true,
+      workingDirectory: process.cwd(),
+      messages: [{
+        id: 'assistant-interrupted',
+        role: 'assistant',
+        content: 'Partial result',
+        interruption: {
+          reason: 'rate_limit',
+          message: 'Rate limit exceeded',
+          occurredAt: timestamp,
+          status: 429,
+          retryAfterSeconds: 5,
+        },
+        createdAt: timestamp,
+      }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+
+    expect(saved.messages[0]?.interruption).toEqual({
+      reason: 'rate_limit',
+      message: 'Rate limit exceeded',
+      occurredAt: timestamp,
+      errorCode: undefined,
+      status: 429,
+      retryAfterSeconds: 5,
+      finishReason: undefined,
+    })
+  })
+
   it('stores only a workspace path reference and never encrypts project files', async () => {
     const projectDirectory = mkdtempSync(join(tmpdir(), 'agentbox-project-boundary-'))
     const sourcePath = join(projectDirectory, 'Main.java')

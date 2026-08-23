@@ -72,6 +72,7 @@ const agentboxApi: AgentboxAPI = {
   },
   runtimes: {
     test: (kind, settings, workingDirectory?: string) => ipcRenderer.invoke(IPC_CHANNELS.runtimeTest, kind, settings, workingDirectory),
+    listCondaEnvironments: (condaExecutable: string) => ipcRenderer.invoke(IPC_CHANNELS.runtimeListCondaEnvironments, condaExecutable),
   },
   conversations: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.conversationsList),

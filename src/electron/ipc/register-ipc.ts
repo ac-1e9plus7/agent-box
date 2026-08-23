@@ -19,7 +19,7 @@ import { ChatGateway } from '../api/gateway'
 import { McpManager } from '../mcp/mcp-manager'
 import { AppRepository } from '../storage/app-repository'
 import { testIntegratedTerminalShell } from '../api/terminal-shell'
-import { testDeveloperRuntime } from '../api/runtime-environments'
+import { listCondaEnvironments, testDeveloperRuntime } from '../api/runtime-environments'
 import { normalizeDeveloperRuntimes, normalizeIntegratedTerminalShell } from '../storage/settings-schema'
 
 export function registerIpcHandlers(
@@ -147,6 +147,11 @@ export function registerIpcHandlers(
       throw new Error('工作目录无效。')
     }
     return testDeveloperRuntime(kind, normalizeDeveloperRuntimes(settings), workingDirectory)
+  })
+
+  register(IPC_CHANNELS.runtimeListCondaEnvironments, (_event, condaExecutable: string) => {
+    if (typeof condaExecutable !== 'string') throw new Error('Conda 可执行文件无效。')
+    return listCondaEnvironments(condaExecutable)
   })
 
   register(IPC_CHANNELS.conversationsList, () => repository.listConversations())

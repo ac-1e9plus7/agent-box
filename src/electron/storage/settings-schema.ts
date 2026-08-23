@@ -1,6 +1,8 @@
 import { isAbsolute } from 'node:path'
 import type { AppSettings, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, ProxyConfig, ProxyMode } from '../../shared/types'
+import { normalizeAgentToolTurnLimit } from '../../shared/agent-limits'
 import { isLoopbackUrl } from '../api/provider-policy'
+import { normalizeRuntimePathInput } from '../runtime-path'
 
 /**
  * Validates settings and fills fields introduced after vault schema v1.
@@ -41,6 +43,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (value.defaultAgentMode !== undefined && typeof value.defaultAgentMode !== 'boolean') {
     throw new Error('Invalid default agent mode')
   }
+  const agentToolTurnLimit = normalizeAgentToolTurnLimit(value.agentToolTurnLimit)
   if (value.mcpEnabled !== undefined && typeof value.mcpEnabled !== 'boolean') {
     throw new Error('Invalid MCP enabled setting')
   }
@@ -71,6 +74,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     defaultReasoningEffort:
       value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],
     defaultAgentMode: Boolean(value.defaultAgentMode),
+    agentToolTurnLimit,
     mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
     mcpToolRetrievalMode: mcpToolRetrievalMode as AppSettings['mcpToolRetrievalMode'],
     mcpToolApprovalPolicy: mcpToolApprovalPolicy as AppSettings['mcpToolApprovalPolicy'],
@@ -110,9 +114,9 @@ export function normalizeDeveloperRuntimes(value: unknown): DeveloperRuntimeSett
   }
   const python = {
     mode: pythonMode as DeveloperRuntimeSettings['python']['mode'],
-    executable: normalizeRuntimePath(value.python.executable ?? ''),
-    environment: normalizeRuntimePath(value.python.environment ?? ''),
-    condaExecutable: normalizeRuntimePath(value.python.condaExecutable ?? 'conda') || 'conda',
+    executable: normalizeRuntimePathInput(value.python.executable ?? ''),
+    environment: normalizeRuntimePathInput(value.python.environment ?? ''),
+    condaExecutable: normalizeRuntimePathInput(value.python.condaExecutable ?? 'conda') || 'conda',
   }
   if (python.mode === 'venv' && !python.environment) throw new Error('Python venv 路径不能为空。')
   if (python.mode === 'conda' && !python.environment) throw new Error('Conda 环境名称或路径不能为空。')
@@ -130,23 +134,16 @@ function normalizeRuntimeRecord<T extends { mode: 'auto' | 'custom' }>(
   const mode = String(value.mode ?? 'auto')
   if (mode !== 'auto' && mode !== 'custom') throw new Error('Invalid developer runtime mode')
   const result = { ...defaults, mode } as T
-  for (const field of fields) result[field] = normalizeRuntimePath(value[String(field)] ?? '') as T[typeof field]
+  for (const field of fields) result[field] = normalizeRuntimePathInput(value[String(field)] ?? '') as T[typeof field]
   if (mode === 'custom' && fields.every((field) => !String(result[field] || '').trim())) {
     throw new Error('自定义运行时路径不能为空。')
   }
   return result
 }
 
-function normalizeRuntimePath(value: unknown): string {
-  if (typeof value !== 'string' || value.length > 4_096 || /[\r\n\0]/.test(value)) {
-    throw new Error('Invalid runtime path')
-  }
-  return value.trim()
-}
-
 function normalizeOptionalDirectory(value: unknown, label: string): string {
   if (value === undefined || value === null || value === '') return ''
-  const directory = normalizeRuntimePath(value)
+  const directory = normalizeRuntimePathInput(value)
   if (!isAbsolute(directory)) throw new Error(`Invalid ${label}`)
   return directory
 }

@@ -17,12 +17,14 @@
 - 🛠️ **MCP (Model Context Protocol) 外部工具集成**：
   - 基于官方 MCP TypeScript SDK，支持 **Stdio** 与 **Streamable HTTP**，并兼容旧式 HTTP+SSE 服务。
   - 内置 **BM25 智能工具检索**，根据问题意图动态筛选 Top-K 工具注入上下文，防止 Token 膨胀。
-  - 支持最多 6 轮 **Agent 自主多轮执行循环**、会话级服务白名单、敏感操作审批与交互式调用卡片；审批可选择 5 分钟或永不超时，并提供明确警告的 **Full Access** 模式。
+  - **Agent 自主多轮执行循环**默认最多 30 轮，并可在设置中调整为 1–100 轮；支持会话级服务白名单、敏感操作审批与交互式调用卡片。
+  - API 限流、网络错误、输出上限或手动停止时自动保存 Agent 工具现场；可点击“从中断处继续”，也可输入 `go`、`继续`、`再次尝试` 等自然语言指令恢复原任务。
 - 💻 **跨平台 Integrated terminal shell**：
   - 自动适配 Windows PowerShell/cmd、macOS zsh/bash 与 Linux SHELL/bash/zsh/fish/sh，也可指定 Shell 可执行文件及逐行启动参数。
   - Agent 可通过受审批保护的 `agentbox_run_terminal` 执行命令；自定义 Shell 可用 `{command}` 参数模板适配不同命令行接口。
 - 📁 **会话工作目录与开发环境**：
   - 新建会话必须绑定工作目录；可复用当前、默认或最近目录，也可从侧边栏目录分组中快捷新建。终端与项目相对路径以该目录为边界。
+  - 内置工作区原生文件工具，可分段读取 UTF-8 文本，并直接创建、覆盖或追加文件；代码内容不再经过 Shell 转义，所有路径严格限制在会话工作目录内。
   - 可配置默认 JDK、Go、PHP 与 Python；Python 支持项目 `.venv`/`venv` 自动发现、系统解释器、普通 venv、Conda 环境名称/prefix 和自定义解释器。
 - 🧩 **Agent 多文件技能（Skills）系统**：
   - 采用 Markdown 规范 + **Python 3 / Shell 参考脚本** 标准，支持会话固定、`$skill-id` 显式调用、上下文自动检索和模型按需加载；回答会显示本轮实际激活的技能。
