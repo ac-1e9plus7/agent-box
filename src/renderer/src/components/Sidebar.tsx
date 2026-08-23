@@ -3,6 +3,7 @@ import type { JSX } from 'react'
 import type { Conversation } from '../types'
 import { groupConversationsByWorkspace } from '../workspace-groups'
 import { Icon } from './Icon'
+import { t } from "../../../shared/i18n"
 
 interface SidebarProps {
   activeConversationId: string
@@ -65,10 +66,10 @@ export function Sidebar({
 
   return (
     <>
-      {mobileOpen && <button className="sidebar-scrim" aria-label="关闭侧边栏" onClick={onCloseMobile} />}
+      {mobileOpen && <button className="sidebar-scrim" aria-label={t("关闭侧边栏")} onClick={onCloseMobile} />}
       <aside
         className={`sidebar ${collapsed ? 'is-collapsed' : ''} ${mobileOpen ? 'is-mobile-open' : ''}`}
-        aria-label="会话侧边栏"
+        aria-label={t("会话侧边栏")}
       >
         <div className="sidebar-drag-region" />
         <div className="sidebar-header">
@@ -76,7 +77,7 @@ export function Sidebar({
             <span className="brand-mark"><Icon name="app" size={22} /></span>
             <span className="brand-name">Agent<em>Box</em></span>
           </div>
-          <button className="icon-button sidebar-collapse" aria-label="收起侧边栏" onClick={onCollapse}>
+          <button className="icon-button sidebar-collapse" aria-label={t("收起侧边栏")} onClick={onCollapse}>
             <Icon name="sidebar" />
           </button>
         </div>
@@ -84,35 +85,35 @@ export function Sidebar({
         <div className="sidebar-actions">
           <button className="new-chat-button" onClick={onNewConversation}>
             <Icon name="plus" size={17} />
-            <span>新建对话</span>
+            <span>{t("新建对话")}</span>
             <kbd>{newConversationShortcut}</kbd>
           </button>
           <label className="search-box">
             <Icon name="search" size={16} />
             <input
-              aria-label="搜索会话"
+              aria-label={t("搜索会话")}
               onChange={(event) => onQueryChange(event.target.value)}
-              placeholder="搜索会话"
+              placeholder={t("搜索会话")}
               type="search"
               value={query}
             />
           </label>
         </div>
 
-        <nav className="conversation-nav" aria-label="会话历史">
+        <nav className="conversation-nav" aria-label={t("会话历史")}>
           {groupedConversations.map((group) => (
             <section className="conversation-group" key={group.path || group.label}>
               <div className="conversation-group-heading">
-                <h2 title={group.path || '未设置工作目录'}>
+                <h2 title={group.path || t("未设置工作目录")}>
                   <Icon name={group.path ? 'folder' : 'message'} size={12} />
                   <span>{group.label}</span>
                 </h2>
                 {group.path && (
                   <button
-                    aria-label={`在 ${group.label} 中新建对话`}
+                    aria-label={t("在 {value0} 中新建对话", { value0: group.label })}
                     className="workspace-new-chat"
                     onClick={() => onNewConversationInWorkspace(group.path!)}
-                    title={`基于 ${group.path} 新建对话`}
+                    title={t("基于 {value0} 新建对话", { value0: group.path })}
                     type="button"
                   >
                     <Icon name="plus" size={12} />
@@ -130,7 +131,7 @@ export function Sidebar({
                       {isEditing ? (
                         <input
                           autoFocus
-                          aria-label="重命名会话"
+                          aria-label={t("重命名会话")}
                           className="conversation-rename-input"
                           value={draftTitle}
                           onBlur={commitRename}
@@ -158,7 +159,7 @@ export function Sidebar({
                       {!isEditing && (
                         <button
                           className="conversation-action conversation-rename"
-                          aria-label={`重命名会话：${conversation.title}`}
+                          aria-label={t("重命名会话：{value0}", { value0: conversation.title })}
                           onClick={() => startRename(conversation)}
                         >
                           <Icon name="edit" size={13} />
@@ -166,7 +167,7 @@ export function Sidebar({
                       )}
                       <button
                         className="conversation-action conversation-delete"
-                        aria-label={`删除会话：${conversation.title}`}
+                        aria-label={t("删除会话：{value0}", { value0: conversation.title })}
                         onClick={() => onDeleteConversation(conversation.id)}
                       >
                         <Icon name="trash" size={14} />
@@ -180,7 +181,7 @@ export function Sidebar({
           {groupedConversations.length === 0 && (
             <div className="sidebar-empty">
               <Icon name="search" size={22} />
-              <p>没有找到相关会话</p>
+              <p>{t("没有找到相关会话")}</p>
             </div>
           )}
         </nav>
@@ -193,14 +194,14 @@ export function Sidebar({
                 : <Icon name="settings" size={17} />}
             </span>
             <span className="sidebar-footer-copy">
-              <strong>{userNickname?.trim() || '设置'}</strong>
-              <small>{userNickname?.trim() ? '个人资料与设置' : '模型、服务商与数据'}</small>
+              <strong>{userNickname?.trim() || t("设置")}</strong>
+              <small>{userNickname?.trim() ? t("个人资料与设置") : t("模型、服务商与数据")}</small>
             </span>
             <Icon name="chevron-right" size={15} />
           </button>
           <div className="local-data-note">
             <Icon name="lock" size={13} />
-            <span>数据已在本机加密</span>
+            <span>{t("数据已在本机加密")}</span>
           </div>
         </footer>
       </aside>

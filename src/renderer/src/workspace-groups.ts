@@ -1,4 +1,5 @@
 import type { Conversation } from './types'
+import { t } from "../../shared/i18n"
 
 export interface WorkspaceConversationGroup {
   label: string
@@ -79,6 +80,6 @@ function workspaceKey(directory?: string): string {
 }
 
 function workspaceLabel(directory?: string): string {
-  if (!directory) return '无工作目录'
+  if (!directory) return t("无工作目录")
   return directory.replaceAll('\\', '/').split('/').filter(Boolean).at(-1) || directory
 }

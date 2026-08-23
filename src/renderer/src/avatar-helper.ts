@@ -2,6 +2,7 @@ import {
   MAX_USER_AVATAR_DATA_URL_LENGTH,
   MAX_USER_AVATAR_DIMENSION,
 } from '../../shared/user-profile'
+import { t } from "../../shared/i18n"
 
 export const AVATAR_CROP_VIEWPORT_SIZE = 340
 export const MIN_AVATAR_ZOOM = 1
@@ -42,7 +43,7 @@ export function resolveAvatarCropLayout(
     || !Number.isFinite(viewportSize)
     || viewportSize <= 0
   ) {
-    throw new Error('头像图片尺寸无效。')
+    throw new Error(t("头像图片尺寸无效。"))
   }
 
   const normalizedZoom = clamp(zoom, MIN_AVATAR_ZOOM, MAX_AVATAR_ZOOM)
@@ -69,10 +70,10 @@ export function resolveAvatarCropLayout(
 
 export function validateAvatarSourceFile(file: Pick<File, 'size' | 'type'>): void {
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') {
-    throw new Error('请选择 PNG、JPEG、WebP 等常见位图文件。')
+    throw new Error(t("请选择 PNG、JPEG、WebP 等常见位图文件。"))
   }
   if (file.size <= 0 || file.size > MAX_AVATAR_SOURCE_BYTES) {
-    throw new Error('头像原图不能超过 30 MB。')
+    throw new Error(t("头像原图不能超过 30 MB。"))
   }
 }
 
@@ -86,12 +87,12 @@ export function validateAvatarSourceDimensions(width: number, height: number): v
     || height > MAX_AVATAR_SOURCE_DIMENSION
     || width * height > MAX_AVATAR_SOURCE_PIXELS
   ) {
-    throw new Error('头像原图尺寸过大或无效。')
+    throw new Error(t("头像原图尺寸过大或无效。"))
   }
 }
 
 export function resolveAvatarOutputSize(sourceSize: number): number {
-  if (!Number.isFinite(sourceSize) || sourceSize <= 0) throw new Error('头像裁剪尺寸无效。')
+  if (!Number.isFinite(sourceSize) || sourceSize <= 0) throw new Error(t("头像裁剪尺寸无效。"))
   return Math.min(MAX_USER_AVATAR_DIMENSION, Math.max(1, Math.round(sourceSize)))
 }
 
@@ -105,7 +106,7 @@ function renderAvatar(
   canvas.width = outputSize
   canvas.height = outputSize
   const context = canvas.getContext('2d')
-  if (!context) throw new Error('无法创建头像画布。')
+  if (!context) throw new Error(t("无法创建头像画布。"))
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
   context.drawImage(
@@ -146,5 +147,5 @@ export function cropAvatarImage(
     if (outputSize <= 128) break
     outputSize = Math.max(128, Math.floor(outputSize * 0.8))
   }
-  throw new Error('头像压缩后仍然过大，请换一张图片。')
+  throw new Error(t("头像压缩后仍然过大，请换一张图片。"))
 }

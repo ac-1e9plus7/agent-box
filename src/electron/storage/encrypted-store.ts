@@ -2,6 +2,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { safeStorage } from 'electron'
+import { t } from "../../shared/i18n"
 
 const KEY_BYTES = 32
 const IV_BYTES = 12
@@ -63,12 +64,15 @@ export class EncryptedStore<T extends object> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
 
     let existingState: T | undefined
+    let existingStateNeedsPersist = false
     const envelopeBuffer = await this.readIfPresent(this.vaultPath)
     if (envelopeBuffer) {
       try {
         this.masterKey = await this.loadOrCreateMasterKey()
         const envelope = JSON.parse(envelopeBuffer.toString('utf8')) as EncryptedEnvelope
-        existingState = this.validateState(this.decrypt(envelope))
+        const decryptedState = this.decrypt(envelope)
+        existingState = this.validateState(decryptedState)
+        existingStateNeedsPersist = JSON.stringify(decryptedState) !== JSON.stringify(existingState)
       } catch {
         // Will attempt legacy migration if available before throwing
       }
@@ -102,12 +106,13 @@ export class EncryptedStore<T extends object> {
 
     if (existingState) {
       this.state = existingState
+      if (existingStateNeedsPersist) await this.persist(existingState)
       return
     }
 
     if (envelopeBuffer && !this.state) {
       throw new EncryptedStoreError(
-        '无法解密本地数据。系统密钥可能已变化，或数据文件已经损坏。',
+        t("无法解密本地数据。系统密钥可能已变化，或数据文件已经损坏。"),
       )
     }
 
@@ -147,7 +152,7 @@ export class EncryptedStore<T extends object> {
   private assertSecureStorageAvailable(): void {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new EncryptedStoreError(
-        '操作系统安全存储当前不可用；为避免明文保存，应用不会加载用户数据。',
+        t("操作系统安全存储当前不可用；为避免明文保存，应用不会加载用户数据。"),
       )
     }
 
@@ -160,7 +165,7 @@ export class EncryptedStore<T extends object> {
         : undefined
     if (process.platform === 'linux' && backend === 'basic_text') {
       throw new EncryptedStoreError(
-        '当前 Linux 环境没有可用的系统密钥环；已拒绝 Electron 的 basic_text 明文后端。',
+        t("当前 Linux 环境没有可用的系统密钥环；已拒绝 Electron 的 basic_text 明文后端。"),
       )
     }
   }
@@ -177,7 +182,7 @@ export class EncryptedStore<T extends object> {
         }
         return decoded
       } catch (error) {
-        throw new EncryptedStoreError('无法使用系统安全存储解锁本地数据密钥。', {
+        throw new EncryptedStoreError(t("无法使用系统安全存储解锁本地数据密钥。"), {
           cause: error,
         })
       }
@@ -332,12 +337,12 @@ export class EncryptedStore<T extends object> {
   }
 
   private requireMasterKey(): Buffer {
-    if (!this.masterKey) throw new EncryptedStoreError('EncryptedStore 尚未初始化。')
+    if (!this.masterKey) throw new EncryptedStoreError(t("EncryptedStore 尚未初始化。"))
     return this.masterKey
   }
 
   private requireState(): T {
-    if (!this.state) throw new EncryptedStoreError('EncryptedStore 尚未初始化。')
+    if (!this.state) throw new EncryptedStoreError(t("EncryptedStore 尚未初始化。"))
     return this.state
   }
 }

@@ -9,6 +9,7 @@ import type {
   RuntimeTestResult,
 } from '../../shared/types'
 import { normalizeRuntimePathInput } from '../runtime-path'
+import { t } from "../../shared/i18n"
 
 export interface ResolvedRuntime {
   kind: DeveloperRuntimeKind
@@ -54,7 +55,7 @@ export async function testDeveloperRuntime(
     : {
         kind,
         ok: false,
-        message: `未找到可用的 ${runtimeDisplayName(kind)} 运行时，请检查自动探测结果或指定路径。`,
+        message: t("未找到可用的 {value0} 运行时，请检查自动探测结果或指定路径。", { value0: runtimeDisplayName(kind) }),
       }
 }
 
@@ -109,7 +110,7 @@ export async function listCondaEnvironments(condaExecutableInput: string): Promi
       ok: false,
       condaExecutable,
       environments: [],
-      message: detail ? `无法读取 Conda 环境：${detail}` : '未找到可用的 Conda 可执行文件。',
+      message: detail ? t("无法读取 Conda 环境：{value0}", { value0: detail }) : t("未找到可用的 Conda 可执行文件。"),
     }
   }
 
@@ -120,15 +121,15 @@ export async function listCondaEnvironments(condaExecutableInput: string): Promi
       condaExecutable,
       environments,
       message: environments.length > 0
-        ? `已发现 ${environments.length} 个 Conda 环境。`
-        : 'Conda 可用，但没有返回任何环境。',
+        ? t("已发现 {value0} 个 Conda 环境。", { value0: environments.length })
+        : t("Conda 可用，但没有返回任何环境。"),
     }
   } catch {
     return {
       ok: false,
       condaExecutable,
       environments: [],
-      message: 'Conda 返回了无法解析的环境列表。',
+      message: t("Conda 返回了无法解析的环境列表。"),
     }
   }
 }

@@ -1,4 +1,5 @@
 import type { AgentInterruption, ChatError, Message, StreamEvent } from '../../shared/types'
+import { t } from "../../shared/i18n"
 
 const EXACT_CONTINUATION_COMMANDS = new Set([
   'go',
@@ -11,18 +12,18 @@ const EXACT_CONTINUATION_COMMANDS = new Set([
   'retry please',
   'try again',
   'again',
-  '继续',
-  '继续执行',
-  '继续吧',
-  '请继续',
-  '接着来',
-  '接着做',
-  '重试',
-  '再试一次',
-  '再次尝试',
-  '重新尝试',
-  '从中断处继续',
-  '继续之前的工作',
+  t("继续"),
+  t("继续执行"),
+  t("继续吧"),
+  t("请继续"),
+  t("接着来"),
+  t("接着做"),
+  t("重试"),
+  t("再试一次"),
+  t("再次尝试"),
+  t("重新尝试"),
+  t("从中断处继续"),
+  t("继续之前的工作"),
 ])
 
 export function isAgentContinuationCommand(content: string): boolean {
@@ -68,13 +69,13 @@ export function interruptionFromStreamEvent(
 
   const finishReason = event.finishReason
   if (finishReason === 'cancelled') {
-    return { reason: 'cancelled', message: 'Agent 执行已停止，当前现场已保留。', occurredAt, finishReason }
+    return { reason: 'cancelled', message: t("Agent 执行已停止，当前现场已保留。"), occurredAt, finishReason }
   }
   if (finishReason === 'tool_turn_limit') {
-    return { reason: 'tool_turn_limit', message: 'Agent 已达到工具调用轮次上限，当前现场已保留。', occurredAt, finishReason }
+    return { reason: 'tool_turn_limit', message: t("Agent 已达到工具调用轮次上限，当前现场已保留。"), occurredAt, finishReason }
   }
   if (finishReason && ['length', 'max_tokens', 'incomplete'].includes(finishReason)) {
-    return { reason: 'output_limit', message: '模型输出达到长度限制，当前 Agent 现场已保留。', occurredAt, finishReason }
+    return { reason: 'output_limit', message: t("模型输出达到长度限制，当前 Agent 现场已保留。"), occurredAt, finishReason }
   }
   return undefined
 }
@@ -82,10 +83,10 @@ export function interruptionFromStreamEvent(
 function classifyChatError(error: ChatError): AgentInterruption['reason'] {
   const code = (error.code || '').toLocaleLowerCase()
   const message = error.message.toLocaleLowerCase()
-  if (error.status === 429 || code.includes('rate') || message.includes('限流') || message.includes('rate limit')) {
+  if (error.status === 429 || code.includes('rate') || message.includes(t("限流")) || message.includes('rate limit')) {
     return 'rate_limit'
   }
-  if (code.includes('timeout') || message.includes('超时') || message.includes('timed out')) return 'timeout'
+  if (code.includes('timeout') || message.includes(t("超时")) || message.includes('timed out')) return 'timeout'
   if (
     code.includes('network')
     || code.includes('fetch')

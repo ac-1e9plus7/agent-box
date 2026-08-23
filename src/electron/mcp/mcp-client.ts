@@ -10,6 +10,7 @@ import type {
   McpToolParameterSchema,
   McpToolResultContent,
 } from '../../shared/types'
+import { t } from "../../shared/i18n"
 
 const MAX_TOOL_LIST_PAGES = 64
 const MAX_TOOLS_PER_SERVER = 2_000
@@ -108,7 +109,7 @@ export class McpClient {
         )
       } catch (sseError) {
         throw new Error(
-          `MCP 远程连接失败（Streamable HTTP: ${errorMessage(streamableError)}；旧 SSE: ${errorMessage(sseError)}）`,
+          t("MCP 远程连接失败（Streamable HTTP: {value0}；旧 SSE: {value1}）", { value0: errorMessage(streamableError), value1: errorMessage(sseError) }),
         )
       }
     }
@@ -155,7 +156,7 @@ export class McpClient {
       const response = await client.listTools(cursor ? { cursor } : {}, { timeout: 30_000 })
       for (const raw of response.tools) {
         if (collected.length >= MAX_TOOLS_PER_SERVER) {
-          throw new Error(`MCP 服务 ${this.serverConfig.name} 返回的工具数量超过限制。`)
+          throw new Error(t("MCP 服务 {value0} 返回的工具数量超过限制。", { value0: this.serverConfig.name }))
         }
         collected.push({
           name: raw.name,
@@ -172,7 +173,7 @@ export class McpClient {
       if (!cursor) return collected
     }
 
-    throw new Error(`MCP 服务 ${this.serverConfig.name} 的工具分页超过 ${MAX_TOOL_LIST_PAGES} 页限制。`)
+    throw new Error(t("MCP 服务 {value0} 的工具分页超过 {value1} 页限制。", { value0: this.serverConfig.name, value1: MAX_TOOL_LIST_PAGES }))
   }
 
   async callTool(
@@ -215,7 +216,7 @@ export class McpClient {
   }
 
   private requireClient(): Client {
-    if (!this.client) throw new Error('MCP 客户端尚未连接。')
+    if (!this.client) throw new Error(t("MCP 客户端尚未连接。"))
     return this.client
   }
 }
@@ -304,7 +305,7 @@ function normalizeToolResult(value: unknown): McpToolExecutionResult {
   if (structuredContent) textParts.push(JSON.stringify(structuredContent))
   const joined = textParts.join('\n')
   const result = joined.length > MAX_TOOL_RESULT_CHARACTERS
-    ? `${joined.slice(0, MAX_TOOL_RESULT_CHARACTERS)}\n[结果已截断]`
+    ? t("{value0}\n[结果已截断]", { value0: joined.slice(0, MAX_TOOL_RESULT_CHARACTERS) })
     : joined
   truncated ||= result.length < joined.length
   return {

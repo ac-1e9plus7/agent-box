@@ -3,6 +3,7 @@ import { projectContext, type ProjectionMessage } from '../src/renderer/src/cont
 import type { AppSettings, ModelConfig } from '../src/shared/types'
 
 const baseSettings: AppSettings = {
+  language: 'en-US',
   theme: 'system',
   sendShortcut: 'enter',
   contextManagementMode: 'manual',

@@ -9,6 +9,7 @@ import {
   validateAvatarSourceDimensions,
 } from '../avatar-helper'
 import { Icon } from './Icon'
+import { t } from "../../../shared/i18n"
 
 interface AvatarCropDialogProps {
   onCancel: () => void
@@ -106,7 +107,7 @@ export function AvatarCropDialog({
     try {
       onComplete(cropAvatarImage(image, zoom, offset.x, offset.y))
     } catch (cropError) {
-      setError(cropError instanceof Error ? cropError.message : '头像处理失败，请重试。')
+      setError(cropError instanceof Error ? cropError.message : t("头像处理失败，请重试。"))
       setSaving(false)
     }
   }
@@ -115,16 +116,16 @@ export function AvatarCropDialog({
     <div className="avatar-crop-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.currentTarget === event.target) onCancel()
     }}>
-      <section aria-label="裁剪头像" aria-modal="true" className="avatar-crop-dialog" role="dialog">
+      <section aria-label={t("裁剪头像")} aria-modal="true" className="avatar-crop-dialog" role="dialog">
         <header className="avatar-crop-header">
-          <div><h3>裁剪头像</h3><small>拖动图片选择要展示的区域</small></div>
-          <button aria-label="关闭头像裁剪" className="icon-button" onClick={onCancel} type="button">
+          <div><h3>{t("裁剪头像")}</h3><small>{t("拖动图片选择要展示的区域")}</small></div>
+          <button aria-label={t("关闭头像裁剪")} className="icon-button" onClick={onCancel} type="button">
             <Icon name="close" size={18} />
           </button>
         </header>
         <div className="avatar-crop-body">
           <div
-            aria-label="头像裁剪区域，可拖动图片或使用方向键调整"
+            aria-label={t("头像裁剪区域，可拖动图片或使用方向键调整")}
             className={`avatar-crop-stage ${dimensions ? 'is-ready' : ''}`}
             onKeyDown={(event) => {
               const step = event.shiftKey ? 15 : 4
@@ -142,9 +143,9 @@ export function AvatarCropDialog({
             tabIndex={0}
           >
             <img
-              alt="待裁剪头像"
+              alt={t("待裁剪头像")}
               draggable={false}
-              onError={() => setError('无法读取这张图片，请换一张重试。')}
+              onError={() => setError(t("无法读取这张图片，请换一张重试。"))}
               onLoad={(event) => {
                 try {
                   const nextDimensions = {
@@ -158,7 +159,7 @@ export function AvatarCropDialog({
                   setError('')
                 } catch (loadError) {
                   setDimensions(null)
-                  setError(loadError instanceof Error ? loadError.message : '头像图片尺寸无效。')
+                  setError(loadError instanceof Error ? loadError.message : t("头像图片尺寸无效。"))
                 }
               }}
               ref={imageRef}
@@ -175,7 +176,7 @@ export function AvatarCropDialog({
           <label className="avatar-zoom-control">
             <Icon name="image" size={14} />
             <input
-              aria-label="头像缩放"
+              aria-label={t("头像缩放")}
               disabled={!dimensions}
               max={MAX_AVATAR_ZOOM}
               min={MIN_AVATAR_ZOOM}
@@ -186,13 +187,13 @@ export function AvatarCropDialog({
             />
             <Icon name="image" size={19} />
           </label>
-          <p className="avatar-crop-hint">保存后会压缩为最长边不超过 1000px 的方形图片。</p>
+          <p className="avatar-crop-hint">{t("保存后会压缩为最长边不超过 1000px 的方形图片。")}</p>
           {error && <p className="avatar-crop-error" role="alert">{error}</p>}
         </div>
         <footer className="avatar-crop-footer">
-          <button className="secondary-button" onClick={onCancel} type="button">取消</button>
+          <button className="secondary-button" onClick={onCancel} type="button">{t("取消")}</button>
           <button className="primary-button" disabled={!dimensions || Boolean(error) || saving} onClick={save} type="button">
-            {saving ? '处理中…' : '使用此头像'}
+            {saving ? t("处理中…") : t("使用此头像")}
           </button>
         </footer>
       </section>

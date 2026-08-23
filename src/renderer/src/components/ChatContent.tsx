@@ -11,6 +11,7 @@ import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
 import { formatFileSize } from '../file-helper'
 import { preprocessMarkdown } from '../markdown-helper'
 import { Icon } from './Icon'
+import { t } from "../../../shared/i18n"
 
 interface ChatContentProps {
   messages: ChatMessage[]
@@ -43,8 +44,8 @@ function compactTokenCount(value: number): string {
 }
 
 function reasoningUsageLabel(usage?: TokenUsage): string {
-  if (usage?.reasoningTokens !== undefined) return `推理 ${compactTokenCount(usage.reasoningTokens)} tokens`
-  if (usage?.totalTokens !== undefined) return `共 ${compactTokenCount(usage.totalTokens)} tokens`
+  if (usage?.reasoningTokens !== undefined) return t("推理 {value0} tokens", { value0: compactTokenCount(usage.reasoningTokens) })
+  if (usage?.totalTokens !== undefined) return t("共 {value0} tokens", { value0: compactTokenCount(usage.totalTokens) })
   return ''
 }
 
@@ -68,14 +69,14 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
   return (
     <section
       className="message-sources"
-      aria-label={safeCitations.length > 0 ? `已联网 ${safeCitations.length} 个来源` : `已搜索 ${searchRequests} 次`}
+      aria-label={safeCitations.length > 0 ? t("已联网 {value0} 个来源", { value0: safeCitations.length }) : t("已搜索 {value0} 次", { value0: searchRequests })}
     >
       <div className="message-sources-heading">
         <span>
           <Icon name="globe" size={14} />
-          {safeCitations.length > 0 ? `已联网 ${safeCitations.length} 个来源` : `已搜索 ${searchRequests} 次`}
+          {safeCitations.length > 0 ? t("已联网 {value0} 个来源", { value0: safeCitations.length }) : t("已搜索 {value0} 次", { value0: searchRequests })}
         </span>
-        {safeCitations.length > 0 && searchRequests > 0 && <small>搜索 {searchRequests} 次</small>}
+        {safeCitations.length > 0 && searchRequests > 0 && <small>{t("已搜索 {value0} 次", { value0: searchRequests })}</small>}
       </div>
       {safeCitations.length > 0 ? (
         <div className="message-source-list">
@@ -91,7 +92,7 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
           ))}
         </div>
       ) : (
-        <p className="message-sources-empty">搜索服务未返回可展示的结构化来源。</p>
+        <p className="message-sources-empty">{t("搜索服务未返回可展示的结构化来源。")}</p>
       )}
     </section>
   )
@@ -129,24 +130,21 @@ function ToolExecutionItem({
         <div className="tool-execution-status">
           {isExecuting && (
             <span className="tool-status-badge executing">
-              <i className="spinner" /> 执行中…
-            </span>
+              <i className="spinner" />{t("执行中…")}</span>
           )}
           {awaitingApproval && (
-            <span className="tool-status-badge awaiting">等待确认</span>
+            <span className="tool-status-badge awaiting">{t("等待确认")}</span>
           )}
           {execution.status === 'complete' && !isError && (
             <span className="tool-status-badge complete">
-              <Icon name="check" size={12} /> 执行完成
-            </span>
+              <Icon name="check" size={12} />{t("执行完成")}</span>
           )}
           {isDenied && (
-            <span className="tool-status-badge error"><Icon name="close" size={12} /> 已拒绝</span>
+            <span className="tool-status-badge error"><Icon name="close" size={12} />{t("已拒绝")}</span>
           )}
           {isError && !isDenied && (
             <span className="tool-status-badge error">
-              <Icon name="close" size={12} /> 执行失败
-            </span>
+              <Icon name="close" size={12} />{t("执行失败")}</span>
           )}
           <Icon className="tool-chevron" name="chevron-down" size={13} />
         </div>
@@ -155,24 +153,24 @@ function ToolExecutionItem({
         {awaitingApproval && (
           <div className="tool-approval-block" role="alert">
             <div>
-              <strong>{execution.riskLevel === 'sensitive' ? '敏感工具调用' : '工具调用确认'}</strong>
-              <span>{execution.approvalReason || '请确认是否允许执行该工具。'}</span>
+              <strong>{execution.riskLevel === 'sensitive' ? t("敏感工具调用") : t("工具调用确认")}</strong>
+              <span>{execution.approvalReason || t("请确认是否允许执行该工具。")}</span>
             </div>
             <div className="tool-approval-actions">
-              <button className="secondary-button" onClick={() => onResolveApproval?.(execution.id, false)}>拒绝</button>
-              <button className="primary-button" onClick={() => onResolveApproval?.(execution.id, true)}>允许本次</button>
+              <button className="secondary-button" onClick={() => onResolveApproval?.(execution.id, false)}>{t("拒绝")}</button>
+              <button className="primary-button" onClick={() => onResolveApproval?.(execution.id, true)}>{t("允许本次")}</button>
             </div>
           </div>
         )}
         {Boolean(argsStr && argsStr !== '{}') && (
           <div className="tool-param-block">
-            <span className="tool-block-label">输入参数:</span>
+            <span className="tool-block-label">{t("输入参数:")}</span>
             <pre><code>{argsStr}</code></pre>
           </div>
         )}
         {execution.result !== undefined && execution.result !== null && (
           <div className="tool-result-block">
-            <span className="tool-block-label">执行结果:</span>
+            <span className="tool-block-label">{t("执行结果:")}</span>
             <pre><code>{execution.result}</code></pre>
           </div>
         )}
@@ -187,7 +185,7 @@ function ToolExecutionList({ executions, onResolveApproval }: { executions?: Too
     <div className="tool-executions-container">
       <div className="tool-executions-heading">
         <Icon name="tool" size={13} />
-        <span>Agent 工具交互 {executions.length} 项</span>
+        <span>{t("Agent 工具交互 {value0} 项", { value0: executions.length })}</span>
       </div>
       <div className="tool-executions-list">
         {executions.map((exec) => (
@@ -201,19 +199,19 @@ function ToolExecutionList({ executions, onResolveApproval }: { executions?: Too
 function SkillActivationList({ activations }: { activations?: SkillActivation[] }): JSX.Element | null {
   if (!activations || activations.length === 0) return null
   const sourceLabel: Record<SkillActivation['source'], string> = {
-    automatic: '自动匹配',
-    explicit: '显式选择',
-    model: '模型按需',
+    automatic: t("自动匹配"),
+    explicit: t("显式选择"),
+    model: t("模型按需"),
   }
   return (
-    <section className="skill-activations" aria-label={`本轮已激活 ${activations.length} 个技能`}>
+    <section className="skill-activations" aria-label={t("本轮已激活 {value0} 个技能", { value0: activations.length })}>
       <div className="skill-activations-heading">
         <Icon name="sparkles" size={13} />
-        <span>本轮已激活 {activations.length} 个技能</span>
+        <span>{t("本轮已激活 {value0} 个技能", { value0: activations.length })}</span>
       </div>
       <div className="skill-activation-list">
         {activations.map((activation) => (
-          <span className="skill-activation-chip" key={activation.id} title={`技能 ID: ${activation.id}`}>
+          <span className="skill-activation-chip" key={activation.id} title={t("技能 ID: {value0}", { value0: activation.id })}>
             <strong>{activation.name}</strong>
             <small>{sourceLabel[activation.source]}</small>
           </span>
@@ -248,10 +246,8 @@ function MessageBody({ content }: { content: string }): JSX.Element {
               <div className="code-block">
               <div className="code-block-header">
                 <span>{language}</span>
-                <button aria-label="复制代码" onClick={() => navigator.clipboard?.writeText(code)}>
-                  <Icon name="copy" size={14} />
-                  复制
-                </button>
+                <button aria-label={t("复制代码")} onClick={() => navigator.clipboard?.writeText(code)}>
+                  <Icon name="copy" size={14} />{t("复制")}</button>
               </div>
                 <pre>{children}</pre>
               </div>
@@ -276,8 +272,8 @@ function EmptyConversation({
     <div className="empty-conversation">
       <div className="welcome-mark"><Icon name="app" size={34} /></div>
       <p className="welcome-eyebrow">AGENTBOX</p>
-      <h1>今天想聊点什么？</h1>
-      <p className="welcome-subtitle">选择一个灵感，或直接在下方输入你的问题。</p>
+      <h1>{t("今天想聊点什么？")}</h1>
+      <p className="welcome-subtitle">{t("选择一个灵感，或直接在下方输入你的问题。")}</p>
       <div className="suggestion-grid">
         {suggestions.map((suggestion) => (
           <button
@@ -316,7 +312,7 @@ function MessageAttachmentsView({
               key={attachment.id}
               className="message-attachment-image-button"
               onClick={() => onPreviewImage(attachment.data, attachment.name)}
-              title={`点击查看大图：${attachment.name}`}
+              title={t("点击查看大图：{value0}", { value0: attachment.name })}
             >
               <img alt={attachment.name} src={attachment.data} />
             </button>
@@ -400,9 +396,9 @@ function UserMessage({
               }}
             />
             <div className="user-edit-actions">
-              <button className="user-edit-cancel" onClick={cancelEdit}><Icon name="close" size={14} /> 取消</button>
-              <button onClick={() => void commitEdit(false)}><Icon name="check" size={14} /> 仅保存</button>
-              <button className="user-edit-regen" onClick={() => void commitEdit(true)}><Icon name="refresh" size={14} /> 保存并重新生成</button>
+              <button className="user-edit-cancel" onClick={cancelEdit}><Icon name="close" size={14} />{t("取消")}</button>
+              <button onClick={() => void commitEdit(false)}><Icon name="check" size={14} />{t("仅保存")}</button>
+              <button className="user-edit-regen" onClick={() => void commitEdit(true)}><Icon name="refresh" size={14} />{t("保存并重新生成")}</button>
             </div>
           </div>
           <div className="user-message-meta">
@@ -410,7 +406,7 @@ function UserMessage({
             <span>{formatTime(message.createdAt)}</span>
           </div>
         </div>
-        <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || '你'}>
+        <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || t("你")}>
           {userAvatar ? <img alt="" src={userAvatar} /> : <Icon name="user" size={17} />}
         </div>
       </article>
@@ -429,27 +425,27 @@ function UserMessage({
             {total > 1 && (
               <div className="message-pagination user-pagination">
                 <button
-                  aria-label="上一个提问版本"
+                  aria-label={t("上一个提问版本")}
                   className="pagination-arrow"
                   disabled={currentIndex === 0 || !canEdit}
                   onClick={() => {
                     const target = siblings[currentIndex - 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title="上一个提问版本"
+                  title={t("上一个提问版本")}
                 >
                   <Icon name="chevron-left" size={13} />
                 </button>
                 <span className="pagination-label">{currentIndex + 1} / {total}</span>
                 <button
-                  aria-label="下一个提问版本"
+                  aria-label={t("下一个提问版本")}
                   className="pagination-arrow"
                   disabled={currentIndex === total - 1 || !canEdit}
                   onClick={() => {
                     const target = siblings[currentIndex + 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title="下一个提问版本"
+                  title={t("下一个提问版本")}
                 >
                   <Icon name="chevron-right" size={13} />
                 </button>
@@ -457,8 +453,8 @@ function UserMessage({
             )}
             {canEdit && (
               <>
-                <button onClick={startEdit}><Icon name="edit" size={14} /> 编辑</button>
-                <button onClick={() => onDelete?.(message.id)} title={total > 1 ? '删除当前提问版本及后续' : '删除此提问及后续'}><Icon name="trash" size={14} /> 删除</button>
+                <button onClick={startEdit}><Icon name="edit" size={14} />{t("编辑")}</button>
+                <button onClick={() => onDelete?.(message.id)} title={total > 1 ? t("删除当前提问版本及后续") : t("删除此提问及后续")}><Icon name="trash" size={14} />{t("删除")}</button>
               </>
             )}
           </div>
@@ -468,7 +464,7 @@ function UserMessage({
           <span>{formatTime(message.createdAt)}</span>
         </div>
       </div>
-      <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || '你'}>
+      <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || t("你")}>
         {userAvatar ? <img alt="" src={userAvatar} /> : <Icon name="user" size={17} />}
       </div>
     </article>
@@ -509,9 +505,9 @@ function AssistantMessage({
       <div className="message-avatar assistant-avatar"><Icon name="app" size={18} /></div>
       <div className="message-column">
         <div className="message-meta">
-          <strong>{model?.name ?? 'AI 助手'}</strong>
+          <strong>{model?.name ?? t("AI 助手")}</strong>
           <span>{formatTime(message.createdAt)}</span>
-          {isStreaming && <span className="streaming-label"><i /> 正在生成</span>}
+          {isStreaming && <span className="streaming-label"><i />{t("正在生成")}</span>}
         </div>
         {message.reasoning && (
           <details
@@ -522,7 +518,7 @@ function AssistantMessage({
             <summary>
               <span>
                 <Icon name="brain" size={15} />
-                {isStreaming ? '思考中…' : '已思考'}
+                {isStreaming ? t("思考中…") : t("已思考")}
                 {reasoningUsage && <small>· {reasoningUsage}</small>}
               </span>
               <Icon className="reasoning-chevron" name="chevron-down" size={14} />
@@ -534,20 +530,18 @@ function AssistantMessage({
           <div className="reasoning-status" role="status">
             <Icon name="brain" size={15} />
             <span>
-              <strong>已推理 {compactTokenCount(message.usage?.reasoningTokens ?? 0)} tokens</strong>
-              <small>模型未返回可见思考过程</small>
+              <strong>{t("推理 {value0} tokens", { value0: compactTokenCount(message.usage?.reasoningTokens ?? 0) })}</strong>
+              <small>{t("模型未返回可见思考过程")}</small>
             </span>
           </div>
         )}
         <SkillActivationList activations={message.skillActivations} />
         <ToolExecutionList executions={message.toolExecutions} onResolveApproval={onResolveToolApproval} />
         {message.content.trim() ? <MessageBody content={message.content} /> : isStreaming ? (
-          <div className="typing-indicator" aria-label="正在回复"><i /><i /><i /></div>
+          <div className="typing-indicator" aria-label={t("正在回复")}><i /><i /><i /></div>
         ) : message.status !== 'error' && (message.citations?.length ?? 0) > 0 ? (
           <div className="message-empty-response" role="status">
-            <Icon name="info" size={15} />
-            模型已执行搜索并返回来源，但没有生成正文；可重试或换用更适合工具调用的模型。
-          </div>
+            <Icon name="info" size={15} />{t("模型已执行搜索并返回来源，但没有生成正文；可重试或换用更适合工具调用的模型。")}</div>
         ) : null}
         <CitationSources citations={message.citations} usage={message.usage} />
         {!isStreaming && message.status !== 'error' && Boolean(message.content.trim()) && (
@@ -555,41 +549,41 @@ function AssistantMessage({
             {total > 1 && (
               <div className="message-pagination">
                 <button
-                  aria-label="上一个回答"
+                  aria-label={t("上一个回答")}
                   className="pagination-arrow"
                   disabled={currentIndex === 0 || isStreaming}
                   onClick={() => {
                     const target = siblings[currentIndex - 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title="上一个回答"
+                  title={t("上一个回答")}
                 >
                   <Icon name="chevron-left" size={13} />
                 </button>
                 <span className="pagination-label">{currentIndex + 1} / {total}</span>
                 <button
-                  aria-label="下一个回答"
+                  aria-label={t("下一个回答")}
                   className="pagination-arrow"
                   disabled={currentIndex === total - 1 || isStreaming}
                   onClick={() => {
                     const target = siblings[currentIndex + 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title="下一个回答"
+                  title={t("下一个回答")}
                 >
                   <Icon name="chevron-right" size={13} />
                 </button>
               </div>
             )}
-            <button onClick={() => navigator.clipboard?.writeText(message.content)}><Icon name="copy" size={14} /> 复制</button>
+            <button onClick={() => navigator.clipboard?.writeText(message.content)}><Icon name="copy" size={14} />{t("复制")}</button>
             {showRegenerate && (
-              <button onClick={() => onRegenerate(message.id)}><Icon name="refresh" size={14} /> 重新生成</button>
+              <button onClick={() => onRegenerate(message.id)}><Icon name="refresh" size={14} />{t("重新生成")}</button>
             )}
             {!isStreaming && (
-              <button onClick={() => onDelete?.(message.id)} title={total > 1 ? '删除当前回答版本及后续' : '删除此回答及后续'}><Icon name="trash" size={14} /> 删除</button>
+              <button onClick={() => onDelete?.(message.id)} title={total > 1 ? t("删除当前回答版本及后续") : t("删除此回答及后续")}><Icon name="trash" size={14} />{t("删除")}</button>
             )}
             <div className="message-model-info">
-              <Icon name="app" size={14} /> {model?.name ?? message.modelId ?? '未知模型'} {message.usage?.outputTokens ? `(${message.usage.outputTokens} tokens)` : ''}
+              <Icon name="app" size={14} /> {model?.name ?? message.modelId ?? t("未知模型")} {message.usage?.outputTokens ? `(${message.usage.outputTokens} tokens)` : ''}
             </div>
           </div>
         )}
@@ -597,13 +591,11 @@ function AssistantMessage({
           <div className={`message-error${message.interruption ? ' is-resumable' : ''}`}>
             <Icon name="info" size={15} />
             <span className="message-error-copy">
-              <span>{message.error || '请求失败，请检查服务商与模型配置。'}</span>
+              <span>{message.error || t("请求失败，请检查服务商与模型配置。")}</span>
               {message.interruption && (
-                <small>
-                  已保留中断现场
-                  {message.interruption.retryAfterSeconds !== undefined
-                    ? `；建议 ${message.interruption.retryAfterSeconds} 秒后继续`
-                    : '；可从失败点继续，或重新生成整条回复'}
+                <small>{t("已保留中断现场")}{message.interruption.retryAfterSeconds !== undefined
+                    ? t("；建议 {value0} 秒后继续", { value0: message.interruption.retryAfterSeconds })
+                    : t("；可从失败点继续，或重新生成整条回复")}
                 </small>
               )}
             </span>
@@ -611,27 +603,27 @@ function AssistantMessage({
               {total > 1 && (
                 <div className="message-pagination">
                   <button
-                    aria-label="上一个回答"
+                    aria-label={t("上一个回答")}
                     className="pagination-arrow"
                     disabled={currentIndex === 0}
                     onClick={() => {
                       const target = siblings[currentIndex - 1]
                       if (target) onSwitchVersion?.(target.id)
                     }}
-                    title="上一个回答"
+                    title={t("上一个回答")}
                   >
                     <Icon name="chevron-left" size={13} />
                   </button>
                   <span className="pagination-label">{currentIndex + 1} / {total}</span>
                   <button
-                    aria-label="下一个回答"
+                    aria-label={t("下一个回答")}
                     className="pagination-arrow"
                     disabled={currentIndex === total - 1}
                     onClick={() => {
                       const target = siblings[currentIndex + 1]
                       if (target) onSwitchVersion?.(target.id)
                     }}
-                    title="下一个回答"
+                    title={t("下一个回答")}
                   >
                     <Icon name="chevron-right" size={13} />
                   </button>
@@ -641,19 +633,17 @@ function AssistantMessage({
                 <button
                   className="message-error-retry message-error-resume"
                   onClick={() => onResumeAgent(message.id)}
-                  title="保留已完成的工具结果，从中断位置继续"
+                  title={t("保留已完成的工具结果，从中断位置继续")}
                 >
-                  <Icon name="refresh" size={14} /> 从中断处继续
-                </button>
+                  <Icon name="refresh" size={14} />{t("从中断处继续")}</button>
               )}
               {showRegenerate && (
                 <button className="message-error-retry" onClick={() => onRegenerate(message.id)}>
-                  <Icon name="refresh" size={14} /> {message.interruption ? '重新生成' : '重试'}
+                  <Icon name="refresh" size={14} /> {message.interruption ? t("重新生成") : t("重试")}
                 </button>
               )}
-              <button className="message-error-retry" onClick={() => onDelete?.(message.id)} title="删除此条错误信息">
-                <Icon name="trash" size={14} /> 删除
-              </button>
+              <button className="message-error-retry" onClick={() => onDelete?.(message.id)} title={t("删除此条错误信息")}>
+                <Icon name="trash" size={14} />{t("删除")}</button>
             </div>
           </div>
         )}
@@ -740,7 +730,7 @@ export function ChatContent({
             <div className="lightbox-header">
               <span className="lightbox-title">{previewImage.name}</span>
               <button
-                aria-label="关闭预览"
+                aria-label={t("关闭预览")}
                 className="icon-button"
                 onClick={() => setPreviewImage(null)}
               >

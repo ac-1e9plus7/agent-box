@@ -1,9 +1,10 @@
 import type { Message, Skill } from '../../shared/types'
 import { tokenize } from '../mcp/tool-retriever'
+import { t } from "../../shared/i18n"
 
 const GENERIC_TERMS = new Set([
-  '一个', '一下', '这个', '那个', '什么', '怎么', '如何', '为什么', '是否', '可以',
-  '帮我', '请帮', '需要', '使用', '进行', '内容', '任务', '问题', '分析',
+  t("一个"), t("一下"), t("这个"), t("那个"), t("什么"), t("怎么"), t("如何"), t("为什么"), t("是否"), t("可以"),
+  t("帮我"), t("请帮"), t("需要"), t("使用"), t("进行"), t("内容"), t("任务"), t("问题"), t("分析"),
 ])
 
 /**

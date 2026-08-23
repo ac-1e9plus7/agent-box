@@ -23,7 +23,7 @@ import type {
 import { EncryptedStore } from './encrypted-store'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
 import { createOpenRouterAutoModel } from './default-models'
-import { DEFAULT_SKILLS } from './default-skills'
+import { DEFAULT_SKILLS, localizedDefaultSkills } from './default-skills'
 import { defaultDeveloperRuntimeSettings, normalizeAppSettings } from './settings-schema'
 import { isApiKeyOptional, isLoopbackUrl } from '../api/provider-policy'
 import { assertConversationMutationAllowed } from './vault-resource-limits'
@@ -33,6 +33,7 @@ import {
   parseStoredCitations,
   parseStoredTokenUsage,
 } from './web-metadata-schema'
+import { APP_LANGUAGES, resourceBundle, t, type AppLanguage } from '../../shared/i18n'
 
 export interface StoredProvider
   extends Omit<ProviderView, 'hasApiKey' | 'apiKeyOptional'> {
@@ -67,6 +68,7 @@ const MAX_MESSAGE_CHARACTERS = 2_000_000
 const MAX_CONVERSATION_CHARACTERS = 50_000_000
 
 const DEFAULT_SETTINGS: AppSettings = {
+  language: 'en-US',
   theme: 'system',
   sendShortcut: 'enter',
   contextManagementMode: 'manual',
@@ -91,11 +93,11 @@ const DEFAULT_SETTINGS: AppSettings = {
 export class AppRepository {
   private readonly store: EncryptedStore<VaultState>
 
-  constructor(userDataDirectory: string) {
+  constructor(userDataDirectory: string, defaultLanguage: AppLanguage = 'en-US') {
     this.store = new EncryptedStore(
       userDataDirectory,
-      createDefaultVault,
-      validateVault,
+      () => createDefaultVault(defaultLanguage),
+      (value) => validateVault(value, defaultLanguage),
     )
   }
 
@@ -114,6 +116,7 @@ export class AppRepository {
   async updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
     return this.store.mutate((draft) => {
       const next = { ...draft.settings }
+      if (patch.language !== undefined) next.language = patch.language
       if (patch.theme !== undefined) next.theme = patch.theme
       if (patch.sendShortcut !== undefined) next.sendShortcut = patch.sendShortcut
       if (patch.contextManagementMode !== undefined) {
@@ -195,7 +198,7 @@ export class AppRepository {
   async removeProvider(id: string): Promise<void> {
     return this.store.mutate((draft) => {
       if (draft.models.some((model) => model.providerId === id)) {
-        throw new Error('该供应商仍被模型使用，请先删除或迁移相关模型。')
+        throw new Error(t("该供应商仍被模型使用，请先删除或迁移相关模型。"))
       }
       draft.providers = draft.providers.filter((provider) => provider.id !== id)
     })
@@ -212,7 +215,7 @@ export class AppRepository {
   async upsertModel(input: ModelInput): Promise<ModelConfig> {
     return this.store.mutate((draft) => {
       if (!draft.providers.some((provider) => provider.id === input.providerId)) {
-        throw new Error('模型引用的供应商不存在。')
+        throw new Error(t("模型引用的供应商不存在。"))
       }
 
       const existing = input.id
@@ -255,7 +258,7 @@ export class AppRepository {
   async removeModel(id: string): Promise<void> {
     return this.store.mutate((draft) => {
       if (draft.conversations.some((conversation) => conversation.modelId === id)) {
-        throw new Error('该模型仍被会话使用，请先删除会话或切换模型。')
+        throw new Error(t("该模型仍被会话使用，请先删除会话或切换模型。"))
       }
       draft.models = draft.models.filter((model) => model.id !== id)
       if (draft.settings.defaultModelId === id) {
@@ -265,13 +268,17 @@ export class AppRepository {
   }
 
   listSkills(): Skill[] {
-    const storedSkills = this.store.read().skills ?? DEFAULT_SKILLS
+    const defaults = localizedDefaultSkills()
+    const storedSkills = this.store.read().skills ?? defaults
     const skills = storedSkills.map((skill) => {
       if (!skill.isBuiltIn) return skill
-      const currentDefault = DEFAULT_SKILLS.find((item) => item.id === skill.id)
+      const currentDefault = defaults.find((item) => item.id === skill.id)
+      const sourceDefault = DEFAULT_SKILLS.find((item) => item.id === skill.id)
       // Keep user enablement and edited instructions, while allowing built-in
-      // trigger metadata to improve across application updates.
-      return currentDefault ? { ...skill, description: currentDefault.description } : skill
+      // resources and trigger metadata to follow the selected display language.
+      return currentDefault && sourceDefault
+        ? mergeLocalizedBuiltInSkill(skill, sourceDefault, currentDefault)
+        : skill
     })
     return structuredClone(skills)
   }
@@ -282,7 +289,7 @@ export class AppRepository {
 
   async upsertSkill(input: SkillInput): Promise<Skill> {
     return this.store.mutate((draft) => {
-      const skills = draft.skills ?? structuredClone(DEFAULT_SKILLS)
+      const skills = draft.skills ?? localizedDefaultSkills()
       const existing = input.id ? skills.find((skill) => skill.id === input.id) : undefined
       const timestamp = new Date().toISOString()
       const entryFile = input.entryFile?.trim() || existing?.entryFile || 'SKILL.md'
@@ -334,7 +341,7 @@ export class AppRepository {
       if (existing) {
         draft.skills = skills.map((item) => (item.id === validated.id ? validated : item))
       } else {
-        if (skills.length >= MAX_SKILLS) throw new Error('Skill 数量已达上限。')
+        if (skills.length >= MAX_SKILLS) throw new Error(t("Skill 数量已达上限。"))
         draft.skills = [...skills, validated]
       }
       return structuredClone(validated)
@@ -343,11 +350,11 @@ export class AppRepository {
 
   async removeSkill(id: string): Promise<void> {
     return this.store.mutate((draft) => {
-      const skills = draft.skills ?? structuredClone(DEFAULT_SKILLS)
+      const skills = draft.skills ?? localizedDefaultSkills()
       const target = skills.find((skill) => skill.id === id)
       if (!target) return
       if (target.isBuiltIn) {
-        throw new Error('系统预置技能不可删除，可以选择将其停用。')
+        throw new Error(t("系统预置技能不可删除，可以选择将其停用。"))
       }
       draft.skills = skills.filter((skill) => skill.id !== id)
     })
@@ -355,9 +362,9 @@ export class AppRepository {
 
   async toggleSkill(id: string, enabled: boolean): Promise<Skill> {
     return this.store.mutate((draft) => {
-      const skills = draft.skills ?? structuredClone(DEFAULT_SKILLS)
+      const skills = draft.skills ?? localizedDefaultSkills()
       const target = skills.find((skill) => skill.id === id)
-      if (!target) throw new Error('技能不存在。')
+      if (!target) throw new Error(t("技能不存在。"))
       const updated: Skill = {
         ...target,
         enabled,
@@ -372,7 +379,7 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const current = draft.skills ?? []
       const customSkills = current.filter((skill) => !skill.isBuiltIn)
-      const nextSkills = [...structuredClone(DEFAULT_SKILLS), ...customSkills]
+      const nextSkills = [...localizedDefaultSkills(), ...customSkills]
       draft.skills = nextSkills
       return structuredClone(nextSkills)
     })
@@ -418,7 +425,7 @@ export class AppRepository {
       if (existing) {
         draft.mcpServers = servers.map((s) => (s.id === validated.id ? validated : s))
       } else {
-        if (servers.length >= MAX_MCP_SERVERS) throw new Error('MCP Server 数量已达上限。')
+        if (servers.length >= MAX_MCP_SERVERS) throw new Error(t("MCP Server 数量已达上限。"))
         draft.mcpServers = [...servers, validated]
       }
       return structuredClone(validated)
@@ -441,7 +448,7 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const servers = draft.mcpServers ?? []
       const target = servers.find((s) => s.id === id)
-      if (!target) throw new Error('MCP 服务不存在。')
+      if (!target) throw new Error(t("MCP 服务不存在。"))
       const updated: McpServerConfig = {
         ...target,
         enabled,
@@ -510,7 +517,7 @@ function buildStoredProvider(
     input.apiKey !== undefined &&
     (typeof input.apiKey !== 'string' || input.apiKey.length > 16_384)
   ) {
-    throw new Error('API Key 无效或超过长度限制。')
+    throw new Error(t("API Key 无效或超过长度限制。"))
   }
   const timestamp = new Date().toISOString()
   const normalizedBaseUrl = normalizeBaseUrl(input.baseUrl)
@@ -534,11 +541,11 @@ function buildStoredProvider(
   return provider
 }
 
-function createDefaultVault(): VaultState {
+function createDefaultVault(language: AppLanguage): VaultState {
   const timestamp = new Date().toISOString()
   return {
     schemaVersion: 1,
-    settings: structuredClone(DEFAULT_SETTINGS),
+    settings: { ...structuredClone(DEFAULT_SETTINGS), language },
     providers: [
       {
         id: 'openrouter',
@@ -555,12 +562,12 @@ function createDefaultVault(): VaultState {
     ],
     models: [createOpenRouterAutoModel(timestamp)],
     conversations: [],
-    skills: structuredClone(DEFAULT_SKILLS),
+    skills: localizedDefaultSkills(),
     mcpServers: [],
   }
 }
 
-function validateVault(value: unknown): VaultState {
+function validateVault(value: unknown, fallbackLanguage: AppLanguage): VaultState {
   if (!isRecord(value) || value.schemaVersion !== 1) {
     throw new Error('Unsupported vault schema')
   }
@@ -575,13 +582,13 @@ function validateVault(value: unknown): VaultState {
   ).map(validateConversation)
   const skills = value.skills !== undefined
     ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
-    : structuredClone(DEFAULT_SKILLS)
+    : localizedDefaultSkills()
   const mcpServers = value.mcpServers !== undefined
     ? parseStoredMcpServers(value.mcpServers)
     : []
   return {
     schemaVersion: 1,
-    settings: normalizeAppSettings(value.settings),
+    settings: normalizeAppSettings(value.settings, fallbackLanguage),
     providers,
     models,
     conversations,
@@ -719,7 +726,7 @@ function validateSkill(value: unknown): Skill {
 
   let files: SkillFile[] = []
   if (Array.isArray(value.files) && value.files.length > 0) {
-    if (value.files.length > MAX_SKILL_FILES) throw new Error('Skill 包含的文件数量超过限制')
+    if (value.files.length > MAX_SKILL_FILES) throw new Error(t("Skill 包含的文件数量超过限制"))
     files = value.files.map(validateSkillFile)
   } else if (typeof value.systemPrompt === 'string' && value.systemPrompt.trim()) {
     files = [
@@ -890,6 +897,50 @@ function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefi
       status,
     }
   })
+}
+
+function mergeLocalizedBuiltInSkill(
+  stored: Skill,
+  source: Skill,
+  localized: Skill,
+): Skill {
+  const files = stored.files.map((storedFile) => {
+    const sourceFile = source.files.find((file) => file.path === storedFile.path)
+    const localizedFile = localized.files.find((file) => file.path === storedFile.path)
+    if (
+      sourceFile
+      && localizedFile
+      && isBundledMessageValue(storedFile.content, sourceFile.content)
+    ) {
+      return { ...localizedFile }
+    }
+    return storedFile
+  })
+  const sourcePrompt = source.systemPrompt
+    || source.files.find((file) => file.path === source.entryFile)?.content
+    || source.files[0]?.content
+  const localizedPrompt = localized.systemPrompt
+    || localized.files.find((file) => file.path === localized.entryFile)?.content
+    || localized.files[0]?.content
+  const systemPrompt = sourcePrompt
+    && localizedPrompt
+    && stored.systemPrompt
+    && isBundledMessageValue(stored.systemPrompt, sourcePrompt)
+      ? localizedPrompt
+      : stored.systemPrompt
+  return {
+    ...stored,
+    name: localized.name,
+    description: localized.description,
+    files,
+    systemPrompt,
+  }
+}
+
+function isBundledMessageValue(value: string, messageKey: string): boolean {
+  return value === messageKey || APP_LANGUAGES.some((language) => (
+    resourceBundle(language)[messageKey] === value
+  ))
 }
 
 function parseStoredSkillActivations(value: unknown): SkillActivation[] | undefined {
@@ -1210,10 +1261,10 @@ function toProviderView(provider: StoredProvider): ProviderView {
 function normalizeBaseUrl(value: string): string {
   const url = new URL(value.trim())
   if (!['https:', 'http:'].includes(url.protocol)) {
-    throw new Error('供应商地址必须使用 http 或 https。')
+    throw new Error(t("供应商地址必须使用 http 或 https。"))
   }
   if (url.protocol === 'http:' && !isLoopbackUrl(url.toString())) {
-    throw new Error('远程供应商地址必须使用 HTTPS；HTTP 仅允许本机回环地址。')
+    throw new Error(t("远程供应商地址必须使用 HTTPS；HTTP 仅允许本机回环地址。"))
   }
   url.username = ''
   url.password = ''
@@ -1239,10 +1290,10 @@ function sanitizeHeaders(value: Record<string, string>): Record<string, string> 
   for (const [rawName, rawValue] of entries) {
     const name = rawName.trim()
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
-      throw new Error(`不允许使用请求头：${name}`)
+      throw new Error(t("不允许使用请求头：{value0}", { value0: name }))
     }
     if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 4_096) {
-      throw new Error(`请求头 ${name} 的值无效。`)
+      throw new Error(t("请求头 {value0} 的值无效。", { value0: name }))
     }
     output[name] = rawValue
   }
@@ -1265,10 +1316,10 @@ function sanitizeMcpHeaders(value: Record<string, string>): Record<string, strin
   for (const [rawName, rawValue] of entries) {
     const name = rawName.trim()
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
-      throw new Error(`不允许使用 MCP 请求头：${name}`)
+      throw new Error(t("不允许使用 MCP 请求头：{value0}", { value0: name }))
     }
     if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 8_192) {
-      throw new Error(`MCP 请求头 ${name} 的值无效。`)
+      throw new Error(t("MCP 请求头 {value0} 的值无效。", { value0: name }))
     }
     output[name] = rawValue
   }

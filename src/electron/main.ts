@@ -5,6 +5,7 @@ import { ChatGateway } from './api/gateway'
 import { registerIpcHandlers } from './ipc/register-ipc'
 import { McpManager } from './mcp/mcp-manager'
 import { AppRepository } from './storage/app-repository'
+import { languageFromSystemLocale, setLanguage, t } from '../shared/i18n'
 
 let mainWindow: BrowserWindow | undefined
 let repository: AppRepository | undefined
@@ -64,8 +65,11 @@ function isSafeExternalUrl(value: string): boolean {
 
 async function start(): Promise<void> {
   configureSessionSecurity()
-  repository = new AppRepository(app.getPath('userData'))
+  const systemLanguage = languageFromSystemLocale(app.getLocale())
+  setLanguage(systemLanguage)
+  repository = new AppRepository(app.getPath('userData'), systemLanguage)
   await repository.initialize()
+  setLanguage(repository.getSettings().language)
   mcpManager = new McpManager(repository)
   gateway = new ChatGateway(repository, mcpManager)
   openMainWindow()
@@ -129,23 +133,23 @@ function migrateLegacyUserDataDirectory(): void {
 }
 
 async function handleStartupFailure(error: unknown): Promise<void> {
-  const errorMessage = error instanceof Error ? error.message : '未知错误'
+  const errorMessage = error instanceof Error ? error.message : t("未知错误")
   const isDecryptionError =
-    errorMessage.includes('解密') ||
+    errorMessage.includes(t("解密")) ||
     errorMessage.includes('decrypt') ||
     errorMessage.includes('safeStorage') ||
-    errorMessage.includes('系统密钥')
+    errorMessage.includes(t("系统密钥"))
 
   const choice = dialog.showMessageBoxSync({
     type: 'warning',
-    title: 'AgentBox - 数据加载提示',
+    title: t("AgentBox - 数据加载提示"),
     message: isDecryptionError
-      ? '无法解密现有的本地数据（可能是系统凭据发生变化、数据文件损坏或迁移密钥不匹配）。'
-      : `应用启动遇到问题：${errorMessage}`,
+      ? t("无法解密现有的本地数据（可能是系统凭据发生变化、数据文件损坏或迁移密钥不匹配）。")
+      : t("应用启动遇到问题：{value0}", { value0: errorMessage }),
     detail: isDecryptionError
-      ? '您可以选择【重置并创建新数据】（现有文件将被安全备份为 .bak，应用将以初始状态启动），或选择【退出应用】以便稍后手动排查。'
-      : '您可以选择重置本地数据并重新启动，或退出应用。',
-    buttons: ['重置并创建新数据（推荐）', '退出应用'],
+      ? t("您可以选择【重置并创建新数据】（现有文件将被安全备份为 .bak，应用将以初始状态启动），或选择【退出应用】以便稍后手动排查。")
+      : t("您可以选择重置本地数据并重新启动，或退出应用。"),
+    buttons: [t("重置并创建新数据（推荐）"), t("退出应用")],
     defaultId: 0,
     cancelId: 1,
     noLink: true,
@@ -166,8 +170,8 @@ async function handleStartupFailure(error: unknown): Promise<void> {
       return
     } catch (resetError) {
       dialog.showErrorBox(
-        '重置数据失败',
-        `无法重置本地数据：${resetError instanceof Error ? resetError.message : String(resetError)}`,
+        t("重置数据失败"),
+        t("无法重置本地数据：{value0}", { value0: resetError instanceof Error ? resetError.message : String(resetError) }),
       )
     }
   }

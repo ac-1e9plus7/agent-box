@@ -22,6 +22,7 @@ import type {
   ExportBackupResult,
   Message,
 } from '../../shared/types'
+import { t } from "../../shared/i18n"
 
 const BACKUP_FORMAT = 'agentbox-backup'
 const BACKUP_FORMAT_VERSION = 1
@@ -111,7 +112,7 @@ export async function createBackupArchive(
   options: CreateBackupArchiveOptions,
 ): Promise<ExportBackupResult> {
   const input = normalizeExportBackupInput(options.input)
-  if (!isAbsolute(options.outputPath)) throw new Error('备份文件路径无效。')
+  if (!isAbsolute(options.outputPath)) throw new Error(t("备份文件路径无效。"))
 
   const outputPath = resolve(options.outputPath)
   const createdAt = options.createdAt ?? new Date()
@@ -227,22 +228,22 @@ export async function createBackupArchive(
   } catch (error) {
     outputStream.destroy()
     await rm(temporaryPath, { force: true }).catch(() => undefined)
-    throw new Error('创建备份失败，未保留不完整的 ZIP 文件。', { cause: error })
+    throw new Error(t("创建备份失败，未保留不完整的 ZIP 文件。"), { cause: error })
   }
 }
 
 export function normalizeExportBackupInput(input: ExportBackupInput): ExportBackupInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new Error('备份选项无效。')
+    throw new Error(t("备份选项无效。"))
   }
   if (input.mode !== 'shallow' && input.mode !== 'deep') {
-    throw new Error('备份模式无效。')
+    throw new Error(t("备份模式无效。"))
   }
   if (input.password !== undefined && typeof input.password !== 'string') {
-    throw new Error('备份密码无效。')
+    throw new Error(t("备份密码无效。"))
   }
   if ((input.password?.length ?? 0) > MAX_BACKUP_PASSWORD_LENGTH) {
-    throw new Error(`备份密码不能超过 ${MAX_BACKUP_PASSWORD_LENGTH} 个字符。`)
+    throw new Error(t("备份密码不能超过 {value0} 个字符。", { value0: MAX_BACKUP_PASSWORD_LENGTH }))
   }
   return {
     mode: input.mode,
@@ -288,7 +289,7 @@ async function collectWorkspaces(
     const sourcePath = conversation.workingDirectory?.trim()
     if (!sourcePath) continue
     if (!isAbsolute(sourcePath)) {
-      throw new Error(`会话“${conversation.title}”的工作目录不是有效绝对路径。`)
+      throw new Error(t("会话“{value0}”的工作目录不是有效绝对路径。", { value0: conversation.title }))
     }
 
     let resolvedPath: string
@@ -297,7 +298,7 @@ async function collectWorkspaces(
       const workspaceStats = await lstat(resolvedPath)
       if (!workspaceStats.isDirectory()) throw new Error('not a directory')
     } catch (error) {
-      throw new Error(`无法读取会话“${conversation.title}”的工作目录：${sourcePath}`, {
+      throw new Error(t("无法读取会话“{value0}”的工作目录：{value1}", { value0: conversation.title, value1: sourcePath }), {
         cause: error,
       })
     }
@@ -399,7 +400,7 @@ async function walkWorkspace(
           modifiedAt: normalizeArchiveDate(entryStats.mtime),
         })
       } else {
-        warnings.push(`已跳过无法写入 ZIP 的特殊文件：${sourcePath}`)
+        warnings.push(t("已跳过无法写入 ZIP 的特殊文件：{value0}", { value0: sourcePath }))
       }
     }
   }
@@ -462,49 +463,49 @@ function buildManifest(input: {
 
 function createBackupReadme(manifest: BackupManifest): string {
   const protection = manifest.encryption.enabled
-    ? '文件内容使用 WinZip AES-256（AE-2）加密。ZIP 标准不会加密条目名称。'
-    : '本备份未设置密码，包内所有文件均为明文。'
+    ? t("文件内容使用 WinZip AES-256（AE-2）加密。ZIP 标准不会加密条目名称。")
+    : t("本备份未设置密码，包内所有文件均为明文。")
   const workspaceSummary = manifest.workspaces.included
-    ? `深备份包含 ${manifest.workspaces.count} 个去重后的会话工作目录。`
-    : '浅备份不包含会话工作目录。'
+    ? t("深备份包含 {value0} 个去重后的会话工作目录。", { value0: manifest.workspaces.count })
+    : t("浅备份不包含会话工作目录。")
   return [
-    'AgentBox 会话备份',
+    t("AgentBox 会话备份"),
     '=================',
     '',
-    `导出时间：${manifest.createdAt}`,
-    `备份模式：${manifest.mode === 'deep' ? '深备份' : '浅备份'}`,
-    `会话数量：${manifest.conversations.count}`,
+    t("导出时间：{value0}", { value0: manifest.createdAt }),
+    t("备份模式：{value0}", { value0: manifest.mode === 'deep' ? '深备份' : '浅备份' }),
+    t("会话数量：{value0}", { value0: manifest.conversations.count }),
     protection,
     workspaceSummary,
     '',
-    '内容说明',
+    t("内容说明"),
     '--------',
-    '- manifest.json：机器可读的备份格式、模式、版本、内容计数和工作目录映射。',
-    '- conversations/index.json：会话索引。',
-    '- conversations/*.json：完整、无损的会话数据，包含所有分支、附件和 Agent 记录。',
-    '- conversations/*.md：便于直接阅读的会话文本。',
-    '- workspaces/*：仅深备份包含；符号链接以链接条目保存，不跟随到工作目录之外。',
+    t("- manifest.json：机器可读的备份格式、模式、版本、内容计数和工作目录映射。"),
+    t("- conversations/index.json：会话索引。"),
+    t("- conversations/*.json：完整、无损的会话数据，包含所有分支、附件和 Agent 记录。"),
+    t("- conversations/*.md：便于直接阅读的会话文本。"),
+    t("- workspaces/*：仅深备份包含；符号链接以链接条目保存，不跟随到工作目录之外。"),
     '',
-    '安全说明',
+    t("安全说明"),
     '--------',
-    '- 导出包不包含 API 密钥、认证凭据、Vault 主密钥或应用配置。',
-    '- JSON、Markdown 和工作目录文件在 ZIP 内都是原始明文；是否加密由导出时是否设置密码决定。',
-    '- 请把未加密备份视为敏感数据，并妥善保管密码。AgentBox 不会保存或恢复导出密码。',
+    t("- 导出包不包含 API 密钥、认证凭据、Vault 主密钥或应用配置。"),
+    t("- JSON、Markdown 和工作目录文件在 ZIP 内都是原始明文；是否加密由导出时是否设置密码决定。"),
+    t("- 请把未加密备份视为敏感数据，并妥善保管密码。AgentBox 不会保存或恢复导出密码。"),
     '',
   ].join('\n')
 }
 
 function conversationToMarkdown(conversation: Conversation): string {
   const lines = [
-    `# ${conversation.title || '未命名会话'}`,
+    `# ${conversation.title || t("未命名会话")}`,
     '',
-    `- 会话 ID：${conversation.id}`,
-    `- 模型 ID：${conversation.modelId}`,
-    `- 创建时间：${conversation.createdAt}`,
-    `- 更新时间：${conversation.updatedAt}`,
-    `- 工作目录：${conversation.workingDirectory || '无'}`,
-    `- 消息数量：${conversation.messages.length}`,
-    '- 分支说明：下方按存储顺序列出会话树中的全部分支消息；父消息 ID 用于还原分支。',
+    t("- 会话 ID：{value0}", { value0: conversation.id }),
+    t("- 模型 ID：{value0}", { value0: conversation.modelId }),
+    t("- 创建时间：{value0}", { value0: conversation.createdAt }),
+    t("- 更新时间：{value0}", { value0: conversation.updatedAt }),
+    t("- 工作目录：{value0}", { value0: conversation.workingDirectory || '无' }),
+    t("- 消息数量：{value0}", { value0: conversation.messages.length }),
+    t("- 分支说明：下方按存储顺序列出会话树中的全部分支消息；父消息 ID 用于还原分支。"),
     '',
     '---',
     '',
@@ -518,44 +519,44 @@ function conversationToMarkdown(conversation: Conversation): string {
 
 function messageToMarkdown(message: Message): string[] {
   const roleLabel = message.role === 'user'
-    ? '用户'
+    ? t("用户")
     : message.role === 'assistant'
-      ? '助手'
-      : '系统'
+      ? t("助手")
+      : t("系统")
   const lines = [
     `## ${roleLabel} · ${message.createdAt}`,
     '',
-    `- 消息 ID：${message.id}`,
-    `- 父消息 ID：${message.parentMessageId ?? '无'}`,
-    ...(message.modelId ? [`- 模型 ID：${message.modelId}`] : []),
+    t("- 消息 ID：{value0}", { value0: message.id }),
+    t("- 父消息 ID：{value0}", { value0: message.parentMessageId ?? '无' }),
+    ...(message.modelId ? [t("- 模型 ID：{value0}", { value0: message.modelId })] : []),
     '',
-    message.content || '（无正文）',
+    message.content || t("（无正文）"),
     '',
   ]
 
   if (message.reasoning) {
-    lines.push('### 思考内容', '', message.reasoning, '')
+    lines.push(t("### 思考内容"), '', message.reasoning, '')
   }
   if (message.attachments?.length) {
-    lines.push('### 附件', '')
+    lines.push(t("### 附件"), '')
     for (const attachment of message.attachments) {
       lines.push(`- ${escapeMarkdownText(attachment.name)}（${attachment.mimeType}，${attachment.size} bytes）`)
     }
-    lines.push('', '附件原始数据保存在对应的完整 JSON 文件中。', '')
+    lines.push('', t("附件原始数据保存在对应的完整 JSON 文件中。"), '')
   }
   if (message.citations?.length) {
-    lines.push('### 来源', '')
+    lines.push(t("### 来源"), '')
     for (const citation of message.citations) {
       lines.push(`- ${escapeMarkdownText(citation.title || citation.url)}：${citation.url}`)
     }
     lines.push('')
   }
   if (message.toolExecutions?.length) {
-    lines.push(`### Agent 工具记录（${message.toolExecutions.length} 项）`, '')
+    lines.push(t("### Agent 工具记录（{value0} 项）", { value0: message.toolExecutions.length }), '')
     for (const execution of message.toolExecutions) {
       lines.push(`- ${escapeMarkdownText(execution.toolName)}：${execution.status}`)
     }
-    lines.push('', '完整参数、结果与 Agent trace 保存在对应的完整 JSON 文件中。', '')
+    lines.push('', t("完整参数、结果与 Agent trace 保存在对应的完整 JSON 文件中。"), '')
   }
   lines.push('---', '')
   return lines
@@ -604,7 +605,7 @@ async function replaceFile(temporaryPath: string, outputPath: string): Promise<v
       if (error.code === 'ENOENT') return undefined
       throw error
     })
-    if (existing?.isDirectory()) throw new Error('所选备份路径是目录，无法写入 ZIP 文件。')
+    if (existing?.isDirectory()) throw new Error(t("所选备份路径是目录，无法写入 ZIP 文件。"))
     if (existing) {
       await rename(outputPath, displacedPath)
       displaced = true

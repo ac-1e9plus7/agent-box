@@ -4,6 +4,7 @@ import {
   RESERVED_SAFETY_TOKENS,
   estimateMessageTokens,
 } from '../../shared/token-estimate'
+import { t } from "../../shared/i18n"
 
 /**
  * Accepts the structural subset of a message that the projection needs. The
@@ -92,7 +93,7 @@ export function projectContext(
       canTrimOnce: false,
       trimTurnCount: 0,
       tone: 'error',
-      message: '系统提示词与最新问题已超过可用上下文。请缩短内容，或提高模型上下文窗口。',
+      message: t("系统提示词与最新问题已超过可用上下文。请缩短内容，或提高模型上下文窗口。"),
     }
   }
 
@@ -128,7 +129,7 @@ export function projectContext(
       canTrimOnce: true,
       trimTurnCount: trimCount,
       tone: 'error',
-      message: `已超出可用上下文约 ${overflow.toLocaleString('zh-CN')} tokens。手动模式不会自动删除历史；你可仅为本次请求按完整轮次裁剪。`,
+      message: t("已超出可用上下文约 {value0} tokens。手动模式不会自动删除历史；你可仅为本次请求按完整轮次裁剪。", { value0: overflow.toLocaleString('zh-CN') }),
     }
   }
 
@@ -145,6 +146,6 @@ export function projectContext(
     canTrimOnce: false,
     trimTurnCount,
     tone: 'warning',
-    message: `发送时将从最早记录开始，自动裁剪约 ${trimTurnCount} 个完整对话轮次；最新问题会保留。`,
+    message: t("发送时将从最早记录开始，自动裁剪约 {value0} 个完整对话轮次；最新问题会保留。", { value0: trimTurnCount }),
   }
 }

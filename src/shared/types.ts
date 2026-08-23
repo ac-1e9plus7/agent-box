@@ -98,6 +98,8 @@ export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'full-access'
 export type ToolApprovalTimeoutMode = 'five-minutes' | 'never'
 
 export interface AppSettings {
+  /** Persisted UI language. Missing legacy values migrate from the system locale. */
+  language: import('./i18n').AppLanguage
   theme: ThemeMode
   sendShortcut: 'enter' | 'mod-enter'
   contextManagementMode: ContextManagementMode

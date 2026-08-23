@@ -4,6 +4,7 @@ import {
   MAX_CITATION_VARIANTS_PER_STREAM,
   parseWebCitation,
 } from '../storage/web-metadata-schema'
+import { t } from "../../shared/i18n"
 
 export interface ProtocolErrorData {
   message: string
@@ -456,7 +457,7 @@ function payloadError(
   const metadata = isRecord(value.metadata) ? value.metadata : undefined
   return removeUndefined({
     message:
-      typeof value.message === 'string' ? value.message : '模型供应商返回了错误。',
+      typeof value.message === 'string' ? value.message : t("模型供应商返回了错误。"),
     code:
       typeof value.error_type === 'string'
         ? value.error_type

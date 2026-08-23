@@ -1,3 +1,5 @@
+import { t } from "../../shared/i18n"
+
 export interface SseMessage {
   event?: string
   data: string
@@ -51,7 +53,7 @@ export async function* parseSse(
           if (field === 'data') {
             dataCharacters += fieldValue.length
             if (dataCharacters > MAX_SSE_EVENT_CHARACTERS) {
-              throw new Error('供应商返回的单个流事件超过大小限制。')
+              throw new Error(t("供应商返回的单个流事件超过大小限制。"))
             }
             dataLines.push(fieldValue)
           }
@@ -61,7 +63,7 @@ export async function* parseSse(
       }
 
       if (buffer.length > MAX_SSE_EVENT_CHARACTERS) {
-        throw new Error('供应商返回的流数据行超过大小限制。')
+        throw new Error(t("供应商返回的流数据行超过大小限制。"))
       }
 
       if (done) break
@@ -73,7 +75,7 @@ export async function* parseSse(
         const fieldValue = line.slice(5).trimStart()
         dataCharacters += fieldValue.length
         if (dataCharacters > MAX_SSE_EVENT_CHARACTERS) {
-          throw new Error('供应商返回的单个流事件超过大小限制。')
+          throw new Error(t("供应商返回的单个流事件超过大小限制。"))
         }
         dataLines.push(fieldValue)
       }

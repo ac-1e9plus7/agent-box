@@ -2,6 +2,7 @@ import { ProxyAgent } from 'undici'
 import type { McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition } from '../../shared/types'
 import { AppRepository } from '../storage/app-repository'
 import { McpClient, type McpToolExecutionResult } from './mcp-client'
+import { t } from "../../shared/i18n"
 
 const MCP_SERVER_CONCURRENCY = 8
 
@@ -62,7 +63,7 @@ export class McpManager {
     signal?: AbortSignal,
   ): Promise<McpToolExecutionResult & { serverName: string }> {
     if (this.repository.getSettings().mcpEnabled === false) {
-      return { result: 'MCP 已在全局设置中停用。', isError: true, serverName: 'Unknown' }
+      return { result: t("MCP 已在全局设置中停用。"), isError: true, serverName: 'Unknown' }
     }
     const server = this.repository.getMcpServer(serverId)
     if (!server || !server.enabled) {
@@ -105,12 +106,12 @@ export class McpManager {
     try {
       const connection = await client.connect()
       const tools = await client.listTools()
-      const protocol = connection.protocolVersion ? `，协议 ${connection.protocolVersion}` : ''
+      const protocol = connection.protocolVersion ? t("，协议 {value0}", { value0: connection.protocolVersion }) : ''
       return {
         ok: true,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: tools.length,
-        message: `连接成功（${connection.transport}${protocol}，已发现 ${tools.length} 个工具）`,
+        message: t("连接成功（{value0}{value1}，已发现 {value2} 个工具）", { value0: connection.transport, value1: protocol, value2: tools.length }),
         tools,
       }
     } catch (error) {
@@ -118,7 +119,7 @@ export class McpManager {
         ok: false,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: 0,
-        message: error instanceof Error ? error.message : '连接失败',
+        message: error instanceof Error ? error.message : t("连接失败"),
       }
     } finally {
       await client.close().catch(() => undefined)

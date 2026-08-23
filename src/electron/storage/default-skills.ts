@@ -1,4 +1,5 @@
 import type { Skill } from '../../shared/types'
+import { t } from '../../shared/i18n'
 
 export const DEFAULT_SKILLS: Skill[] = [
   {
@@ -387,3 +388,20 @@ if __name__ == "__main__":
     updatedAt: '2026-08-16T00:00:00.000Z'
   }
 ]
+
+/**
+ * Materializes built-in skill metadata and Markdown assets from the active
+ * language resource bundle. DEFAULT_SKILLS remains the stable Chinese message
+ * catalog used by retrieval tests and as the resource-key source.
+ */
+export function localizedDefaultSkills(): Skill[] {
+  return DEFAULT_SKILLS.map((skill) => ({
+    ...skill,
+    name: t(skill.name),
+    description: t(skill.description),
+    files: skill.files.map((file) => (
+      file.kind === 'markdown' ? { ...file, content: t(file.content) } : { ...file }
+    )),
+    systemPrompt: skill.systemPrompt ? t(skill.systemPrompt) : skill.systemPrompt,
+  }))
+}

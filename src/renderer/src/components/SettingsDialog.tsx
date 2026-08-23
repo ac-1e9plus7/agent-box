@@ -29,6 +29,7 @@ import { formatFileSize } from '../file-helper'
 import { validateAvatarSourceFile } from '../avatar-helper'
 import { AvatarCropDialog } from './AvatarCropDialog'
 import { Icon } from './Icon'
+import { t } from '../../../shared/i18n'
 
 export interface SettingsSavePayload {
   models: ModelConfig[]
@@ -68,14 +69,14 @@ interface SettingsDialogProps {
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
-  { id: 'general', label: '通用', icon: 'settings' },
-  { id: 'runtimes', label: '开发运行时', icon: 'code' },
-  { id: 'skills', label: 'Agent 技能', icon: 'bot' },
-  { id: 'mcp', label: 'MCP 外部工具', icon: 'tool' },
-  { id: 'models', label: '模型', icon: 'sparkles' },
-  { id: 'providers', label: '服务商', icon: 'globe' },
-  { id: 'security', label: '数据与安全', icon: 'shield' },
-  { id: 'about', label: '关于', icon: 'info' }
+  { id: 'general', label: t("通用"), icon: 'settings' },
+  { id: 'runtimes', label: t("开发运行时"), icon: 'code' },
+  { id: 'skills', label: t("Agent 技能"), icon: 'bot' },
+  { id: 'mcp', label: t("MCP 外部工具"), icon: 'tool' },
+  { id: 'models', label: t("模型"), icon: 'sparkles' },
+  { id: 'providers', label: t("服务商"), icon: 'globe' },
+  { id: 'security', label: t("数据与安全"), icon: 'shield' },
+  { id: 'about', label: t("关于"), icon: 'info' }
 ]
 
 const BUILTIN_TOOL_FILTER = '__agentbox_builtin__'
@@ -192,10 +193,10 @@ function TokenStepper({
   return (
     <div className="token-stepper">
       <button
-        aria-label={`减少${ariaLabel}`}
+        aria-label={t("减少{value0}", { value0: ariaLabel })}
         disabled={value <= minimum}
         onClick={() => applyButtonStep('decrease')}
-        title="按钮按 64K 调整，并在 2ⁿ、1M、2M 等关键值停靠"
+        title={t("按钮按 64K 调整，并在 2ⁿ、1M、2M 等关键值停靠")}
         type="button"
       >
         <Icon name="minus" size={14} />
@@ -218,10 +219,10 @@ function TokenStepper({
         }}
       />
       <button
-        aria-label={`增加${ariaLabel}`}
+        aria-label={t("增加{value0}", { value0: ariaLabel })}
         disabled={value >= maximum}
         onClick={() => applyButtonStep('increase')}
-        title="按钮按 64K 调整，并在 2ⁿ、1M、2M 等关键值停靠"
+        title={t("按钮按 64K 调整，并在 2ⁿ、1M、2M 等关键值停靠")}
         type="button"
       >
         <Icon name="plus" size={14} />
@@ -260,7 +261,7 @@ function AgentTurnLimitInput({
   return (
     <label className="agent-turn-limit-control">
       <input
-        aria-label="Agent 工具调用轮次上限"
+        aria-label={t("Agent 工具调用轮次上限")}
         max={MAX_AGENT_TOOL_TURN_LIMIT}
         min={MIN_AGENT_TOOL_TURN_LIMIT}
         onBlur={commit}
@@ -275,7 +276,7 @@ function AgentTurnLimitInput({
         type="number"
         value={inputValue}
       />
-      <span>轮</span>
+      <span>{t("轮")}</span>
     </label>
   )
 }
@@ -428,7 +429,7 @@ export function SettingsDialog({
           ok: false,
           condaExecutable: preferenceDraft.developerRuntimes.python.condaExecutable,
           environments: [],
-          message: error instanceof Error ? error.message : '读取 Conda 环境失败。',
+          message: error instanceof Error ? error.message : t("读取 Conda 环境失败。"),
         })
       }).finally(() => {
         if (!cancelled) setLoadingCondaEnvironments(false)
@@ -458,7 +459,7 @@ export function SettingsDialog({
         setMcpServersList((curr) => curr.map((s) => (s.id === id ? updated : s)))
       }
     } catch (err) {
-      setMcpActionError(err instanceof Error ? err.message : '操作失败')
+      setMcpActionError(err instanceof Error ? err.message : t("操作失败"))
     }
   }
 
@@ -469,7 +470,7 @@ export function SettingsDialog({
         setMcpServersList((curr) => curr.filter((s) => s.id !== id))
       }
     } catch (err) {
-      setMcpActionError(err instanceof Error ? err.message : '删除失败')
+      setMcpActionError(err instanceof Error ? err.message : t("删除失败"))
     }
   }
 
@@ -550,7 +551,7 @@ export function SettingsDialog({
         setEditingMcpServer(null)
       }
     } catch (err) {
-      setMcpActionError(err instanceof Error ? err.message : '保存失败')
+      setMcpActionError(err instanceof Error ? err.message : t("保存失败"))
     }
   }
 
@@ -585,7 +586,7 @@ export function SettingsDialog({
         ok: false,
         latencyMs: 0,
         toolsCount: 0,
-        message: err instanceof Error ? err.message : '连接异常',
+        message: err instanceof Error ? err.message : t("连接异常"),
       })
     } finally {
       setModalTesting(false)
@@ -610,7 +611,7 @@ export function SettingsDialog({
     } catch (err) {
       setServerTestResults((curr) => ({
         ...curr,
-        [server.id]: { ok: false, latencyMs: 0, toolsCount: 0, message: err instanceof Error ? err.message : '测试异常' },
+        [server.id]: { ok: false, latencyMs: 0, toolsCount: 0, message: err instanceof Error ? err.message : t("测试异常") },
       }))
     } finally {
       setTestingServerId(null)
@@ -668,7 +669,7 @@ export function SettingsDialog({
         (tool.modelName && tool.modelName.toLowerCase().includes(q)) ||
         (tool.description && tool.description.toLowerCase().includes(q)) ||
         tool.serverName.toLowerCase().includes(q) ||
-        (tool.source === 'builtin' && '系统内置'.includes(q))
+        (tool.source === 'builtin' && t("系统内置").includes(q))
       )
     })
   }, [allExploredTools, toolExplorerServerFilter, toolExplorerSearch])
@@ -683,7 +684,7 @@ export function SettingsDialog({
       setClearConfirming(false)
       closeDialog()
     } catch (error) {
-      setClearError(error instanceof Error ? error.message : '清除失败，请重试。')
+      setClearError(error instanceof Error ? error.message : t("清除失败，请重试。"))
     } finally {
       setClearing(false)
     }
@@ -692,7 +693,7 @@ export function SettingsDialog({
   const exportBackup = async (): Promise<void> => {
     if (!onExportBackup || backupExporting) return
     if (backupPassword !== backupPasswordConfirmation) {
-      setBackupError('两次输入的备份密码不一致。')
+      setBackupError(t("两次输入的备份密码不一致。"))
       return
     }
 
@@ -710,7 +711,7 @@ export function SettingsDialog({
         setBackupResult(result)
       }
     } catch (error) {
-      setBackupError(error instanceof Error ? error.message : '导出备份失败，请重试。')
+      setBackupError(error instanceof Error ? error.message : t("导出备份失败，请重试。"))
     } finally {
       setBackupExporting(false)
     }
@@ -781,7 +782,7 @@ export function SettingsDialog({
       setAvatarInputError('')
       setAvatarCropSource(URL.createObjectURL(file))
     } catch (error) {
-      setAvatarInputError(error instanceof Error ? error.message : '无法读取头像图片。')
+      setAvatarInputError(error instanceof Error ? error.message : t("无法读取头像图片。"))
     }
   }
 
@@ -792,7 +793,7 @@ export function SettingsDialog({
       const updated = await onToggleSkill(id, enabled)
       setSkillsList((prev) => prev.map((s) => (s.id === id ? updated : s)))
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : '切换技能状态失败')
+      setSkillActionError(err instanceof Error ? err.message : t("切换技能状态失败"))
     }
   }
 
@@ -807,7 +808,7 @@ export function SettingsDialog({
       })
       setEditingSkill(null)
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : '保存技能失败')
+      setSkillActionError(err instanceof Error ? err.message : t("保存技能失败"))
     }
   }
 
@@ -818,7 +819,7 @@ export function SettingsDialog({
       await onRemoveSkill(id)
       setSkillsList((prev) => prev.filter((s) => s.id !== id))
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : '删除技能失败')
+      setSkillActionError(err instanceof Error ? err.message : t("删除技能失败"))
     }
   }
 
@@ -829,7 +830,7 @@ export function SettingsDialog({
       const reset = await onResetDefaultSkills()
       setSkillsList(reset)
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : '恢复默认技能失败')
+      setSkillActionError(err instanceof Error ? err.message : t("恢复默认技能失败"))
     }
   }
 
@@ -847,7 +848,7 @@ export function SettingsDialog({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : '导出 Zip 技能包失败')
+      setSkillActionError(err instanceof Error ? err.message : t("导出 Zip 技能包失败"))
     }
   }
 
@@ -866,7 +867,7 @@ export function SettingsDialog({
       setInstallingSkill(false)
       setSkillImportText('')
     } catch (err) {
-      setSkillImportError(err instanceof Error ? err.message : '解析或导入 Zip 技能包失败，请检查压缩包内容。')
+      setSkillImportError(err instanceof Error ? err.message : t("解析或导入 Zip 技能包失败，请检查压缩包内容。"))
     }
   }
 
@@ -880,23 +881,23 @@ export function SettingsDialog({
       const text = await file.text()
       setSkillImportText(text)
     } catch {
-      setSkillImportError('读取文件失败，请重试。')
+      setSkillImportError(t("读取文件失败，请重试。"))
     }
   }
 
   const handleImportSkillText = async (): Promise<void> => {
     setSkillImportError('')
     if (!skillImportText.trim()) {
-      setSkillImportError('请输入或粘贴技能 JSON 配置。')
+      setSkillImportError(t("请输入或粘贴技能 JSON 配置。"))
       return
     }
     try {
       const parsed = JSON.parse(skillImportText.trim())
       const items = Array.isArray(parsed) ? parsed : [parsed]
       for (const item of items) {
-        if (!item || typeof item !== 'object') throw new Error('无效的技能配置格式')
-        if (typeof item.name !== 'string' || !item.name.trim()) throw new Error('技能缺少有效名称')
-        if (typeof item.systemPrompt !== 'string' || !item.systemPrompt.trim()) throw new Error('技能缺少有效系统指令 (systemPrompt)')
+        if (!item || typeof item !== 'object') throw new Error(t("无效的技能配置格式"))
+        if (typeof item.name !== 'string' || !item.name.trim()) throw new Error(t("技能缺少有效名称"))
+        if (typeof item.systemPrompt !== 'string' || !item.systemPrompt.trim()) throw new Error(t("技能缺少有效系统指令 (systemPrompt)"))
 
         const candidate: SkillInput = {
           id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined,
@@ -921,7 +922,7 @@ export function SettingsDialog({
       setInstallingSkill(false)
       setSkillImportText('')
     } catch (err) {
-      setSkillImportError(err instanceof Error ? err.message : '解析或导入失败，请检查配置格式。')
+      setSkillImportError(err instanceof Error ? err.message : t("解析或导入失败，请检查配置格式。"))
     }
   }
 
@@ -1012,7 +1013,7 @@ export function SettingsDialog({
       ...current,
       {
         id,
-        name: '新模型',
+        name: t("新模型"),
         remoteId: '',
         providerId: providerDrafts[0]?.id ?? '',
         apiFormat: 'openai-chat-completions',
@@ -1046,7 +1047,7 @@ export function SettingsDialog({
     try {
       setRemoteModels(await onDiscoverModels(providerId))
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : '无法获取远程模型列表。')
+      setSaveError(error instanceof Error ? error.message : t("无法获取远程模型列表。"))
     } finally {
       setDiscovering(false)
     }
@@ -1091,7 +1092,7 @@ export function SettingsDialog({
       ...current,
       {
         id,
-        name: '自定义服务商',
+        name: t("自定义服务商"),
         kind: 'custom',
         baseUrl: 'https://api.example.com/v1',
         apiFormat: DEFAULT_NEW_PROVIDER_API_FORMAT,
@@ -1117,7 +1118,7 @@ export function SettingsDialog({
       ...current,
       {
         id,
-        name: 'CLIProxyAPI（本地）',
+        name: t("CLIProxyAPI（本地）"),
         kind: 'cliproxy',
         baseUrl: 'http://127.0.0.1:8317/v1',
         apiFormat: 'openai-chat-completions',
@@ -1154,7 +1155,7 @@ export function SettingsDialog({
 
   const save = async (): Promise<void> => {
     if (providersRequiringNewKey.length > 0) {
-      setSaveError(`“${providersRequiringNewKey[0]?.name ?? '服务商'}”的连接地址或类型已更改，请重新输入 API 密钥。`)
+      setSaveError(t("“{value0}”的连接地址或类型已更改，请重新输入 API 密钥。", { value0: providersRequiringNewKey[0]?.name ?? t("服务商") }))
       return
     }
     setSaving(true)
@@ -1170,7 +1171,7 @@ export function SettingsDialog({
       setApiKeyInputs({})
       closeDialog()
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : '保存失败，请检查配置后重试。')
+      setSaveError(error instanceof Error ? error.message : t("保存失败，请检查配置后重试。"))
     } finally {
       setSaving(false)
     }
@@ -1187,7 +1188,7 @@ export function SettingsDialog({
         ok: false,
         platform: 'unknown',
         latencyMs: 0,
-        message: error instanceof Error ? error.message : 'Shell 测试失败',
+        message: error instanceof Error ? error.message : t("Shell 测试失败"),
       })
     } finally {
       setTestingTerminalShell(false)
@@ -1230,7 +1231,7 @@ export function SettingsDialog({
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.currentTarget === event.target) closeDialog()
     }}>
-      <section className="settings-dialog" role="dialog" aria-modal="true" aria-label="设置">
+      <section className="settings-dialog" role="dialog" aria-modal="true" aria-label={t("设置")}>
         <aside className="settings-sidebar">
           <div className="settings-brand">
             <span className="brand-mark"><Icon name="app" size={21} /></span>
@@ -1250,7 +1251,7 @@ export function SettingsDialog({
           </nav>
           <div className="settings-secure-note">
             <Icon name="lock" size={15} />
-            <span><strong>隐私优先</strong><small>密钥与数据仅存于本机</small></span>
+            <span><strong>{t("隐私优先")}</strong><small>{t("密钥与数据仅存于本机")}</small></span>
           </div>
         </aside>
 
@@ -1258,39 +1259,39 @@ export function SettingsDialog({
           <header className="settings-header">
             <div>
               <h2>{settingsNav.find((item) => item.id === activeSection)?.label}</h2>
-              <p>{activeSection === 'general' && '调整 AgentBox 的使用偏好'}</p>
-              <p>{activeSection === 'runtimes' && '配置项目默认 JDK、Go、PHP 与 Python 环境'}</p>
-              <p>{activeSection === 'skills' && '管理、安装与自定义 Agent 智能体专业技能'}</p>
-              <p>{activeSection === 'mcp' && '连接与管理 Model Context Protocol (MCP) 外部工具服务'}</p>
-              <p>{activeSection === 'models' && '配置模型能力、上下文窗口与请求格式'}</p>
-              <p>{activeSection === 'providers' && '管理 API 端点与访问密钥'}</p>
-              <p>{activeSection === 'security' && '了解本地加密与系统安全存储'}</p>
-              <p>{activeSection === 'about' && '关于 AgentBox 与系统信息'}</p>
+              <p>{activeSection === 'general' && t("调整 AgentBox 的使用偏好")}</p>
+              <p>{activeSection === 'runtimes' && t("配置项目默认 JDK、Go、PHP 与 Python 环境")}</p>
+              <p>{activeSection === 'skills' && t("管理、安装与自定义 Agent 智能体专业技能")}</p>
+              <p>{activeSection === 'mcp' && t("连接与管理 Model Context Protocol (MCP) 外部工具服务")}</p>
+              <p>{activeSection === 'models' && t("配置模型能力、上下文窗口与请求格式")}</p>
+              <p>{activeSection === 'providers' && t("管理 API 端点与访问密钥")}</p>
+              <p>{activeSection === 'security' && t("了解本地加密与系统安全存储")}</p>
+              <p>{activeSection === 'about' && t("关于 AgentBox 与系统信息")}</p>
             </div>
-            <button className="icon-button" aria-label="关闭设置" onClick={closeDialog}><Icon name="close" /></button>
+            <button className="icon-button" aria-label={t("关闭设置")} onClick={closeDialog}><Icon name="close" /></button>
           </header>
 
           <div className="settings-content">
             {activeSection === 'general' && (
               <div className="settings-section-content narrow-settings">
                 <section className="settings-card user-profile-card">
-                  <h3>个人资料</h3>
+                  <h3>{t("个人资料")}</h3>
                   <div className="user-profile-settings">
                     <div className={`user-profile-avatar-preview ${preferenceDraft.userAvatar ? 'has-image' : ''}`}>
                       {preferenceDraft.userAvatar
-                        ? <img alt="当前头像" src={preferenceDraft.userAvatar} />
+                        ? <img alt={t("当前头像")} src={preferenceDraft.userAvatar} />
                         : <Icon name="user" size={28} />}
                     </div>
                     <div className="user-profile-fields">
                       <label>
-                        <FieldLabel hint={`最多 ${MAX_USER_NICKNAME_LENGTH} 个字符，可留空`}>昵称</FieldLabel>
+                        <FieldLabel hint={t("最多 {value0} 个字符，可留空", { value0: MAX_USER_NICKNAME_LENGTH })}>{t("昵称")}</FieldLabel>
                         <input
                           maxLength={MAX_USER_NICKNAME_LENGTH}
                           onChange={(event) => setPreferenceDraft((current) => ({
                             ...current,
                             userNickname: event.target.value,
                           }))}
-                          placeholder="你希望显示的名字"
+                          placeholder={t("你希望显示的名字")}
                           type="text"
                           value={preferenceDraft.userNickname ?? ''}
                         />
@@ -1298,7 +1299,7 @@ export function SettingsDialog({
                       <div className="user-profile-avatar-actions">
                         <label className="secondary-button">
                           <Icon name="image" size={14} />
-                          {preferenceDraft.userAvatar ? '更换头像' : '选择头像'}
+                          {preferenceDraft.userAvatar ? t("更换头像") : t("选择头像")}
                           <input
                             accept="image/*"
                             onChange={(event) => {
@@ -1313,23 +1314,33 @@ export function SettingsDialog({
                             className="secondary-button"
                             onClick={() => setPreferenceDraft((current) => ({ ...current, userAvatar: '' }))}
                             type="button"
-                          >
-                            移除
-                          </button>
+                          >{t("移除")}</button>
                         )}
                       </div>
                     </div>
                   </div>
                   <p className="user-profile-note">
-                    <Icon name="shield" size={13} />
-                    昵称与头像仅用于本地界面展示，不会加入任何提示词或发送给模型。
-                  </p>
+                    <Icon name="shield" size={13} />{t("昵称与头像仅用于本地界面展示，不会加入任何提示词或发送给模型。")}</p>
                   {avatarInputError && <p className="user-profile-error" role="alert">{avatarInputError}</p>}
                 </section>
                 <section className="settings-card">
-                  <h3>外观与行为</h3>
+                  <h3>{t("外观与行为")}</h3>
                   <div className="settings-row">
-                    <div><strong>主题</strong><small>跟随系统或使用固定主题</small></div>
+                    <div><strong>{t('language.settingLabel')}</strong><small>{t('language.settingHint')}</small></div>
+                    <select
+                      aria-label={t('language.settingLabel')}
+                      value={preferenceDraft.language}
+                      onChange={(event) => setPreferenceDraft((current) => ({
+                        ...current,
+                        language: event.target.value as AppPreferences['language']
+                      }))}
+                    >
+                      <option value="zh-CN">{t("简体中文")}</option>
+                      <option value="en-US">English</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <div><strong>{t("主题")}</strong><small>{t("跟随系统或使用固定主题")}</small></div>
                     <div className="segmented-control">
                       {(['system', 'light', 'dark'] as const).map((theme) => (
                         <button
@@ -1337,36 +1348,36 @@ export function SettingsDialog({
                           key={theme}
                           onClick={() => setPreferenceDraft((current) => ({ ...current, theme }))}
                         >
-                          {theme === 'system' ? '跟随系统' : theme === 'light' ? '浅色' : '深色'}
+                          {theme === 'system' ? t("跟随系统") : theme === 'light' ? t("浅色") : t("深色")}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div className="settings-row">
-                    <div><strong>新会话默认 Agent 模式</strong><small>新建对话时默认开启智能体模式与技能注入</small></div>
+                    <div><strong>{t("新会话默认 Agent 模式")}</strong><small>{t("新建对话时默认开启智能体模式与技能注入")}</small></div>
                     <SettingsToggle
                       checked={Boolean(preferenceDraft.defaultAgentMode)}
-                      label="新会话默认 Agent 模式"
+                      label={t("新会话默认 Agent 模式")}
                       onChange={(defaultAgentMode) => setPreferenceDraft((current) => ({ ...current, defaultAgentMode }))}
                     />
                   </div>
                   <div className="settings-row">
-                    <div><strong>Agent 工具调用轮次</strong><small>范围 1–100，默认 {DEFAULT_AGENT_TOOL_TURN_LIMIT}；提高上限会增加耗时和 API 费用</small></div>
+                    <div><strong>{t("Agent 工具调用轮次")}</strong><small>{t("范围 1–100，默认 {value0}；提高上限会增加耗时和 API 费用", { value0: DEFAULT_AGENT_TOOL_TURN_LIMIT })}</small></div>
                     <AgentTurnLimitInput
                       onChange={(agentToolTurnLimit) => setPreferenceDraft((current) => ({ ...current, agentToolTurnLimit }))}
                       value={preferenceDraft.agentToolTurnLimit ?? DEFAULT_AGENT_TOOL_TURN_LIMIT}
                     />
                   </div>
                   <div className="settings-row">
-                    <div><strong>新会话默认思考</strong><small>支持推理的模型将自动开启</small></div>
+                    <div><strong>{t("新会话默认思考")}</strong><small>{t("支持推理的模型将自动开启")}</small></div>
                     <SettingsToggle
                       checked={preferenceDraft.defaultReasoningEnabled}
-                      label="新会话默认思考"
+                      label={t("新会话默认思考")}
                       onChange={(defaultReasoningEnabled) => setPreferenceDraft((current) => ({ ...current, defaultReasoningEnabled }))}
                     />
                   </div>
                   <div className="settings-row">
-                    <div><strong>新模型思考强度</strong><small>添加模型时作为默认初始值，可在模型页单独调整</small></div>
+                    <div><strong>{t("新模型思考强度")}</strong><small>{t("添加模型时作为默认初始值，可在模型页单独调整")}</small></div>
                     <select
                       value={preferenceDraft.defaultReasoningEffort}
                       onChange={(event) => setPreferenceDraft((current) => ({
@@ -1374,22 +1385,22 @@ export function SettingsDialog({
                         defaultReasoningEffort: event.target.value as AppPreferences['defaultReasoningEffort']
                       }))}
                     >
-                      <option value="minimal">极简</option>
-                      <option value="low">低</option>
-                      <option value="medium">中</option>
-                      <option value="high">高</option>
-                      <option value="xhigh">很高</option>
-                      <option value="max">最高</option>
+                      <option value="minimal">{t("极简")}</option>
+                      <option value="low">{t("低")}</option>
+                      <option value="medium">{t("中")}</option>
+                      <option value="high">{t("高")}</option>
+                      <option value="xhigh">{t("很高")}</option>
+                      <option value="max">{t("最高")}</option>
                     </select>
                   </div>
                 </section>
                 <section className="settings-card">
-                  <h3>输入</h3>
+                  <h3>{t("输入")}</h3>
                   <div className="settings-row">
-                    <div><strong>按 Enter 发送</strong><small>关闭后使用 ⌘/Ctrl + Enter 发送</small></div>
+                    <div><strong>{t("按 Enter 发送")}</strong><small>{t("关闭后使用 ⌘/Ctrl + Enter 发送")}</small></div>
                     <SettingsToggle
                       checked={preferenceDraft.sendShortcut === 'enter'}
-                      label="按 Enter 发送"
+                      label={t("按 Enter 发送")}
                       onChange={(sendOnEnter) => setPreferenceDraft((current) => ({
                         ...current,
                         sendShortcut: sendOnEnter ? 'enter' : 'mod-enter'
@@ -1397,16 +1408,16 @@ export function SettingsDialog({
                     />
                   </div>
                   <label className="system-prompt-field">
-                    <FieldLabel hint="每次请求时添加，可留空">系统提示词</FieldLabel>
+                    <FieldLabel hint={t("每次请求时添加，可留空")}>{t("系统提示词")}</FieldLabel>
                     <textarea
-                      placeholder="例如：请始终使用简体中文回答…"
+                      placeholder={t("例如：请始终使用简体中文回答…")}
                       rows={5}
                       value={preferenceDraft.systemPrompt}
                       onChange={(event) => setPreferenceDraft((current) => ({ ...current, systemPrompt: event.target.value }))}
                     />
                   </label>
                   <div className="settings-row" style={{ marginTop: '16px' }}>
-                    <div><strong>自动命名模型</strong><small>对话产生时自动生成标题所用的模型</small></div>
+                    <div><strong>{t("自动命名模型")}</strong><small>{t("对话产生时自动生成标题所用的模型")}</small></div>
                     <select
                       value={preferenceDraft.titleGenerationModelId ?? ''}
                       onChange={(event) => setPreferenceDraft((current) => ({
@@ -1414,7 +1425,7 @@ export function SettingsDialog({
                         titleGenerationModelId: event.target.value === '' ? undefined : event.target.value
                       }))}
                     >
-                      <option value="">跟随当前会话模型</option>
+                      <option value="">{t("跟随当前会话模型")}</option>
                       {models.map((model) => (
                         <option key={model.id} value={model.id}>{model.name}</option>
                       ))}
@@ -1422,11 +1433,11 @@ export function SettingsDialog({
                   </div>
                 </section>
                 <section className="settings-card">
-                  <h3>默认工作目录</h3>
+                  <h3>{t("默认工作目录")}</h3>
                   <div className="settings-row workspace-default-row">
                     <div>
-                      <strong>默认工作目录</strong>
-                      <small>在新建对话面板中作为快捷选项；仍可复用已有目录或另选目录</small>
+                      <strong>{t("默认工作目录")}</strong>
+                      <small>{t("在新建对话面板中作为快捷选项；仍可复用已有目录或另选目录")}</small>
                     </div>
                     <div className="workspace-default-actions">
                       <button
@@ -1437,21 +1448,20 @@ export function SettingsDialog({
                         }}
                         type="button"
                       >
-                        <Icon name="folder" size={14} /> 选择目录
-                      </button>
+                        <Icon name="folder" size={14} />{t("选择目录")}</button>
                       {preferenceDraft.defaultWorkingDirectory && (
-                        <button className="icon-button" aria-label="清除默认工作目录" onClick={() => setPreferenceDraft((current) => ({ ...current, defaultWorkingDirectory: '' }))}>
+                        <button className="icon-button" aria-label={t("清除默认工作目录")} onClick={() => setPreferenceDraft((current) => ({ ...current, defaultWorkingDirectory: '' }))}>
                           <Icon name="close" size={13} />
                         </button>
                       )}
                     </div>
                   </div>
                   <p className="workspace-default-path" title={preferenceDraft.defaultWorkingDirectory}>
-                    {preferenceDraft.defaultWorkingDirectory || '未设置；新建对话时需要选择工作目录'}
+                    {preferenceDraft.defaultWorkingDirectory || t("未设置；新建对话时需要选择工作目录")}
                   </p>
                 </section>
                 <section className="settings-card context-policy-card">
-                  <h3>上下文管理</h3>
+                  <h3>{t("上下文管理")}</h3>
                   <div className="context-policy-options">
                     <button
                       className={preferenceDraft.contextManagementMode === 'manual' ? 'is-active' : ''}
@@ -1459,8 +1469,8 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>手动管理 <em>默认</em></strong>
-                        <small>保留全部历史。超过模型可用上下文时会阻止发送，由你调整会话或上下文窗口。</small>
+                        <strong>{t("手动管理")}<em>{t("默认")}</em></strong>
+                        <small>{t("保留全部历史。超过模型可用上下文时会阻止发送，由你调整会话或上下文窗口。")}</small>
                       </span>
                     </button>
                     <button
@@ -1469,8 +1479,8 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>自动裁剪</strong>
-                        <small>超限时从最早的对话开始，按完整的用户＋助手轮次裁剪；系统提示词与最新问题始终保留。</small>
+                        <strong>{t("自动裁剪")}</strong>
+                        <small>{t("超限时从最早的对话开始，按完整的用户＋助手轮次裁剪；系统提示词与最新问题始终保留。")}</small>
                       </span>
                     </button>
                   </div>
@@ -1487,8 +1497,8 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>自动选择 <em>推荐</em></strong>
-                        <small>Windows 依次尝试 PowerShell 7、Windows PowerShell、cmd；macOS/Linux 优先使用 SHELL，再尝试 zsh、bash、fish 或 sh。</small>
+                        <strong>{t("自动选择")}<em>{t("推荐")}</em></strong>
+                        <small>{t("Windows 依次尝试 PowerShell 7、Windows PowerShell、cmd；macOS/Linux 优先使用 SHELL，再尝试 zsh、bash、fish 或 sh。")}</small>
                       </span>
                     </button>
                     <button
@@ -1500,18 +1510,18 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>指定 Shell</strong>
-                        <small>使用可执行文件名或绝对路径，并可逐行添加启动参数。</small>
+                        <strong>{t("指定 Shell")}</strong>
+                        <small>{t("使用可执行文件名或绝对路径，并可逐行添加启动参数。")}</small>
                       </span>
                     </button>
                   </div>
                   {preferenceDraft.integratedTerminalShell.mode === 'custom' && (
                     <div className="terminal-shell-fields">
                       <label className="system-prompt-field">
-                        <FieldLabel hint="例如：pwsh.exe、C:\Program Files\PowerShell\7\pwsh.exe、/bin/zsh、/usr/bin/fish">Shell 可执行文件</FieldLabel>
+                        <FieldLabel hint={t("例如：pwsh.exe、C:\\Program Files\\PowerShell\\7\\pwsh.exe、/bin/zsh、/usr/bin/fish")}>{t("Shell 可执行文件")}</FieldLabel>
                         <input
                           className="mono-input"
-                          placeholder="Shell 可执行文件名或绝对路径"
+                          placeholder={t("Shell 可执行文件名或绝对路径")}
                           value={preferenceDraft.integratedTerminalShell.executable}
                           onChange={(event) => setPreferenceDraft((current) => ({
                             ...current,
@@ -1520,10 +1530,10 @@ export function SettingsDialog({
                         />
                       </label>
                       <label className="system-prompt-field">
-                        <FieldLabel hint="每行一个参数。已知 Shell 会自动添加命令参数；其他 Shell 可使用 {command} 占位符。">启动参数</FieldLabel>
+                        <FieldLabel hint={t("每行一个参数。已知 Shell 会自动添加命令参数；其他 Shell 可使用 {command} 占位符。")}>{t("启动参数")}</FieldLabel>
                         <textarea
                           className="mono-input terminal-shell-args"
-                          placeholder={'例如：\n-NoLogo\n-NoProfile'}
+                          placeholder={t("例如：\n-NoLogo\n-NoProfile")}
                           value={preferenceDraft.integratedTerminalShell.args.join('\n')}
                           onChange={(event) => setPreferenceDraft((current) => ({
                             ...current,
@@ -1536,7 +1546,7 @@ export function SettingsDialog({
                       </label>
                     </div>
                   )}
-                  <p className="settings-card-note">Agent 调用集成终端时使用此 Shell；默认安全策略下，每条命令执行前都需要审批。</p>
+                  <p className="settings-card-note">{t("Agent 调用集成终端时使用此 Shell；默认安全策略下，每条命令执行前都需要审批。")}</p>
                   <div className="terminal-shell-test-row">
                     <button
                       className="secondary-button"
@@ -1544,7 +1554,7 @@ export function SettingsDialog({
                       onClick={() => void testTerminalShell()}
                       type="button"
                     >
-                      <Icon name="tool" size={14} /> {testingTerminalShell ? '测试中…' : '测试 Shell'}
+                      <Icon name="tool" size={14} /> {testingTerminalShell ? t("测试中…") : t("测试 Shell")}
                     </button>
                     {terminalShellTest && (
                       <span className={terminalShellTest.ok ? 'is-success' : 'is-error'}>
@@ -1555,7 +1565,7 @@ export function SettingsDialog({
                   </div>
                 </section>
                 <section className="settings-card context-policy-card">
-                  <h3>网络代理</h3>
+                  <h3>{t("网络代理")}</h3>
                   <div className="context-policy-options">
                     <button
                       className={preferenceDraft.proxy.mode === 'off' ? 'is-active' : ''}
@@ -1566,8 +1576,8 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>关闭 <em>默认</em></strong>
-                        <small>直连所有供应商，不经过代理。</small>
+                        <strong>{t("关闭")}<em>{t("默认")}</em></strong>
+                        <small>{t("直连所有供应商，不经过代理。")}</small>
                       </span>
                     </button>
                     <button
@@ -1579,17 +1589,17 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>自定义代理</strong>
-                        <small>转发所有模型请求；本地代理可用 http，远程代理请使用 https。</small>
+                        <strong>{t("自定义代理")}</strong>
+                        <small>{t("转发所有模型请求；本地代理可用 http，远程代理请使用 https。")}</small>
                       </span>
                     </button>
                   </div>
                   {preferenceDraft.proxy.mode === 'custom' && (
                     <label className="system-prompt-field">
-                      <FieldLabel hint="支持 http://（仅本机）与 https://，可在地址中包含用户名密码">代理地址</FieldLabel>
+                      <FieldLabel hint={t("支持 http://（仅本机）与 https://，可在地址中包含用户名密码")}>{t("代理地址")}</FieldLabel>
                       <input
                         className="mono-input"
-                        placeholder="例如：http://127.0.0.1:7890"
+                        placeholder={t("例如：http://127.0.0.1:7890")}
                         value={preferenceDraft.proxy.url}
                         onChange={(event) => setPreferenceDraft((current) => ({
                           ...current,
@@ -1605,8 +1615,8 @@ export function SettingsDialog({
             {activeSection === 'runtimes' && (
               <div className="settings-section-content runtime-settings-panel">
                 <section className="settings-card">
-                  <h3>运行时解析规则</h3>
-                  <p className="runtime-intro">自动模式优先使用当前会话工作目录中的环境，再回退到系统环境变量与 PATH。配置会注入 Integrated terminal，并用于代码执行工具。</p>
+                  <h3>{t("运行时解析规则")}</h3>
+                  <p className="runtime-intro">{t("自动模式优先使用当前会话工作目录中的环境，再回退到系统环境变量与 PATH。配置会注入 Integrated terminal，并用于代码执行工具。")}</p>
                 </section>
 
                 {(['jdk', 'go', 'php'] as const).map((kind) => {
@@ -1616,7 +1626,7 @@ export function SettingsDialog({
                   return (
                     <section className="settings-card runtime-card" key={kind}>
                       <div className="runtime-card-header">
-                        <div><h3>{label}</h3><small>{kind === 'jdk' ? '提供 JAVA_HOME 和 java' : kind === 'go' ? '提供 go 与可选 GOROOT' : '提供 php CLI'}</small></div>
+                        <div><h3>{label}</h3><small>{kind === 'jdk' ? t("提供 JAVA_HOME 和 java") : kind === 'go' ? t("提供 go 与可选 GOROOT") : t("提供 php CLI")}</small></div>
                         <div className="segmented-control">
                           {(['auto', 'custom'] as const).map((mode) => (
                             <button
@@ -1630,7 +1640,7 @@ export function SettingsDialog({
                                 }
                               }))}
                             >
-                              {mode === 'auto' ? '自动' : '指定'}
+                              {mode === 'auto' ? t("自动") : t("指定")}
                             </button>
                           ))}
                         </div>
@@ -1638,47 +1648,45 @@ export function SettingsDialog({
                       {runtime.mode === 'custom' && (
                         <div className="runtime-fields">
                           {kind === 'jdk' && (
-                            <label><FieldLabel hint="JDK 根目录，需包含 bin/java">JAVA_HOME</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.jdk.home} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.jdk.home); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
+                            <label><FieldLabel hint={t("JDK 根目录，需包含 bin/java")}>JAVA_HOME</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.jdk.home} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.jdk.home); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
                           )}
                           {kind === 'go' && (
                             <>
-                              <label><FieldLabel hint="go 或 go.exe 的路径；留空时使用 GOROOT/bin/go">Go 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.go.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, executable: event.target.value } } }))} /></label>
-                              <label><FieldLabel hint="可选 Go 安装根目录">GOROOT</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.go.root} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.go.root); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
+                              <label><FieldLabel hint={t("go 或 go.exe 的路径；留空时使用 GOROOT/bin/go")}>{t("Go 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.go.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, executable: event.target.value } } }))} /></label>
+                              <label><FieldLabel hint={t("可选 Go 安装根目录")}>GOROOT</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.go.root} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.go.root); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
                             </>
                           )}
                           {kind === 'php' && (
-                            <label><FieldLabel hint="php 或 php.exe 的可执行文件路径">PHP 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.php.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, php: { ...current.developerRuntimes.php, executable: event.target.value } } }))} /></label>
+                            <label><FieldLabel hint={t("php 或 php.exe 的可执行文件路径")}>{t("PHP 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.php.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, php: { ...current.developerRuntimes.php, executable: event.target.value } } }))} /></label>
                           )}
                         </div>
                       )}
-                      <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === kind} onClick={() => void testRuntime(kind)}>{testingRuntime === kind ? '检测中…' : `检测 ${label}`}</button>{result && <span className={result.ok ? 'is-ok' : 'is-error'}>{result.message}</span>}</div>
+                      <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === kind} onClick={() => void testRuntime(kind)}>{testingRuntime === kind ? t("检测中…") : t("检测 {value0}", { value0: label })}</button>{result && <span className={result.ok ? 'is-ok' : 'is-error'}>{result.message}</span>}</div>
                     </section>
                   )
                 })}
 
                 <section className="settings-card runtime-card">
-                  <div className="runtime-card-header"><div><h3>Python</h3><small>支持项目 .venv、普通 venv、Conda 与自定义解释器</small></div></div>
+                  <div className="runtime-card-header"><div><h3>Python</h3><small>{t("支持项目 .venv、普通 venv、Conda 与自定义解释器")}</small></div></div>
                   <div className="python-runtime-modes">
                     {(['auto', 'system', 'venv', 'conda', 'custom'] as const).map((mode) => (
                       <button className={preferenceDraft.developerRuntimes.python.mode === mode ? 'is-active' : ''} key={mode} onClick={() => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, mode } } }))}>
-                        {mode === 'auto' ? '自动' : mode === 'system' ? '系统' : mode === 'venv' ? 'venv' : mode === 'conda' ? 'Conda' : '指定解释器'}
+                        {mode === 'auto' ? t("自动") : mode === 'system' ? t("系统") : mode === 'venv' ? 'venv' : mode === 'conda' ? 'Conda' : t("指定解释器")}
                       </button>
                     ))}
                   </div>
                   <div className="runtime-fields">
-                    {preferenceDraft.developerRuntimes.python.mode === 'auto' && <p className="runtime-mode-hint">依次检测工作目录的 .venv/venv、VIRTUAL_ENV、CONDA_PREFIX，再回退到系统 Python 3。</p>}
-                    {preferenceDraft.developerRuntimes.python.mode === 'system' && <label><FieldLabel hint="可选；留空时自动尝试 python3/python/py -3">系统 Python 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
-                    {preferenceDraft.developerRuntimes.python.mode === 'venv' && <label><FieldLabel hint="venv 根目录，Windows 使用 Scripts/python.exe，macOS/Linux 使用 bin/python">venv 路径</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.python.environment); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: path } } })) }}><Icon name="folder" size={13} /></button></div></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'auto' && <p className="runtime-mode-hint">{t("依次检测工作目录的 .venv/venv、VIRTUAL_ENV、CONDA_PREFIX，再回退到系统 Python 3。")}</p>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'system' && <label><FieldLabel hint={t("可选；留空时自动尝试 python3/python/py -3")}>{t("系统 Python 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'venv' && <label><FieldLabel hint={t("venv 根目录，Windows 使用 Scripts/python.exe，macOS/Linux 使用 bin/python")}>{t("venv 路径")}</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.python.environment); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: path } } })) }}><Icon name="folder" size={13} /></button></div></label>}
                     {preferenceDraft.developerRuntimes.python.mode === 'conda' && (
                       <>
                         <label>
-                          <FieldLabel hint="默认 conda；也可粘贴 conda.exe/conda 的完整路径">
-                            Conda 可执行文件
-                          </FieldLabel>
+                          <FieldLabel hint={t("默认 conda；也可粘贴 conda.exe/conda 的完整路径")}>{t("Conda 可执行文件")}</FieldLabel>
                           <div className="runtime-path-input">
                             <input
                               className="mono-input"
-                              placeholder="conda 或 C:\\...\\conda.exe"
+                              placeholder={t("conda 或 C:\\\\...\\\\conda.exe")}
                               value={preferenceDraft.developerRuntimes.python.condaExecutable}
                               onChange={(event) => setPreferenceDraft((current) => ({
                                 ...current,
@@ -1692,11 +1700,11 @@ export function SettingsDialog({
                               }))}
                             />
                             <button
-                              aria-label="刷新 Conda 环境"
+                              aria-label={t("刷新 Conda 环境")}
                               className="secondary-button"
                               disabled={loadingCondaEnvironments}
                               onClick={() => setCondaEnvironmentRefresh((current) => current + 1)}
-                              title="重新读取 Conda 环境"
+                              title={t("重新读取 Conda 环境")}
                               type="button"
                             >
                               <Icon name="refresh" size={13} />
@@ -1704,14 +1712,12 @@ export function SettingsDialog({
                           </div>
                           <small className={`runtime-field-status ${condaEnvironmentResult?.ok ? 'is-ok' : condaEnvironmentResult ? 'is-error' : ''}`}>
                             {loadingCondaEnvironments
-                              ? '正在读取 Conda 环境…'
-                              : condaEnvironmentResult?.message ?? '输入后将自动检测 Conda。'}
+                              ? t("正在读取 Conda 环境…")
+                              : condaEnvironmentResult?.message ?? t("输入后将自动检测 Conda。")}
                           </small>
                         </label>
                         <label>
-                          <FieldLabel hint="检测到有效 Conda 后可直接选择；保存实际的环境 prefix 路径">
-                            Conda 环境
-                          </FieldLabel>
+                          <FieldLabel hint={t("检测到有效 Conda 后可直接选择；保存实际的环境 prefix 路径")}>{t("Conda 环境")}</FieldLabel>
                           {condaEnvironmentResult?.ok && condaEnvironmentResult.environments.length > 0 ? (
                             <select
                               className="mono-input runtime-environment-select"
@@ -1731,20 +1737,19 @@ export function SettingsDialog({
                                 && !condaEnvironmentResult.environments.some((environment) => (
                                   environment.path === preferenceDraft.developerRuntimes.python.environment
                                 )) && (
-                                  <option value={preferenceDraft.developerRuntimes.python.environment}>
-                                    当前配置（未在环境列表中）— {preferenceDraft.developerRuntimes.python.environment}
+                                  <option value={preferenceDraft.developerRuntimes.python.environment}>{t("当前配置（未在环境列表中）— {value0}", { value0: preferenceDraft.developerRuntimes.python.environment })}
                                   </option>
                                 )}
                               {condaEnvironmentResult.environments.map((environment) => (
                                 <option key={environment.path} value={environment.path}>
-                                  {environment.name}{environment.active ? '（当前）' : ''} — {environment.path}
+                                  {environment.name}{environment.active ? t("（当前）") : ''} — {environment.path}
                                 </option>
                               ))}
                             </select>
                           ) : (
                             <input
                               className="mono-input"
-                              placeholder="环境名称或绝对 prefix 路径"
+                              placeholder={t("环境名称或绝对 prefix 路径")}
                               value={preferenceDraft.developerRuntimes.python.environment}
                               onChange={(event) => setPreferenceDraft((current) => ({
                                 ...current,
@@ -1761,9 +1766,9 @@ export function SettingsDialog({
                         </label>
                       </>
                     )}
-                    {preferenceDraft.developerRuntimes.python.mode === 'custom' && <label><FieldLabel>Python 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'custom' && <label><FieldLabel>{t("Python 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
                   </div>
-                  <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === 'python'} onClick={() => void testRuntime('python')}>{testingRuntime === 'python' ? '检测中…' : '检测 Python'}</button>{runtimeTestResults.python && <span className={runtimeTestResults.python.ok ? 'is-ok' : 'is-error'}>{runtimeTestResults.python.message}</span>}</div>
+                  <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === 'python'} onClick={() => void testRuntime('python')}>{testingRuntime === 'python' ? t("检测中…") : t("检测 Python")}</button>{runtimeTestResults.python && <span className={runtimeTestResults.python.ok ? 'is-ok' : 'is-error'}>{runtimeTestResults.python.message}</span>}</div>
                 </section>
               </div>
             )}
@@ -1775,12 +1780,12 @@ export function SettingsDialog({
                     <div className="skills-search-box">
                       <Icon name="search" size={15} />
                       <input
-                        placeholder="搜索技能名称、描述或作者…"
+                        placeholder={t("搜索技能名称、描述或作者…")}
                         value={skillSearch}
                         onChange={(e) => setSkillSearch(e.target.value)}
                       />
                       {skillSearch && (
-                        <button className="icon-button" onClick={() => setSkillSearch('')} aria-label="清空搜索">
+                        <button className="icon-button" onClick={() => setSkillSearch('')} aria-label={t("清空搜索")}>
                           <Icon name="close" size={13} />
                         </button>
                       )}
@@ -1793,10 +1798,10 @@ export function SettingsDialog({
                           onClick={() => setSkillFilter(filter)}
                         >
                           {filter === 'all'
-                            ? `全部 (${skillsList.length})`
+                            ? t("全部 ({value0})", { value0: skillsList.length })
                             : filter === 'builtin'
-                              ? `预置 (${skillsList.filter((s) => s.isBuiltIn).length})`
-                              : `自定义 (${skillsList.filter((s) => !s.isBuiltIn).length})`}
+                              ? t("预置 ({value0})", { value0: skillsList.filter((s) => s.isBuiltIn).length })
+                              : t("自定义 ({value0})", { value0: skillsList.filter((s) => !s.isBuiltIn).length })}
                         </button>
                       ))}
                     </div>
@@ -1813,7 +1818,7 @@ export function SettingsDialog({
                           files: [
                             {
                               path: 'SKILL.md',
-                              content: '# 新技能\n\n请在此处编写技能规范与说明。',
+                              content: t("# 新技能\n\n请在此处编写技能规范与说明。"),
                               kind: 'markdown'
                             }
                           ],
@@ -1825,7 +1830,7 @@ export function SettingsDialog({
                       }}
                     >
                       <Icon name="plus" size={14} />
-                      <span>新建技能</span>
+                      <span>{t("新建技能")}</span>
                     </button>
                     <button
                       className="skills-action-btn"
@@ -1836,15 +1841,15 @@ export function SettingsDialog({
                       }}
                     >
                       <Icon name="upload" size={14} />
-                      <span>导入技能</span>
+                      <span>{t("导入技能")}</span>
                     </button>
                     <button
                       className="skills-action-btn"
                       onClick={() => void handleResetSkills()}
-                      title="重置系统预置技能并保留自定义技能"
+                      title={t("重置系统预置技能并保留自定义技能")}
                     >
                       <Icon name="refresh" size={14} />
-                      <span>恢复预置</span>
+                      <span>{t("恢复预置")}</span>
                     </button>
                   </div>
                 </div>
@@ -1861,8 +1866,8 @@ export function SettingsDialog({
                   {filteredSkills.length === 0 ? (
                     <div className="skills-empty">
                       <Icon name="bot" size={32} />
-                      <p>未找到匹配的技能</p>
-                      <small>可点击上方「新建技能」或「导入技能」添加新能力（支持 .zip 压缩包）</small>
+                      <p>{t("未找到匹配的技能")}</p>
+                      <small>{t("可点击上方「新建技能」或「导入技能」添加新能力（支持 .zip 压缩包）")}</small>
                     </div>
                   ) : (
                     filteredSkills.map((skill) => {
@@ -1887,7 +1892,7 @@ export function SettingsDialog({
                               <div className="skill-title-row">
                                 <h4>{skill.name}</h4>
                                 <span className={`skill-badge ${skill.isBuiltIn ? 'is-builtin' : 'is-custom'}`}>
-                                  {skill.isBuiltIn ? '预置' : '自定义'}
+                                  {skill.isBuiltIn ? t("预置") : t("自定义")}
                                 </span>
                               </div>
                               <div className="skill-meta-row">
@@ -1898,7 +1903,7 @@ export function SettingsDialog({
                             <div className="skill-toggle-wrapper">
                               <SettingsToggle
                                 checked={skill.enabled}
-                                label={skill.enabled ? '已启用' : '已停用'}
+                                label={skill.enabled ? t("已启用") : t("已停用")}
                                 onChange={(enabled) => void handleToggleSkill(skill.id, enabled)}
                               />
                             </div>
@@ -1908,19 +1913,19 @@ export function SettingsDialog({
 
                           <div className="skill-file-tags">
                             {mdCount > 0 && (
-                              <span className="skill-tag skill-tag-md" title={`${mdCount} 个 Markdown 文档`}>
+                              <span className="skill-tag skill-tag-md" title={t("{value0} 个 Markdown 文档", { value0: mdCount })}>
                                 <Icon name="file" size={11} />
                                 {mdCount} Markdown
                               </span>
                             )}
                             {pyCount > 0 && (
-                              <span className="skill-tag skill-tag-py" title={`${pyCount} 个 Python 3 脚本`}>
+                              <span className="skill-tag skill-tag-py" title={t("{value0} 个 Python 3 脚本", { value0: pyCount })}>
                                 <Icon name="code" size={11} />
                                 {pyCount} Python 3
                               </span>
                             )}
                             {shCount > 0 && (
-                              <span className="skill-tag skill-tag-sh" title={`${shCount} 个 Shell 脚本`}>
+                              <span className="skill-tag skill-tag-sh" title={t("{value0} 个 Shell 脚本", { value0: shCount })}>
                                 <Icon name="tool" size={11} />
                                 {shCount} Shell
                               </span>
@@ -1933,7 +1938,7 @@ export function SettingsDialog({
                               type="button"
                               onClick={() => togglePromptExpanded(skill.id)}
                             >
-                              <span>查看技能文件与规范 ({files.length} 个文件)</span>
+                              <span>{t("查看技能文件与规范 ({value0} 个文件)", { value0: files.length })}</span>
                               <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={14} />
                             </button>
                             {isExpanded && (
@@ -1980,24 +1985,24 @@ export function SettingsDialog({
                               }}
                             >
                               <Icon name="edit" size={13} />
-                              <span>编辑</span>
+                              <span>{t("编辑")}</span>
                             </button>
                             <button
                               className="skill-footer-btn"
                               onClick={() => void handleExportSkill(skill)}
-                              title="导出为 Zip 技能压缩包 (.zip)"
+                              title={t("导出为 Zip 技能压缩包 (.zip)")}
                             >
                               <Icon name="download" size={13} />
-                              <span>导出 .zip</span>
+                              <span>{t("导出 .zip")}</span>
                             </button>
                             {!skill.isBuiltIn && (
                               <button
                                 className="skill-footer-btn is-danger"
                                 onClick={() => void handleRemoveSkill(skill.id)}
-                                title="删除此自定义技能"
+                                title={t("删除此自定义技能")}
                               >
                                 <Icon name="trash" size={13} />
-                                <span>删除</span>
+                                <span>{t("删除")}</span>
                               </button>
                             )}
                           </div>
@@ -2012,53 +2017,53 @@ export function SettingsDialog({
                   <div className="skill-modal-backdrop" onClick={() => setEditingSkill(null)}>
                     <div className="skill-modal" onClick={(e) => e.stopPropagation()}>
                       <header className="skill-modal-header">
-                        <h3>{editingSkill.id ? '编辑技能' : '新建自定义技能'}</h3>
+                        <h3>{editingSkill.id ? t("编辑技能") : t("新建自定义技能")}</h3>
                         <button className="icon-button" onClick={() => setEditingSkill(null)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
                         <div className="skill-form-row">
                           <label className="skill-form-field" style={{ flex: 2 }}>
-                            <span>技能名称 *</span>
+                            <span>{t("技能名称 *")}</span>
                             <input
                               autoFocus
-                              placeholder="例如：数据分析师"
+                              placeholder={t("例如：数据分析师")}
                               value={editingSkill.name}
                               onChange={(e) => setEditingSkill({ ...editingSkill, name: e.target.value })}
                             />
                           </label>
                           <label className="skill-form-field" style={{ flex: 1 }}>
-                            <span>图标</span>
+                            <span>{t("图标")}</span>
                             <select
                               value={editingSkill.icon ?? 'bot'}
                               onChange={(e) => setEditingSkill({ ...editingSkill, icon: e.target.value })}
                             >
-                              <option value="bot">智能体 (bot)</option>
-                              <option value="code">代码 (code)</option>
-                              <option value="chart">图表 (chart)</option>
-                              <option value="translate">翻译 (translate)</option>
-                              <option value="sparkles">智能 (sparkles)</option>
-                              <option value="tool">工具 (tool)</option>
-                              <option value="search">搜索 (search)</option>
-                              <option value="file">文档 (file)</option>
-                              <option value="globe">网络 (globe)</option>
-                              <option value="zap">极速 (zap)</option>
+                              <option value="bot">{t("智能体 (bot)")}</option>
+                              <option value="code">{t("代码 (code)")}</option>
+                              <option value="chart">{t("图表 (chart)")}</option>
+                              <option value="translate">{t("翻译 (translate)")}</option>
+                              <option value="sparkles">{t("智能 (sparkles)")}</option>
+                              <option value="tool">{t("工具 (tool)")}</option>
+                              <option value="search">{t("搜索 (search)")}</option>
+                              <option value="file">{t("文档 (file)")}</option>
+                              <option value="globe">{t("网络 (globe)")}</option>
+                              <option value="zap">{t("极速 (zap)")}</option>
                             </select>
                           </label>
                         </div>
 
                         <div className="skill-form-row">
                           <label className="skill-form-field" style={{ flex: 1 }}>
-                            <span>作者</span>
+                            <span>{t("作者")}</span>
                             <input
-                              placeholder="例如：Community / User"
+                              placeholder={t("例如：Community / User")}
                               value={editingSkill.author ?? ''}
                               onChange={(e) => setEditingSkill({ ...editingSkill, author: e.target.value })}
                             />
                           </label>
                           <label className="skill-form-field" style={{ flex: 1 }}>
-                            <span>版本号</span>
+                            <span>{t("版本号")}</span>
                             <input
-                              placeholder="例如：1.0.0"
+                              placeholder={t("例如：1.0.0")}
                               value={editingSkill.version ?? '1.0.0'}
                               onChange={(e) => setEditingSkill({ ...editingSkill, version: e.target.value })}
                             />
@@ -2066,18 +2071,18 @@ export function SettingsDialog({
                         </div>
 
                         <label className="skill-form-field">
-                          <span>技能简述</span>
+                          <span>{t("技能简述")}</span>
                           <input
-                            placeholder="简明描述此技能适用的场景与擅长的任务…"
+                            placeholder={t("简明描述此技能适用的场景与擅长的任务…")}
                             value={editingSkill.description}
                             onChange={(e) => setEditingSkill({ ...editingSkill, description: e.target.value })}
                           />
                         </label>
 
                         <label className="skill-form-field">
-                          <span>主指令 Markdown 文件 (SKILL.md) *</span>
+                          <span>{t("主指令 Markdown 文件 (SKILL.md) *")}</span>
                           <textarea
-                            placeholder="定义 Agent 激活此技能时的专业执行规范、思考准则与输出格式…"
+                            placeholder={t("定义 Agent 激活此技能时的专业执行规范、思考准则与输出格式…")}
                             rows={8}
                             value={editingSkill.systemPrompt ?? ''}
                             onChange={(e) => setEditingSkill({ ...editingSkill, systemPrompt: e.target.value })}
@@ -2085,14 +2090,12 @@ export function SettingsDialog({
                         </label>
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setEditingSkill(null)}>取消</button>
+                        <button className="secondary-button" onClick={() => setEditingSkill(null)}>{t("取消")}</button>
                         <button
                           className="primary-button"
                           disabled={!editingSkill.name.trim() || !(editingSkill.systemPrompt || editingSkill.files?.length)}
                           onClick={() => void handleSaveSkill(editingSkill)}
-                        >
-                          保存技能
-                        </button>
+                        >{t("保存技能")}</button>
                       </footer>
                     </div>
                   </div>
@@ -2103,17 +2106,16 @@ export function SettingsDialog({
                   <div className="skill-modal-backdrop" onClick={() => setInstallingSkill(false)}>
                     <div className="skill-modal" onClick={(e) => e.stopPropagation()}>
                       <header className="skill-modal-header">
-                        <h3>导入外部技能 (Import Skill)</h3>
+                        <h3>{t("导入外部技能 (Import Skill)")}</h3>
                         <button className="icon-button" onClick={() => setInstallingSkill(false)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
                         <p className="skill-modal-hint">
-                          <strong>推荐方式</strong>：选择包含 <code>SKILL.md</code>、Python 3 / Shell 脚本和参考文档的 <strong>.zip 技能压缩包</strong> 直接导入。
-                        </p>
+                          <strong>{t("推荐方式")}</strong>{t("：选择包含")}<code>SKILL.md</code>{t("、Python 3 / Shell 脚本和参考文档的")}<strong>{t(".zip 技能压缩包")}</strong>{t("直接导入。")}</p>
                         <div className="skill-import-dropzone">
                           <label className="skill-file-upload-btn">
                             <Icon name="upload" size={16} />
-                            <span>选择技能压缩包 (.zip) 或 JSON 文件</span>
+                            <span>{t("选择技能压缩包 (.zip) 或 JSON 文件")}</span>
                             <input
                               type="file"
                               accept=".zip,.json,application/zip,application/json"
@@ -2126,10 +2128,10 @@ export function SettingsDialog({
                           </label>
                         </div>
                         <label className="skill-form-field" style={{ marginTop: '12px' }}>
-                          <span>或者粘贴 JSON 文本配置：</span>
+                          <span>{t("或者粘贴 JSON 文本配置：")}</span>
                           <textarea
                             className="mono-input"
-                            placeholder={`{\n  "name": "数学推演专家",\n  "description": "...",\n  "systemPrompt": "..."\n}`}
+                            placeholder={t("{\n  \"name\": \"数学推演专家\",\n  \"description\": \"...\",\n  \"systemPrompt\": \"...\"\n}")}
                             rows={6}
                             value={skillImportText}
                             onChange={(e) => setSkillImportText(e.target.value)}
@@ -2142,14 +2144,12 @@ export function SettingsDialog({
                         )}
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setInstallingSkill(false)}>取消</button>
+                        <button className="secondary-button" onClick={() => setInstallingSkill(false)}>{t("取消")}</button>
                         <button
                           className="primary-button"
                           disabled={!skillImportText.trim()}
                           onClick={() => void handleImportSkillText()}
-                        >
-                          导入文本配置
-                        </button>
+                        >{t("导入文本配置")}</button>
                       </footer>
                     </div>
                   </div>
@@ -2161,56 +2161,48 @@ export function SettingsDialog({
             {activeSection === 'mcp' && (
               <div className="settings-section-content mcp-settings">
                 <section className="settings-card mcp-global-card">
-                  <h3>MCP 协议全局设置</h3>
+                  <h3>{t("MCP 协议全局设置")}</h3>
                   <div className="settings-row">
                     <div>
-                      <strong>启用 MCP 外部工具协议</strong>
-                      <small>开启后，Agent 模式将允许检索并执行连接的 MCP 工具</small>
+                      <strong>{t("启用 MCP 外部工具协议")}</strong>
+                      <small>{t("开启后，Agent 模式将允许检索并执行连接的 MCP 工具")}</small>
                     </div>
                     <SettingsToggle
                       checked={preferenceDraft.mcpEnabled ?? true}
-                      label={preferenceDraft.mcpEnabled ?? true ? '已启用' : '已停用'}
+                      label={preferenceDraft.mcpEnabled ?? true ? t("已启用") : t("已停用")}
                       onChange={(enabled) => setPreferenceDraft((curr) => ({ ...curr, mcpEnabled: enabled }))}
                     />
                   </div>
                   <div className="settings-row">
                     <div>
-                      <strong>工具智能检索模式</strong>
-                      <small>智能检索 (auto) 动态匹配最相关的工具；全部挂载 (all) 加载全部可用工具</small>
+                      <strong>{t("工具智能检索模式")}</strong>
+                      <small>{t("智能检索 (auto) 动态匹配最相关的工具；全部挂载 (all) 加载全部可用工具")}</small>
                     </div>
                     <div className="segmented-control">
                       <button
                         className={(preferenceDraft.mcpToolRetrievalMode ?? 'auto') === 'auto' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolRetrievalMode: 'auto' }))}
-                      >
-                        智能检索 (auto)
-                      </button>
+                      >{t("智能检索 (auto)")}</button>
                       <button
                         className={preferenceDraft.mcpToolRetrievalMode === 'all' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolRetrievalMode: 'all' }))}
-                      >
-                        全部挂载 (all)
-                      </button>
+                      >{t("全部挂载 (all)")}</button>
                     </div>
                   </div>
                   <div className="settings-row">
                     <div>
-                      <strong>工具调用审批策略</strong>
-                      <small>Full Access 会跳过代码、终端和 MCP 工具的全部审批</small>
+                      <strong>{t("工具调用审批策略")}</strong>
+                      <small>{t("Full Access 会跳过代码、终端和 MCP 工具的全部审批")}</small>
                     </div>
                     <div className="segmented-control">
                       <button
                         className={preferenceDraft.mcpToolApprovalPolicy === 'always' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'always' }))}
-                      >
-                        每次确认
-                      </button>
+                      >{t("每次确认")}</button>
                       <button
                         className={(preferenceDraft.mcpToolApprovalPolicy ?? 'sensitive') === 'sensitive' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'sensitive' }))}
-                      >
-                        智能确认
-                      </button>
+                      >{t("智能确认")}</button>
                       <button
                         className={preferenceDraft.mcpToolApprovalPolicy === 'full-access' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'full-access' }))}
@@ -2222,27 +2214,23 @@ export function SettingsDialog({
                   {preferenceDraft.mcpToolApprovalPolicy === 'full-access' && (
                     <div className="full-access-warning" role="alert">
                       <Icon name="shield" size={15} />
-                      <span><strong>Full Access 已开启</strong><small>模型可直接执行终端命令、代码及有副作用的 MCP 工具。仅在你信任当前模型、服务和任务时使用。</small></span>
+                      <span><strong>{t("Full Access 已开启")}</strong><small>{t("模型可直接执行终端命令、代码及有副作用的 MCP 工具。仅在你信任当前模型、服务和任务时使用。")}</small></span>
                     </div>
                   )}
                   <div className="settings-row">
                     <div>
-                      <strong>审批等待时限</strong>
-                      <small>永不超时仍可通过拒绝、停止生成、关闭会话或退出应用结束等待</small>
+                      <strong>{t("审批等待时限")}</strong>
+                      <small>{t("永不超时仍可通过拒绝、停止生成、关闭会话或退出应用结束等待")}</small>
                     </div>
                     <div className="segmented-control">
                       <button
                         className={(preferenceDraft.toolApprovalTimeoutMode ?? 'five-minutes') === 'five-minutes' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, toolApprovalTimeoutMode: 'five-minutes' }))}
-                      >
-                        5 分钟
-                      </button>
+                      >{t("5 分钟")}</button>
                       <button
                         className={preferenceDraft.toolApprovalTimeoutMode === 'never' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, toolApprovalTimeoutMode: 'never' }))}
-                      >
-                        永不超时
-                      </button>
+                      >{t("永不超时")}</button>
                     </div>
                   </div>
                 </section>
@@ -2252,12 +2240,12 @@ export function SettingsDialog({
                     <div className="mcp-search-box">
                       <Icon name="search" size={15} />
                       <input
-                        placeholder="搜索服务名称或描述…"
+                        placeholder={t("搜索服务名称或描述…")}
                         value={mcpSearch}
                         onChange={(e) => setMcpSearch(e.target.value)}
                       />
                       {mcpSearch && (
-                        <button className="icon-button" onClick={() => setMcpSearch('')} aria-label="清空搜索">
+                        <button className="icon-button" onClick={() => setMcpSearch('')} aria-label={t("清空搜索")}>
                           <Icon name="close" size={13} />
                         </button>
                       )}
@@ -2266,11 +2254,11 @@ export function SettingsDialog({
                   <div className="mcp-toolbar-right">
                     <button className="mcp-action-btn" onClick={() => void openToolExplorerModal()}>
                       <Icon name="tool" size={14} />
-                      <span>工具总览 (Tool Explorer)</span>
+                      <span>{t("工具总览 (Tool Explorer)")}</span>
                     </button>
                     <button className="mcp-action-btn is-primary" onClick={() => startEditMcpServer()}>
                       <Icon name="plus" size={14} />
-                      <span>添加 MCP 服务</span>
+                      <span>{t("添加 MCP 服务")}</span>
                     </button>
                   </div>
                 </div>
@@ -2287,8 +2275,8 @@ export function SettingsDialog({
                   {filteredMcpServers.length === 0 ? (
                     <div className="mcp-empty">
                       <Icon name="tool" size={32} />
-                      <p>未配置 MCP 服务</p>
-                      <small>点击上方「添加 MCP 服务」可接入本地命令行子进程或远程 Streamable HTTP 工具服务</small>
+                      <p>{t("未配置 MCP 服务")}</p>
+                      <small>{t("点击上方「添加 MCP 服务」可接入本地命令行子进程或远程 Streamable HTTP 工具服务")}</small>
                     </div>
                   ) : (
                     filteredMcpServers.map((server) => {
@@ -2313,7 +2301,7 @@ export function SettingsDialog({
                             <div className="mcp-toggle-wrapper">
                               <SettingsToggle
                                 checked={server.enabled}
-                                label={server.enabled ? '已启用' : '已停用'}
+                                label={server.enabled ? t("已启用") : t("已停用")}
                                 onChange={(enabled) => void handleToggleMcpServer(server.id, enabled)}
                               />
                             </div>
@@ -2322,12 +2310,12 @@ export function SettingsDialog({
                           <div className="mcp-server-details">
                             {server.transport === 'stdio' ? (
                               <div className="mcp-detail-row">
-                                <span className="mcp-detail-label">命令:</span>
+                                <span className="mcp-detail-label">{t("命令:")}</span>
                                 <code>{server.command} {(server.args || []).join(' ')}</code>
                               </div>
                             ) : (
                               <div className="mcp-detail-row">
-                                <span className="mcp-detail-label">端点:</span>
+                                <span className="mcp-detail-label">{t("端点:")}</span>
                                 <code>{server.url}</code>
                               </div>
                             )}
@@ -2347,15 +2335,15 @@ export function SettingsDialog({
                               onClick={() => void handleTestServerInList(server)}
                             >
                               {isTesting ? <span className="button-spinner" /> : <Icon name="refresh" size={13} />}
-                              <span>{isTesting ? '测试中…' : '测试连接'}</span>
+                              <span>{isTesting ? t("测试中…") : t("测试连接")}</span>
                             </button>
                             <button className="mcp-footer-btn" onClick={() => startEditMcpServer(server)}>
                               <Icon name="edit" size={13} />
-                              <span>编辑</span>
+                              <span>{t("编辑")}</span>
                             </button>
                             <button className="mcp-footer-btn is-danger" onClick={() => void handleRemoveMcpServer(server.id)}>
                               <Icon name="trash" size={13} />
-                              <span>删除</span>
+                              <span>{t("删除")}</span>
                             </button>
                           </div>
                         </div>
@@ -2369,65 +2357,59 @@ export function SettingsDialog({
                   <div className="skill-modal-backdrop" onClick={() => setEditingMcpServer(null)}>
                     <div className="skill-modal mcp-edit-modal" onClick={(e) => e.stopPropagation()}>
                       <header className="skill-modal-header">
-                        <h3>{editingMcpServer.id ? '编辑 MCP 服务' : '新建 MCP 外部服务'}</h3>
+                        <h3>{editingMcpServer.id ? t("编辑 MCP 服务") : t("新建 MCP 外部服务")}</h3>
                         <button className="icon-button" onClick={() => setEditingMcpServer(null)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
                         <label className="skill-form-field">
-                          <span>服务名称 (必填)</span>
+                          <span>{t("服务名称 (必填)")}</span>
                           <input
-                            placeholder="例如：文件系统服务 (Filesystem)"
+                            placeholder={t("例如：文件系统服务 (Filesystem)")}
                             value={editingMcpServer.name}
                             onChange={(e) => setEditingMcpServer({ ...editingMcpServer, name: e.target.value })}
                           />
                         </label>
                         <label className="skill-form-field">
-                          <span>描述说明 (可选)</span>
+                          <span>{t("描述说明 (可选)")}</span>
                           <input
-                            placeholder="例如：提供本地工作区文件的读取与写入能力"
+                            placeholder={t("例如：提供本地工作区文件的读取与写入能力")}
                             value={editingMcpServer.description || ''}
                             onChange={(e) => setEditingMcpServer({ ...editingMcpServer, description: e.target.value })}
                           />
                         </label>
                         <div className="skill-form-field">
-                          <span>传输协议类型</span>
+                          <span>{t("传输协议类型")}</span>
                           <div className="segmented-control" style={{ width: '100%' }}>
                             <button
                               type="button"
                               className={editingMcpServer.transport === 'stdio' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'stdio' })}
-                            >
-                              本地命令行子进程 (stdio)
-                            </button>
+                            >{t("本地命令行子进程 (stdio)")}</button>
                             <button
                               type="button"
                               className={editingMcpServer.transport === 'http' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'http' })}
-                            >
-                              远程 HTTP（自动兼容）
-                            </button>
+                            >{t("远程 HTTP（自动兼容）")}</button>
                             <button
                               type="button"
                               className={editingMcpServer.transport === 'sse' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'sse' })}
-                            >
-                              旧版 SSE
-                            </button>
+                            >{t("旧版 SSE")}</button>
                           </div>
                         </div>
 
                         {editingMcpServer.transport === 'stdio' ? (
                           <>
                             <label className="skill-form-field">
-                              <span>执行命令 (Command)</span>
+                              <span>{t("执行命令 (Command)")}</span>
                               <input
-                                placeholder="例如：npx, uvx, node, python"
+                                placeholder={t("例如：npx, uvx, node, python")}
                                 value={editingMcpServer.command || ''}
                                 onChange={(e) => setEditingMcpServer({ ...editingMcpServer, command: e.target.value })}
                               />
                             </label>
                             <label className="skill-form-field">
-                              <span>启动参数 (每行一个参数，换行分隔)</span>
+                              <span>{t("启动参数 (每行一个参数，换行分隔)")}</span>
                               <textarea
                                 className="mono-input"
                                 placeholder={"-y\n@modelcontextprotocol/server-filesystem\nC:\\Projects"}
@@ -2438,14 +2420,13 @@ export function SettingsDialog({
                             </label>
                             <div className="skill-form-field">
                               <div className="mcp-keyvalue-head">
-                                <span>环境变量 (Environment Variables)</span>
+                                <span>{t("环境变量 (Environment Variables)")}</span>
                                 <button
                                   type="button"
                                   className="mcp-add-kv-btn"
                                   onClick={() => setEditingMcpEnvRows([...editingMcpEnvRows, { key: '', value: '' }])}
                                 >
-                                  <Icon name="plus" size={12} /> 添加变量
-                                </button>
+                                  <Icon name="plus" size={12} />{t("添加变量")}</button>
                               </div>
                               {editingMcpEnvRows.map((row, idx) => (
                                 <div key={idx} className="mcp-kv-row">
@@ -2481,23 +2462,22 @@ export function SettingsDialog({
                         ) : (
                           <>
                             <label className="skill-form-field">
-                              <span>{editingMcpServer.transport === 'sse' ? '旧版 SSE 端点 URL' : 'MCP HTTP 端点 URL'}</span>
+                              <span>{editingMcpServer.transport === 'sse' ? t("旧版 SSE 端点 URL") : t("MCP HTTP 端点 URL")}</span>
                               <input
-                                placeholder={editingMcpServer.transport === 'sse' ? 'http://127.0.0.1:3000/sse' : 'http://127.0.0.1:3000/mcp 或 https://.../mcp'}
+                                placeholder={editingMcpServer.transport === 'sse' ? 'http://127.0.0.1:3000/sse' : t("http://127.0.0.1:3000/mcp 或 https://.../mcp")}
                                 value={editingMcpServer.url || ''}
                                 onChange={(e) => setEditingMcpServer({ ...editingMcpServer, url: e.target.value })}
                               />
                             </label>
                             <div className="skill-form-field">
                               <div className="mcp-keyvalue-head">
-                                <span>自定义请求头 (HTTP Headers)</span>
+                                <span>{t("自定义请求头 (HTTP Headers)")}</span>
                                 <button
                                   type="button"
                                   className="mcp-add-kv-btn"
                                   onClick={() => setEditingMcpHeadersRows([...editingMcpHeadersRows, { key: '', value: '' }])}
                                 >
-                                  <Icon name="plus" size={12} /> 添加请求头
-                                </button>
+                                  <Icon name="plus" size={12} />{t("添加请求头")}</button>
                               </div>
                               {editingMcpHeadersRows.map((row, idx) => (
                                 <div key={idx} className="mcp-kv-row">
@@ -2546,16 +2526,14 @@ export function SettingsDialog({
                           disabled={modalTesting || !editingMcpServer.name.trim()}
                           onClick={() => void handleTestMcpModal()}
                         >
-                          {modalTesting ? <><span className="button-spinner" /> 测试中…</> : <><Icon name="refresh" size={14} /> 测试连接</>}
+                          {modalTesting ? <><span className="button-spinner" />{t("测试中…")}</> : <><Icon name="refresh" size={14} />{t("测试连接")}</>}
                         </button>
-                        <button className="secondary-button" onClick={() => setEditingMcpServer(null)}>取消</button>
+                        <button className="secondary-button" onClick={() => setEditingMcpServer(null)}>{t("取消")}</button>
                         <button
                           className="primary-button"
                           disabled={!editingMcpServer.name.trim() || (editingMcpServer.transport === 'stdio' ? !editingMcpServer.command?.trim() : !editingMcpServer.url?.trim())}
                           onClick={() => void handleSaveMcpModal()}
-                        >
-                          保存服务
-                        </button>
+                        >{t("保存服务")}</button>
                       </footer>
                     </div>
                   </div>
@@ -2568,8 +2546,8 @@ export function SettingsDialog({
                       <header className="skill-modal-header">
                         <div className="mcp-explorer-header-title">
                           <Icon name="tool" size={18} />
-                          <h3>工具总览 (Tool Explorer)</h3>
-                          <span className="tool-count-pill">{allExploredTools.length} 个工具</span>
+                          <h3>{t("工具总览 (Tool Explorer)")}</h3>
+                          <span className="tool-count-pill">{t("{value0} 个工具", { value0: allExploredTools.length })}</span>
                         </div>
                         <button className="icon-button" onClick={() => setToolExplorerOpen(false)}><Icon name="close" size={16} /></button>
                       </header>
@@ -2578,7 +2556,7 @@ export function SettingsDialog({
                           <div className="mcp-search-box">
                             <Icon name="search" size={14} />
                             <input
-                              placeholder="搜索工具名称或描述…"
+                              placeholder={t("搜索工具名称或描述…")}
                               value={toolExplorerSearch}
                               onChange={(e) => setToolExplorerSearch(e.target.value)}
                             />
@@ -2588,10 +2566,10 @@ export function SettingsDialog({
                             value={toolExplorerServerFilter}
                             onChange={(e) => setToolExplorerServerFilter(e.target.value)}
                           >
-                            <option value="all">全部来源 ({allExploredTools.length})</option>
-                            <option value={BUILTIN_TOOL_FILTER}>系统内置 ({builtinExploredTools.length})</option>
+                            <option value="all">{t("全部来源 ({value0})", { value0: allExploredTools.length })}</option>
+                            <option value={BUILTIN_TOOL_FILTER}>{t("系统内置 ({value0})", { value0: builtinExploredTools.length })}</option>
                             {mcpServersList.length > 0 && (
-                              <optgroup label="MCP 外部服务">
+                              <optgroup label={t("MCP 外部服务")}>
                                 {mcpServersList.map((s) => (
                                   <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
@@ -2603,12 +2581,12 @@ export function SettingsDialog({
                         {loadingTools ? (
                           <div className="mcp-loading-tools">
                             <span className="button-spinner large" />
-                            <p>正在检索 MCP 外部工具列表…</p>
+                            <p>{t("正在检索 MCP 外部工具列表…")}</p>
                           </div>
                         ) : filteredExploredTools.length === 0 ? (
                           <div className="mcp-empty">
-                            <p>未发现匹配的工具</p>
-                            <small>可调整搜索或来源筛选，并确保 MCP 服务处于启用状态</small>
+                            <p>{t("未发现匹配的工具")}</p>
+                            <small>{t("可调整搜索或来源筛选，并确保 MCP 服务处于启用状态")}</small>
                           </div>
                         ) : (
                           <div className="mcp-tools-list">
@@ -2624,17 +2602,15 @@ export function SettingsDialog({
                                   <span className="mcp-tool-item-badges">
                                     {tool.source === 'builtin' && (
                                       <span className="mcp-tool-source-badge is-builtin">
-                                        <Icon name="sparkles" size={10} />
-                                        系统内置
-                                      </span>
+                                        <Icon name="sparkles" size={10} />{t("系统内置")}</span>
                                     )}
                                     <span className="mcp-tool-item-server">{tool.serverName}</span>
                                   </span>
                                 </div>
-                                <p className="mcp-tool-item-desc">{tool.description || '无描述说明'}</p>
+                                <p className="mcp-tool-item-desc">{tool.description || t("无描述说明")}</p>
                                 {tool.inputSchema?.properties && Object.keys(tool.inputSchema.properties).length > 0 && (
                                   <details className="mcp-tool-schema-details">
-                                    <summary>参数定义 ({Object.keys(tool.inputSchema.properties).length})</summary>
+                                    <summary>{t("参数定义 ({value0})", { value0: Object.keys(tool.inputSchema.properties).length })}</summary>
                                     <pre><code>{JSON.stringify(tool.inputSchema, null, 2)}</code></pre>
                                   </details>
                                 )}
@@ -2644,7 +2620,7 @@ export function SettingsDialog({
                         )}
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setToolExplorerOpen(false)}>关闭</button>
+                        <button className="secondary-button" onClick={() => setToolExplorerOpen(false)}>{t("关闭")}</button>
                       </footer>
                     </div>
                   </div>
@@ -2656,17 +2632,16 @@ export function SettingsDialog({
               <div className="settings-split-view">
                 <aside className="settings-list-panel">
                   <div className="settings-list-toolbar">
-                    <span>{modelDrafts.length} 个模型</span>
+                    <span>{t("{value0} 个模型", { value0: modelDrafts.length })}</span>
                     <div>
                       <button disabled={!onDiscoverModels || discovering} onClick={() => void discoverModels()}>
-                        {discovering ? <span className="button-spinner" /> : <Icon name="refresh" size={14} />} 获取
-                      </button>
-                      <button onClick={addModel}><Icon name="plus" size={15} /> 添加</button>
+                        {discovering ? <span className="button-spinner" /> : <Icon name="refresh" size={14} />}{t("获取")}</button>
+                      <button onClick={addModel}><Icon name="plus" size={15} />{t("添加")}</button>
                     </div>
                   </div>
                   {remoteModels && (
                     <div className="remote-model-picker">
-                      <header><strong>选择远程模型</strong><button aria-label="关闭模型列表" onClick={() => setRemoteModels(null)}><Icon name="close" size={14} /></button></header>
+                      <header><strong>{t("选择远程模型")}</strong><button aria-label={t("关闭模型列表")} onClick={() => setRemoteModels(null)}><Icon name="close" size={14} /></button></header>
                       <div>
                         {remoteModels.slice(0, 100).map((remoteModel) => (
                           <button key={remoteModel.id} onClick={() => addDiscoveredModel(remoteModel)}>
@@ -2674,7 +2649,7 @@ export function SettingsDialog({
                             <Icon name="plus" size={14} />
                           </button>
                         ))}
-                        {remoteModels.length === 0 && <p>服务商没有返回可用模型。</p>}
+                        {remoteModels.length === 0 && <p>{t("服务商没有返回可用模型。")}</p>}
                       </div>
                     </div>
                   )}
@@ -2688,7 +2663,7 @@ export function SettingsDialog({
                           onClick={() => setSelectedModelId(model.id)}
                         >
                           <span className="entity-icon"><Icon name="sparkles" size={16} /></span>
-                          <span><strong>{model.name || '未命名模型'}</strong><small>{provider?.name ?? '未选择服务商'}</small></span>
+                          <span><strong>{model.name || t("未命名模型")}</strong><small>{provider?.name ?? t("未选择服务商")}</small></span>
                         </button>
                       )
                     })}
@@ -2699,18 +2674,18 @@ export function SettingsDialog({
                     <div className="editor-title-row">
                       <div>
                         <span className="entity-icon large"><Icon name="sparkles" size={18} /></span>
-                        <div><h3>{selectedModel.name || '未命名模型'}</h3><small>{selectedModel.remoteId || '填写模型标识'}</small></div>
+                        <div><h3>{selectedModel.name || t("未命名模型")}</h3><small>{selectedModel.remoteId || t("填写模型标识")}</small></div>
                       </div>
-                      <span className="settings-value-note">已配置</span>
+                      <span className="settings-value-note">{t("已配置")}</span>
                     </div>
 
                     <div className="editor-form-grid">
                       <label>
-                        <FieldLabel>显示名称</FieldLabel>
+                        <FieldLabel>{t("显示名称")}</FieldLabel>
                         <input value={selectedModel.name} onChange={(event) => updateModel({ name: event.target.value })} />
                       </label>
                       <label>
-                        <FieldLabel hint="OpenRouter 模型 slug">模型 ID</FieldLabel>
+                        <FieldLabel hint={t("OpenRouter 模型 slug")}>{t("模型 ID")}</FieldLabel>
                         <input
                           className="mono-input"
                           placeholder="anthropic/claude-sonnet-4"
@@ -2719,7 +2694,7 @@ export function SettingsDialog({
                         />
                       </label>
                       <label>
-                        <FieldLabel>服务商</FieldLabel>
+                        <FieldLabel>{t("服务商")}</FieldLabel>
                         <select value={selectedModel.providerId} onChange={(event) => {
                           const providerId = event.target.value
                           const nextProvider = providerDrafts.find((provider) => provider.id === providerId)
@@ -2732,7 +2707,7 @@ export function SettingsDialog({
                         </select>
                       </label>
                       <label>
-                        <FieldLabel hint="按模型或端点指定">API 格式</FieldLabel>
+                        <FieldLabel hint={t("按模型或端点指定")}>{t("API 格式")}</FieldLabel>
                         <select
                           value={selectedModel.apiFormat ?? providerDrafts.find((provider) => provider.id === selectedModel.providerId)?.apiFormat ?? 'openai-chat-completions'}
                           onChange={(event) => updateModel({ apiFormat: event.target.value as ApiFormat })}
@@ -2743,9 +2718,9 @@ export function SettingsDialog({
                         </select>
                       </label>
                       <div className="token-field">
-                        <FieldLabel hint="± 按钮以 64K 为步长">上下文窗口</FieldLabel>
+                        <FieldLabel hint={t("± 按钮以 64K 为步长")}>{t("上下文窗口")}</FieldLabel>
                         <TokenStepper
-                          ariaLabel="上下文窗口"
+                          ariaLabel={t("上下文窗口")}
                           maximum={100_000_000}
                           minimum={1_024}
                           value={selectedModel.contextWindow}
@@ -2753,9 +2728,9 @@ export function SettingsDialog({
                         />
                       </div>
                       <div className="token-field">
-                        <FieldLabel hint="± 按钮以 64K 为步长">最大输出 Token</FieldLabel>
+                        <FieldLabel hint={t("± 按钮以 64K 为步长")}>{t("最大输出 Token")}</FieldLabel>
                         <TokenStepper
-                          ariaLabel="最大输出 Token"
+                          ariaLabel={t("最大输出 Token")}
                           maximum={10_000_000}
                           minimum={256}
                           value={selectedModel.maxOutputTokens}
@@ -2767,8 +2742,8 @@ export function SettingsDialog({
                     {modelsNeedingCalibration.includes(selectedModel.id) && (
                       <div className="model-calibration-warning">
                         <Icon name="info" size={16} />
-                        <span><strong>远程接口未返回完整模型能力</strong><small>当前缺失项使用通用默认值。保存前请手工校准上下文窗口、最大输出 Token 和思考支持。</small></span>
-                        <button onClick={() => setModelsNeedingCalibration((current) => current.filter((id) => id !== selectedModel.id))}>知道了</button>
+                        <span><strong>{t("远程接口未返回完整模型能力")}</strong><small>{t("当前缺失项使用通用默认值。保存前请手工校准上下文窗口、最大输出 Token 和思考支持。")}</small></span>
+                        <button onClick={() => setModelsNeedingCalibration((current) => current.filter((id) => id !== selectedModel.id))}>{t("知道了")}</button>
                       </div>
                     )}
 
@@ -2777,12 +2752,12 @@ export function SettingsDialog({
                         <div className="routing-heading">
                           <span className="entity-icon provider-icon"><Icon name="globe" size={16} /></span>
                           <div>
-                            <strong>OpenRouter 上游供应商</strong>
-                            <small>限定该模型实际由哪些 provider 提供推理</small>
+                            <strong>{t("OpenRouter 上游供应商")}</strong>
+                            <small>{t("限定该模型实际由哪些 provider 提供推理")}</small>
                           </div>
                         </div>
                         <label className="routing-only-field">
-                          <FieldLabel hint="逗号分隔；留空为自动选择">指定供应商 slug</FieldLabel>
+                          <FieldLabel hint={t("逗号分隔；留空为自动选择")}>{t("指定供应商 slug")}</FieldLabel>
                           <input
                             className="mono-input"
                             placeholder="anthropic, openai"
@@ -2800,7 +2775,7 @@ export function SettingsDialog({
                         </label>
                         <div className="routing-grid">
                           <label>
-                            <FieldLabel>排序偏好</FieldLabel>
+                            <FieldLabel>{t("排序偏好")}</FieldLabel>
                             <select
                               value={selectedModel.providerRouting?.sort ?? ''}
                               onChange={(event) => updateModel({
@@ -2810,14 +2785,14 @@ export function SettingsDialog({
                                 }
                               })}
                             >
-                              <option value="">OpenRouter 自动</option>
-                              <option value="price">价格优先</option>
-                              <option value="latency">低延迟优先</option>
-                              <option value="throughput">吞吐优先</option>
+                              <option value="">{t("OpenRouter 自动")}</option>
+                              <option value="price">{t("价格优先")}</option>
+                              <option value="latency">{t("低延迟优先")}</option>
+                              <option value="throughput">{t("吞吐优先")}</option>
                             </select>
                           </label>
                           <label>
-                            <FieldLabel>数据收集策略</FieldLabel>
+                            <FieldLabel>{t("数据收集策略")}</FieldLabel>
                             <select
                               value={selectedModel.providerRouting?.dataCollection ?? 'deny'}
                               onChange={(event) => updateModel({
@@ -2827,22 +2802,22 @@ export function SettingsDialog({
                                 }
                               })}
                             >
-                              <option value="allow">允许</option>
-                              <option value="deny">禁止</option>
+                              <option value="allow">{t("允许")}</option>
+                              <option value="deny">{t("禁止")}</option>
                             </select>
                           </label>
                         </div>
                         <div className="routing-toggles">
-                          <div><span><strong>允许回退</strong><small>首选供应商不可用时切换到其他供应商</small></span><SettingsToggle
+                          <div><span><strong>{t("允许回退")}</strong><small>{t("首选供应商不可用时切换到其他供应商")}</small></span><SettingsToggle
                             checked={selectedModel.providerRouting?.allowFallbacks ?? true}
-                            label="允许供应商回退"
+                            label={t("允许供应商回退")}
                             onChange={(allowFallbacks) => updateModel({
                               providerRouting: { ...selectedModel.providerRouting, allowFallbacks }
                             })}
                           /></div>
-                          <div><span><strong>仅使用零数据保留端点</strong><small>要求上游声明 ZDR 支持</small></span><SettingsToggle
+                          <div><span><strong>{t("仅使用零数据保留端点")}</strong><small>{t("要求上游声明 ZDR 支持")}</small></span><SettingsToggle
                             checked={selectedModel.providerRouting?.zdr ?? true}
-                            label="仅使用 ZDR 端点"
+                            label={t("仅使用 ZDR 端点")}
                             onChange={(zdr) => updateModel({
                               providerRouting: { ...selectedModel.providerRouting, zdr }
                             })}
@@ -2853,13 +2828,13 @@ export function SettingsDialog({
 
                     {selectedModelApiFormat === 'anthropic-messages' && (
                       <div className="anthropic-thinking-card">
-                        <div><Icon name="brain" size={18} /><span><strong>Anthropic 思考协议</strong><small>根据 Claude 版本选择兼容模式</small></span></div>
+                        <div><Icon name="brain" size={18} /><span><strong>{t("Anthropic 思考协议")}</strong><small>{t("根据 Claude 版本选择兼容模式")}</small></span></div>
                         <select
                           value={selectedModel.anthropicThinkingMode ?? 'adaptive'}
                           onChange={(event) => updateModel({ anthropicThinkingMode: event.target.value as 'adaptive' | 'manual' })}
                         >
                           <option value="adaptive">Adaptive（Claude 4.6+）</option>
-                          <option value="manual">固定预算（Claude 4.5 及更早）</option>
+                          <option value="manual">{t("固定预算（Claude 4.5 及更早）")}</option>
                         </select>
                       </div>
                     )}
@@ -2869,12 +2844,12 @@ export function SettingsDialog({
                         <div>
                           <Icon name="globe" size={18} />
                           <span>
-                            <strong>新会话默认联网模式</strong>
-                            <small>仅 OpenRouter 连接可用；旧会话保持关闭</small>
+                            <strong>{t("新会话默认联网模式")}</strong>
+                            <small>{t("仅 OpenRouter 连接可用；旧会话保持关闭")}</small>
                           </span>
                         </div>
                         <select
-                          aria-label="新会话默认联网模式"
+                          aria-label={t("新会话默认联网模式")}
                           value={selectedModel.defaultWebSearchMode ?? 'off'}
                           onChange={(event) => updateModel({ defaultWebSearchMode: event.target.value as WebSearchMode })}
                         >
@@ -2886,10 +2861,10 @@ export function SettingsDialog({
                     )}
 
                     <div className="model-capability-card">
-                      <div><Icon name="brain" size={18} /><span><strong>思考模式</strong><small>允许在聊天时开启或关闭模型推理</small></span></div>
+                      <div><Icon name="brain" size={18} /><span><strong>{t("思考模式")}</strong><small>{t("允许在聊天时开启或关闭模型推理")}</small></span></div>
                       <SettingsToggle
                         checked={selectedModel.supportsReasoning}
-                        label="支持思考模式"
+                        label={t("支持思考模式")}
                         onChange={(supportsReasoning) => updateModel({
                           supportsReasoning,
                           defaultReasoningEnabled: supportsReasoning ? selectedModel.defaultReasoningEnabled : false
@@ -2897,35 +2872,35 @@ export function SettingsDialog({
                       />
                     </div>
                     <div className="model-capability-card nested-capability">
-                      <div><span><strong>仅新会话默认开启</strong><small>只影响之后新建的会话，不会修改已有会话</small></span></div>
+                      <div><span><strong>{t("仅新会话默认开启")}</strong><small>{t("只影响之后新建的会话，不会修改已有会话")}</small></span></div>
                       <SettingsToggle
                         checked={selectedModel.defaultReasoningEnabled}
                         disabled={!selectedModel.supportsReasoning}
-                        label="新会话默认开启思考"
+                        label={t("新会话默认开启思考")}
                         onChange={(defaultReasoningEnabled) => updateModel({ defaultReasoningEnabled })}
                       />
                     </div>
                     <div className="model-capability-card nested-capability">
-                      <div><span><strong>默认思考强度</strong><small>该模型开启思考时使用的 effort</small></span></div>
+                      <div><span><strong>{t("默认思考强度")}</strong><small>{t("该模型开启思考时使用的 effort")}</small></span></div>
                       <select
-                        aria-label="模型默认思考强度"
+                        aria-label={t("模型默认思考强度")}
                         disabled={!selectedModel.supportsReasoning}
                         value={selectedModel.defaultReasoningEffort}
                         onChange={(event) => updateModel({
                           defaultReasoningEffort: event.target.value as ModelConfig['defaultReasoningEffort']
                         })}
                       >
-                        <option value="minimal">极简</option>
-                        <option value="low">低</option>
-                        <option value="medium">中</option>
-                        <option value="high">高</option>
-                        <option value="xhigh">很高</option>
-                        <option value="max">最高</option>
+                        <option value="minimal">{t("极简")}</option>
+                        <option value="low">{t("低")}</option>
+                        <option value="medium">{t("中")}</option>
+                        <option value="high">{t("高")}</option>
+                        <option value="xhigh">{t("很高")}</option>
+                        <option value="max">{t("最高")}</option>
                       </select>
                     </div>
 
                     <div className="danger-row">
-                      <button disabled={modelDrafts.length <= 1} onClick={removeModel}><Icon name="trash" size={15} /> 删除模型</button>
+                      <button disabled={modelDrafts.length <= 1} onClick={removeModel}><Icon name="trash" size={15} />{t("删除模型")}</button>
                     </div>
                   </div>
                 )}
@@ -2936,12 +2911,12 @@ export function SettingsDialog({
               <div className="settings-split-view">
                 <aside className="settings-list-panel">
                   <div className="settings-list-toolbar">
-                    <span>{providerDrafts.length} 个服务商</span>
-                    <button onClick={addProvider}><Icon name="plus" size={15} /> 添加</button>
+                    <span>{t("{value0} 个服务商", { value0: providerDrafts.length })}</span>
+                    <button onClick={addProvider}><Icon name="plus" size={15} />{t("添加")}</button>
                   </div>
                   <button className="cliproxy-preset-button" onClick={addCliProxyPreset}>
                     <span><Icon name="code" size={17} /></span>
-                    <span><strong>CLIProxyAPI 本地预设</strong><small>127.0.0.1:8317 · 密钥可选</small></span>
+                    <span><strong>{t("CLIProxyAPI 本地预设")}</strong><small>{t("127.0.0.1:8317 · 密钥可选")}</small></span>
                     <Icon name="plus" size={14} />
                   </button>
                   <div className="settings-entity-list">
@@ -2952,7 +2927,7 @@ export function SettingsDialog({
                         onClick={() => { setSelectedProviderId(provider.id); setTestState('idle') }}
                       >
                         <span className="entity-icon provider-icon"><Icon name="globe" size={16} /></span>
-                        <span><strong>{provider.name}</strong><small>{provider.hasApiKey ? '密钥已保存' : isProviderKeyOptional(provider) ? '本机连接 · 密钥可选' : '需要 API 密钥'}</small></span>
+                        <span><strong>{provider.name}</strong><small>{provider.hasApiKey ? t("密钥已保存") : isProviderKeyOptional(provider) ? t("本机连接 · 密钥可选") : t("需要 API 密钥")}</small></span>
                         <i className={`status-dot ${provider.hasApiKey || isProviderKeyOptional(provider) ? 'is-ready' : ''}`} />
                       </button>
                     ))}
@@ -2963,33 +2938,33 @@ export function SettingsDialog({
                     <div className="editor-title-row">
                       <div>
                         <span className="entity-icon large provider-icon"><Icon name="globe" size={18} /></span>
-                        <div><h3>{selectedProvider.name}</h3><small>{selectedProvider.id === 'openrouter' ? '内置服务商' : selectedProvider.kind === 'cliproxy' ? '本机兼容代理' : '自定义服务商'}</small></div>
+                        <div><h3>{selectedProvider.name}</h3><small>{selectedProvider.id === 'openrouter' ? t("内置服务商") : selectedProvider.kind === 'cliproxy' ? t("本机兼容代理") : t("自定义服务商")}</small></div>
                       </div>
-                      <span className="settings-value-note">{clearApiKeyIds.includes(selectedProvider.id) ? '密钥待清除' : selectedProvider.hasApiKey ? '密钥已保存' : selectedProviderKeyOptional ? '密钥可选' : '待配置'}</span>
+                      <span className="settings-value-note">{clearApiKeyIds.includes(selectedProvider.id) ? t("密钥待清除") : selectedProvider.hasApiKey ? t("密钥已保存") : selectedProviderKeyOptional ? t("密钥可选") : t("待配置")}</span>
                     </div>
                     <div className="editor-form-grid single-column">
                       <label>
-                        <FieldLabel>名称</FieldLabel>
+                        <FieldLabel>{t("名称")}</FieldLabel>
                         <input value={selectedProvider.name} onChange={(event) => updateProvider({ name: event.target.value })} />
                       </label>
                       <label>
-                        <FieldLabel>服务商类型</FieldLabel>
+                        <FieldLabel>{t("服务商类型")}</FieldLabel>
                         <select value={selectedProvider.kind} onChange={(event) => updateProvider({ kind: event.target.value as ProviderConfig['kind'] })}>
                           <option value="openrouter">OpenRouter</option>
-                          <option value="openai">OpenAI 兼容</option>
+                          <option value="openai">{t("OpenAI 兼容")}</option>
                           <option value="anthropic">Anthropic</option>
-                          <option value="cliproxy">CLIProxyAPI（本机）</option>
-                          <option value="custom">自定义</option>
+                          <option value="cliproxy">{t("CLIProxyAPI（本机）")}</option>
+                          <option value="custom">{t("自定义")}</option>
                         </select>
                       </label>
                       <label>
-                        <FieldLabel hint="新接入推荐 Responses">默认 API 格式</FieldLabel>
+                        <FieldLabel hint={t("新接入推荐 Responses")}>{t("默认 API 格式")}</FieldLabel>
                         <div className="provider-api-format-control">
                           <select
                             aria-describedby="legacy-chat-completions-hint"
                             title={selectedProvider.apiFormat === 'openai-chat-completions'
                               ? LEGACY_CHAT_COMPLETIONS_HINT
-                              : 'Responses 是新接入的推荐格式。'}
+                              : t("Responses 是新接入的推荐格式。")}
                             value={selectedProvider.apiFormat}
                             onChange={(event) => updateProvider({ apiFormat: event.target.value as ApiFormat })}
                           >
@@ -3011,12 +2986,12 @@ export function SettingsDialog({
                             title={LEGACY_CHAT_COMPLETIONS_HINT}
                           >
                             <Icon name="info" size={13} />
-                            <span>旧版格式说明</span>
+                            <span>{t("旧版格式说明")}</span>
                           </span>
                         </div>
                       </label>
                       <label>
-                        <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? 'CLIProxyAPI 默认本机监听地址' : '请求将发送到此地址'}>Base URL</FieldLabel>
+                        <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? t("CLIProxyAPI 默认本机监听地址") : t("请求将发送到此地址")}>Base URL</FieldLabel>
                         <input
                           className="mono-input"
                           placeholder={selectedProvider.kind === 'cliproxy' ? 'http://127.0.0.1:8317/v1' : 'https://openrouter.ai/api/v1'}
@@ -3025,12 +3000,12 @@ export function SettingsDialog({
                         />
                       </label>
                       <label>
-                        <FieldLabel hint={selectedProviderKeyOptional ? 'config.yaml 的 api-keys 为空时可留空' : selectedProvider.hasApiKey ? '已加密保存；留空则保持不变' : '保存后将由系统安全加密'}>API 密钥</FieldLabel>
+                        <FieldLabel hint={selectedProviderKeyOptional ? t("config.yaml 的 api-keys 为空时可留空") : selectedProvider.hasApiKey ? t("已加密保存；留空则保持不变") : t("保存后将由系统安全加密")}>{t("API 密钥")}</FieldLabel>
                         <div className="secret-input">
                           <Icon name="key" size={16} />
                           <input
                             autoComplete="off"
-                            placeholder={clearApiKeyIds.includes(selectedProvider.id) ? '保存后将清除密钥；输入新值可取消' : selectedProvider.hasApiKey ? '••••••••••••••••••••' : selectedProviderKeyOptional ? '可选：填写 CLIProxyAPI 配置的密钥' : 'sk-or-v1-…'}
+                            placeholder={clearApiKeyIds.includes(selectedProvider.id) ? t("保存后将清除密钥；输入新值可取消") : selectedProvider.hasApiKey ? '••••••••••••••••••••' : selectedProviderKeyOptional ? t("可选：填写 CLIProxyAPI 配置的密钥") : 'sk-or-v1-…'}
                             type={showApiKey ? 'text' : 'password'}
                             value={apiKeyInputs[selectedProvider.id] ?? ''}
                             onChange={(event) => {
@@ -3039,7 +3014,7 @@ export function SettingsDialog({
                               if (value.trim()) setClearApiKeyIds((current) => current.filter((id) => id !== selectedProvider.id))
                             }}
                           />
-                          <button type="button" onClick={() => setShowApiKey((current) => !current)}>{showApiKey ? '隐藏' : '显示'}</button>
+                          <button type="button" onClick={() => setShowApiKey((current) => !current)}>{showApiKey ? t("隐藏") : t("显示")}</button>
                         </div>
                         {selectedProvider.hasApiKey && (
                           <button
@@ -3048,26 +3023,25 @@ export function SettingsDialog({
                             onClick={() => toggleClearApiKey(selectedProvider.id)}
                           >
                             <Icon name={clearApiKeyIds.includes(selectedProvider.id) ? 'refresh' : 'trash'} size={13} />
-                            {clearApiKeyIds.includes(selectedProvider.id) ? '保留原密钥' : '保存时清除密钥'}
+                            {clearApiKeyIds.includes(selectedProvider.id) ? t("保留原密钥") : t("保存时清除密钥")}
                           </button>
                         )}
                         {selectedProviderNeedsNewKey && (
                           <span className="credential-warning">
-                            <Icon name="info" size={13} /> 连接地址或服务商类型已改变。安全策略会清除旧密钥，请重新输入。
-                          </span>
+                            <Icon name="info" size={13} />{t("连接地址或服务商类型已改变。安全策略会清除旧密钥，请重新输入。")}</span>
                         )}
                       </label>
                     </div>
                     <div className="provider-security-banner">
                       <Icon name="shield" size={18} />
-                      <div><strong>{selectedProviderKeyOptional ? '本机回环连接可无密钥使用' : '密钥不会进入 renderer 持久状态'}</strong><p>{selectedProviderKeyOptional ? '若 CLIProxyAPI 的 api-keys 未配置，请保持为空；填写时仍会安全加密。' : '保存时通过安全通道交给主进程，并使用系统密钥链派生的密钥加密。'}</p></div>
+                      <div><strong>{selectedProviderKeyOptional ? t("本机回环连接可无密钥使用") : t("密钥不会进入 renderer 持久状态")}</strong><p>{selectedProviderKeyOptional ? t("若 CLIProxyAPI 的 api-keys 未配置，请保持为空；填写时仍会安全加密。") : t("保存时通过安全通道交给主进程，并使用系统密钥链派生的密钥加密。")}</p></div>
                     </div>
                     {selectedProviderKeyOptional
                       && (!selectedProvider.hasApiKey || clearApiKeyIds.includes(selectedProvider.id))
                       && !(apiKeyInputs[selectedProvider.id] ?? '').trim() && (
                       <div className="cliproxy-network-warning">
                         <Icon name="info" size={17} />
-                        <div><strong>无密钥时必须限制服务端监听地址</strong><p>请在 CLIProxyAPI 的 config.yaml 中设置 <code>host: "127.0.0.1"</code>。默认 <code>host: ""</code> 可能允许局域网访问，且默认未启用 TLS。</p></div>
+                        <div><strong>{t("无密钥时必须限制服务端监听地址")}</strong><p>{t("请在 CLIProxyAPI 的 config.yaml 中设置")}<code>host: "127.0.0.1"</code>{t("。默认")}<code>host: ""</code>{t("可能允许局域网访问，且默认未启用 TLS。")}</p></div>
                       </div>
                     )}
                     <div className="provider-actions">
@@ -3076,13 +3050,13 @@ export function SettingsDialog({
                         disabled={!onTestProvider || testState === 'testing' || selectedProviderNeedsNewKey || ((!selectedProvider.hasApiKey || clearApiKeyIds.includes(selectedProvider.id)) && !selectedProviderKeyOptional && !(apiKeyInputs[selectedProvider.id] ?? '').trim())}
                         onClick={testProvider}
                       >
-                        {testState === 'testing' ? <><span className="button-spinner" /> 测试中…</> :
-                          testState === 'success' ? <><Icon name="check" size={15} /> 连接成功</> :
-                            testState === 'failed' ? <><Icon name="info" size={15} /> 重试连接</> :
-                              <><Icon name="refresh" size={15} /> 测试当前配置</>}
+                        {testState === 'testing' ? <><span className="button-spinner" />{t("测试中…")}</> :
+                          testState === 'success' ? <><Icon name="check" size={15} />{t("连接成功")}</> :
+                            testState === 'failed' ? <><Icon name="info" size={15} />{t("重试连接")}</> :
+                              <><Icon name="refresh" size={15} />{t("测试当前配置")}</>}
                       </button>
                       {selectedProvider.id !== 'openrouter' && (
-                        <button className="remove-provider-button" onClick={removeProvider}><Icon name="trash" size={15} /> 删除</button>
+                        <button className="remove-provider-button" onClick={removeProvider}><Icon name="trash" size={15} />{t("删除")}</button>
                       )}
                     </div>
                   </div>
@@ -3094,17 +3068,17 @@ export function SettingsDialog({
               <div className="settings-section-content narrow-settings">
                 <div className="encryption-hero">
                   <span><Icon name="shield" size={29} /></span>
-                  <div><h3>本地数据保护已启用</h3><p>会话、配置与 API 密钥在写入磁盘前都会加密。</p></div>
-                  <i><Icon name="check" size={14} /> 已保护</i>
+                  <div><h3>{t("本地数据保护已启用")}</h3><p>{t("会话、配置与 API 密钥在写入磁盘前都会加密。")}</p></div>
+                  <i><Icon name="check" size={14} />{t("已保护")}</i>
                 </div>
                 <section className="settings-card">
                   <div className="settings-row">
-                    <div><strong>API 密钥</strong><small>由操作系统凭据保护机制加密</small></div>
-                    <span className="security-state"><Icon name="check" size={14} /> 安全</span>
+                    <div><strong>{t("API 密钥")}</strong><small>{t("由操作系统凭据保护机制加密")}</small></div>
+                    <span className="security-state"><Icon name="check" size={14} />{t("安全")}</span>
                   </div>
                   <div className="settings-row">
-                    <div><strong>会话数据库</strong><small>仅保存在此设备的应用数据目录</small></div>
-                    <span className="security-state"><Icon name="check" size={14} /> 本地</span>
+                    <div><strong>{t("会话数据库")}</strong><small>{t("仅保存在此设备的应用数据目录")}</small></div>
+                    <span className="security-state"><Icon name="check" size={14} />{t("本地")}</span>
                   </div>
                 </section>
                 <section className={`settings-card export-card ${backupConfiguring ? 'is-configuring' : ''}`}>
@@ -3112,8 +3086,8 @@ export function SettingsDialog({
                     <div>
                       <Icon name="archive" size={20} />
                       <span>
-                        <strong>导出加密备份</strong>
-                        <small>以明文 JSON 与 Markdown 导出全部会话，可选包含工作目录</small>
+                        <strong>{t("导出加密备份")}</strong>
+                        <small>{t("以明文 JSON 与 Markdown 导出全部会话，可选包含工作目录")}</small>
                       </span>
                     </div>
                     <button
@@ -3125,13 +3099,13 @@ export function SettingsDialog({
                         setBackupResult(null)
                       }}
                     >
-                      {backupConfiguring ? '收起' : '配置并导出'}
+                      {backupConfiguring ? t("收起") : t("配置并导出")}
                     </button>
                   </div>
                   {backupConfiguring && (
                     <div className="backup-export-panel">
                       <fieldset className="backup-mode-options" disabled={backupExporting}>
-                        <legend>备份模式</legend>
+                        <legend>{t("备份模式")}</legend>
                         <label className={backupMode === 'shallow' ? 'is-selected' : ''}>
                           <input
                             checked={backupMode === 'shallow'}
@@ -3139,7 +3113,7 @@ export function SettingsDialog({
                             onChange={() => setBackupMode('shallow')}
                             type="radio"
                           />
-                          <span><strong>浅备份</strong><small>全部会话、分支、附件与 Agent 记录，不复制工作目录</small></span>
+                          <span><strong>{t("浅备份")}</strong><small>{t("全部会话、分支、附件与 Agent 记录，不复制工作目录")}</small></span>
                         </label>
                         <label className={backupMode === 'deep' ? 'is-selected' : ''}>
                           <input
@@ -3148,13 +3122,13 @@ export function SettingsDialog({
                             onChange={() => setBackupMode('deep')}
                             type="radio"
                           />
-                          <span><strong>深备份</strong><small>在浅备份基础上，递归包含所有去重后的会话工作目录</small></span>
+                          <span><strong>{t("深备份")}</strong><small>{t("在浅备份基础上，递归包含所有去重后的会话工作目录")}</small></span>
                         </label>
                       </fieldset>
 
                       <div className="backup-password-fields">
                         <label>
-                          <span>ZIP 密码（可选，建议设置）</span>
+                          <span>{t("ZIP 密码（可选，建议设置）")}</span>
                           <input
                             autoComplete="new-password"
                             disabled={backupExporting}
@@ -3166,13 +3140,13 @@ export function SettingsDialog({
                               setBackupError('')
                               setBackupResult(null)
                             }}
-                            placeholder="建议使用至少 12 位独立密码"
+                            placeholder={t("建议使用至少 12 位独立密码")}
                             type="password"
                             value={backupPassword}
                           />
                         </label>
                         <label>
-                          <span>确认密码</span>
+                          <span>{t("确认密码")}</span>
                           <input
                             autoComplete="new-password"
                             disabled={backupExporting || !backupPassword}
@@ -3181,7 +3155,7 @@ export function SettingsDialog({
                               setBackupPasswordConfirmation(event.target.value)
                               setBackupError('')
                             }}
-                            placeholder={backupPassword ? '再次输入密码' : '未设置密码'}
+                            placeholder={backupPassword ? t("再次输入密码") : t("未设置密码")}
                             type="password"
                             value={backupPasswordConfirmation}
                           />
@@ -3192,12 +3166,12 @@ export function SettingsDialog({
                         <Icon name={backupProtectionEnabled ? 'lock' : 'info'} size={16} />
                         <span>
                           <strong>{backupResult
-                            ? backupProtectionEnabled ? '本次备份已使用 ZIP AES-256 加密' : '本次备份未设置密码'
-                            : backupProtectionEnabled ? '将使用 ZIP AES-256 加密文件内容' : '当前将导出未加密的明文 ZIP'}</strong>
+                            ? backupProtectionEnabled ? t("本次备份已使用 ZIP AES-256 加密") : t("本次备份未设置密码")
+                            : backupProtectionEnabled ? t("将使用 ZIP AES-256 加密文件内容") : t("当前将导出未加密的明文 ZIP")}</strong>
                           <small>
                             {backupProtectionEnabled
-                              ? 'AgentBox 不保存密码；ZIP 条目名称仍可能被查看，深备份会暴露工作目录文件名。'
-                              : '会话、附件与深备份文件可被直接读取。建议设置密码后再导出。'}
+                              ? t("AgentBox 不保存密码；ZIP 条目名称仍可能被查看，深备份会暴露工作目录文件名。")
+                              : t("会话、附件与深备份文件可被直接读取。建议设置密码后再导出。")}
                           </small>
                         </span>
                       </div>
@@ -3207,10 +3181,9 @@ export function SettingsDialog({
                         <div className="backup-export-success" role="status">
                           <Icon name="check" size={15} />
                           <span>
-                            <strong>备份已导出</strong>
+                            <strong>{t("备份已导出")}</strong>
                             <small>
-                              {backupResult.conversationCount} 个会话
-                              {backupResult.mode === 'deep' ? `，${backupResult.workspaceCount} 个工作目录` : ''}
+                              {t("{value0} 个会话", { value0: backupResult.conversationCount })}{backupResult.mode === 'deep' ? t("，{value0} 个工作目录", { value0: backupResult.workspaceCount }) : ''}
                               {backupResult.bytesWritten !== undefined ? `，${formatFileSize(backupResult.bytesWritten)}` : ''}
                               {backupResult.filePath ? ` · ${backupResult.filePath}` : ''}
                             </small>
@@ -3219,13 +3192,13 @@ export function SettingsDialog({
                       )}
 
                       <div className="backup-export-actions">
-                        <small>API 密钥、Vault 密钥、服务商及应用设置不会进入导出包。</small>
+                        <small>{t("API 密钥、Vault 密钥、服务商及应用设置不会进入导出包。")}</small>
                         <button
                           className="primary-button"
                           disabled={!onExportBackup || backupExporting || backupPassword !== backupPasswordConfirmation}
                           onClick={() => void exportBackup()}
                         >
-                          {backupExporting ? <><span className="button-spinner" /> 正在创建 ZIP…</> : <><Icon name="archive" size={14} /> 选择位置并导出</>}
+                          {backupExporting ? <><span className="button-spinner" />{t("正在创建 ZIP…")}</> : <><Icon name="archive" size={14} />{t("选择位置并导出")}</>}
                         </button>
                       </div>
                     </div>
@@ -3235,28 +3208,26 @@ export function SettingsDialog({
                   <div className="danger-card-head">
                     <Icon name="trash" size={20} />
                     <span>
-                      <strong>清除全部会话数据</strong>
-                      <small>删除所有对话与消息，重新加密本地数据。不会清除已配置的供应商与模型。</small>
+                      <strong>{t("清除全部会话数据")}</strong>
+                      <small>{t("删除所有对话与消息，重新加密本地数据。不会清除已配置的供应商与模型。")}</small>
                     </span>
                   </div>
                   {clearError && <p className="danger-card-error">{clearError}</p>}
                   {clearConfirming ? (
                     <div className="danger-card-confirm">
-                      <p>将永久删除全部会话，此操作无法撤销。确定继续吗？</p>
+                      <p>{t("将永久删除全部会话，此操作无法撤销。确定继续吗？")}</p>
                       <div className="danger-card-actions">
                         <button
                           className="secondary-button"
                           disabled={clearing}
                           onClick={() => { setClearConfirming(false); setClearError('') }}
-                        >
-                          取消
-                        </button>
+                        >{t("取消")}</button>
                         <button
                           className="danger-button"
                           disabled={clearing}
                           onClick={() => void confirmClearData()}
                         >
-                          {clearing ? '清除中…' : '确认清除'}
+                          {clearing ? t("清除中…") : t("确认清除")}
                         </button>
                       </div>
                     </div>
@@ -3266,8 +3237,7 @@ export function SettingsDialog({
                       disabled={!onClearData}
                       onClick={() => setClearConfirming(true)}
                     >
-                      <Icon name="trash" size={14} /> 清除全部会话数据
-                    </button>
+                      <Icon name="trash" size={14} />{t("清除全部会话数据")}</button>
                   )}
                 </section>
               </div>
@@ -3277,7 +3247,7 @@ export function SettingsDialog({
               <div className="about-panel">
                 <div className="about-mark"><Icon name="app" size={42} /></div>
                 <h2>AgentBox</h2>
-                <p>私密、强大的多模型 AI 智能体与桌面客户端。</p>
+                <p>{t("私密、强大的多模型 AI 智能体与桌面客户端。")}</p>
                 <span className="version-pill">Version 0.1.0</span>
                 <div className="about-divider" />
                 <small>Built with React, Electron & OpenRouter</small>
@@ -3287,12 +3257,12 @@ export function SettingsDialog({
 
           <footer className="settings-footer">
             <span className={saveError ? 'settings-save-error' : ''}>
-              {saveError || '更改将安全地保存在本机'}
+              {saveError || t("更改将安全地保存在本机")}
             </span>
             <div>
-              <button className="secondary-button" onClick={closeDialog}>取消</button>
+              <button className="secondary-button" onClick={closeDialog}>{t("取消")}</button>
               <button className="primary-button" disabled={saving || providersRequiringNewKey.length > 0} onClick={save}>
-                {saving ? '保存中…' : '保存更改'}
+                {saving ? t("保存中…") : t("保存更改")}
               </button>
             </div>
           </footer>

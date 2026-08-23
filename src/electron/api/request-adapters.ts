@@ -9,6 +9,7 @@ import type {
   ReasoningEffort,
   WebSearchMode,
 } from '../../shared/types'
+import { t } from "../../shared/i18n"
 
 export class RequestAdapterError extends Error {
   constructor(message: string, readonly code: string) {
@@ -275,7 +276,7 @@ function applyOpenAiTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+        t("网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。"),
         'web_search_not_supported',
       )
     }
@@ -317,7 +318,7 @@ function applyResponsesTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+        t("网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。"),
         'web_search_not_supported',
       )
     }
@@ -357,7 +358,7 @@ function applyAnthropicTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。',
+        t("网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。"),
         'web_search_not_supported',
       )
     }
@@ -392,7 +393,7 @@ function reasoningBudget(
 ): number {
   if (maxOutputTokens <= 1_024) {
     throw new RequestAdapterError(
-      'Anthropic 思考模式要求最大输出长度大于 1024 token。',
+      t("Anthropic 思考模式要求最大输出长度大于 1024 token。"),
       'invalid_reasoning_budget',
     )
   }

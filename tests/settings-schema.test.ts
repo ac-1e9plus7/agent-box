@@ -12,6 +12,16 @@ const legacySettings = {
 }
 
 describe('settings schema migration', () => {
+  it('uses the caller-provided system language for legacy settings', () => {
+    expect(normalizeAppSettings(legacySettings, 'zh-CN').language).toBe('zh-CN')
+    expect(normalizeAppSettings(legacySettings, 'en-US').language).toBe('en-US')
+  })
+
+  it('preserves a selected language and rejects unknown values', () => {
+    expect(normalizeAppSettings({ ...legacySettings, language: 'zh-CN' }).language).toBe('zh-CN')
+    expect(() => normalizeAppSettings({ ...legacySettings, language: 'fr-FR' })).toThrow('Invalid language')
+  })
+
   it('defaults legacy settings to an empty display-only user profile', () => {
     expect(normalizeAppSettings(legacySettings)).toMatchObject({
       userNickname: '',

@@ -4,14 +4,21 @@ import { normalizeAgentToolTurnLimit } from '../../shared/agent-limits'
 import { MAX_USER_AVATAR_DATA_URL_LENGTH, MAX_USER_NICKNAME_LENGTH } from '../../shared/user-profile'
 import { isLoopbackUrl } from '../api/provider-policy'
 import { normalizeRuntimePathInput } from '../runtime-path'
+import { isAppLanguage, type AppLanguage } from '../../shared/i18n'
+import { t } from "../../shared/i18n"
 
 /**
  * Validates settings and fills fields introduced after vault schema v1.
  * Missing contextManagementMode is intentionally migrated to the safe,
  * non-destructive manual behavior.
  */
-export function normalizeAppSettings(value: unknown): AppSettings {
+export function normalizeAppSettings(
+  value: unknown,
+  fallbackLanguage: AppLanguage = 'en-US',
+): AppSettings {
   if (!isRecord(value)) throw new Error('Invalid settings')
+  const language = value.language ?? fallbackLanguage
+  if (!isAppLanguage(language)) throw new Error('Invalid language')
   if (!['system', 'light', 'dark'].includes(String(value.theme))) {
     throw new Error('Invalid theme')
   }
@@ -68,6 +75,7 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   const developerRuntimes = normalizeDeveloperRuntimes(value.developerRuntimes)
   const defaultWorkingDirectory = normalizeOptionalDirectory(value.defaultWorkingDirectory, 'default working directory')
   const settings: AppSettings = {
+    language,
     theme: value.theme as AppSettings['theme'],
     sendShortcut: value.sendShortcut as AppSettings['sendShortcut'],
     contextManagementMode:
@@ -103,7 +111,7 @@ function normalizeUserNickname(value: unknown): string {
     || value.length > MAX_USER_NICKNAME_LENGTH
     || /[\r\n\0]/.test(value)
   ) {
-    throw new Error('昵称不能超过 50 个字符或包含换行。')
+    throw new Error(t("昵称不能超过 50 个字符或包含换行。"))
   }
   return value.trim()
 }
@@ -111,11 +119,11 @@ function normalizeUserNickname(value: unknown): string {
 function normalizeUserAvatar(value: unknown): string {
   if (value === undefined || value === null || value === '') return ''
   if (typeof value !== 'string' || value.length > MAX_USER_AVATAR_DATA_URL_LENGTH) {
-    throw new Error('头像数据过大或格式无效。')
+    throw new Error(t("头像数据过大或格式无效。"))
   }
   const match = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value)
   const payload = match?.[1]
-  if (!payload || payload.length % 4 !== 0) throw new Error('头像数据过大或格式无效。')
+  if (!payload || payload.length % 4 !== 0) throw new Error(t("头像数据过大或格式无效。"))
   return value
 }
 
@@ -146,9 +154,9 @@ export function normalizeDeveloperRuntimes(value: unknown): DeveloperRuntimeSett
     environment: normalizeRuntimePathInput(value.python.environment ?? ''),
     condaExecutable: normalizeRuntimePathInput(value.python.condaExecutable ?? 'conda') || 'conda',
   }
-  if (python.mode === 'venv' && !python.environment) throw new Error('Python venv 路径不能为空。')
-  if (python.mode === 'conda' && !python.environment) throw new Error('Conda 环境名称或路径不能为空。')
-  if (python.mode === 'custom' && !python.executable) throw new Error('Python 可执行文件不能为空。')
+  if (python.mode === 'venv' && !python.environment) throw new Error(t("Python venv 路径不能为空。"))
+  if (python.mode === 'conda' && !python.environment) throw new Error(t("Conda 环境名称或路径不能为空。"))
+  if (python.mode === 'custom' && !python.executable) throw new Error(t("Python 可执行文件不能为空。"))
   return { jdk, go, php, python }
 }
 
@@ -164,7 +172,7 @@ function normalizeRuntimeRecord<T extends { mode: 'auto' | 'custom' }>(
   const result = { ...defaults, mode } as T
   for (const field of fields) result[field] = normalizeRuntimePathInput(value[String(field)] ?? '') as T[typeof field]
   if (mode === 'custom' && fields.every((field) => !String(result[field] || '').trim())) {
-    throw new Error('自定义运行时路径不能为空。')
+    throw new Error(t("自定义运行时路径不能为空。"))
   }
   return result
 }
@@ -194,7 +202,7 @@ export function normalizeIntegratedTerminalShell(value: unknown): IntegratedTerm
     return argument
   })
   const executable = value.executable.trim()
-  if (mode === 'custom' && !executable) throw new Error('自定义终端 Shell 可执行文件不能为空。')
+  if (mode === 'custom' && !executable) throw new Error(t("自定义终端 Shell 可执行文件不能为空。"))
   return { mode: mode as IntegratedTerminalShellConfig['mode'], executable, args }
 }
 
@@ -215,21 +223,21 @@ function normalizeProxy(value: unknown): ProxyConfig {
 }
 
 function validateProxyUrl(url: string): void {
-  if (!url.trim()) throw new Error('代理地址不能为空。')
+  if (!url.trim()) throw new Error(t("代理地址不能为空。"))
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
-    throw new Error('代理地址格式无效。')
+    throw new Error(t("代理地址格式无效。"))
   }
   const scheme = parsed.protocol.toLowerCase()
   if (scheme !== 'http:' && scheme !== 'https:') {
-    throw new Error('代理地址仅支持 http 与 https 协议。')
+    throw new Error(t("代理地址仅支持 http 与 https 协议。"))
   }
   // Remote HTTP proxies would transmit requests in the clear; require HTTPS for
   // non-loopback hosts, mirroring the provider base-URL policy.
   if (scheme === 'http:' && !isLoopbackUrl(url)) {
-    throw new Error('远程 HTTP 代理不被允许，请使用 https 代理。')
+    throw new Error(t("远程 HTTP 代理不被允许，请使用 https 代理。"))
   }
 }
 

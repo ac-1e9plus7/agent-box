@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
 import type { DeveloperRuntimeSettings } from '../../shared/types'
 import { resolveDeveloperRuntime } from './runtime-environments'
+import { getLanguage, t } from '../../shared/i18n'
 
 export type ExecutableLanguage = 'javascript' | 'python'
 
@@ -69,12 +70,12 @@ const context = vm.createContext(sandbox, {
     const script = new vm.Script(source, { filename: 'agentbox-user-code.js' })
     const value = await script.runInContext(context, { timeout: workerData.timeoutMs })
     if (value !== undefined) append(['Result:', value])
-    const result = output.join('\n') || '(代码执行完成，无输出)'
-    parentPort.postMessage({ result: result + (truncated ? '\n[输出已截断]' : ''), isError: false, truncated })
+    const result = output.join('\n') || workerData.messages.noOutput
+    parentPort.postMessage({ result: result + (truncated ? '\n' + workerData.messages.outputTruncated : ''), isError: false, truncated })
   } catch (error) {
     const message = error && error.stack ? error.stack : String(error)
     append([message])
-    parentPort.postMessage({ result: output.join('\n') + (truncated ? '\n[输出已截断]' : ''), isError: true, truncated })
+    parentPort.postMessage({ result: output.join('\n') + (truncated ? '\n' + workerData.messages.outputTruncated : ''), isError: true, truncated })
   }
 })()
 `
@@ -106,7 +107,7 @@ real_import = builtins.__import__
 def safe_import(name, globals=None, locals=None, fromlist=(), level=0):
     root = name.split(".", 1)[0]
     if level != 0 or root not in ALLOWED_MODULES:
-        raise ImportError(f"模块 {name!r} 不在允许列表中")
+        raise ImportError(__MODULE_NOT_ALLOWED__.format(name=repr(name)))
     return real_import(name, globals, locals, fromlist, level)
 
 safe_builtins = {name: getattr(builtins, name) for name in SAFE_BUILTIN_NAMES}
@@ -114,9 +115,9 @@ safe_builtins["__import__"] = safe_import
 tree = ast.parse(USER_CODE, filename="agentbox-user-code.py", mode="exec")
 for node in ast.walk(tree):
     if isinstance(node, ast.Attribute) and node.attr.startswith("__"):
-        raise PermissionError("不允许访问双下划线属性")
+        raise PermissionError(__DUNDER_NOT_ALLOWED__)
     if isinstance(node, ast.Name) and node.id in {"eval", "exec", "compile", "open", "globals", "locals", "vars", "getattr", "setattr", "delattr"}:
-        raise PermissionError(f"不允许使用 {node.id}")
+        raise PermissionError(__NAME_NOT_ALLOWED__.format(name=node.id))
 
 scope = {"__builtins__": safe_builtins, "__name__": "__main__", "input_data": USER_INPUT}
 exec(compile(tree, "agentbox-user-code.py", "exec"), scope, scope)
@@ -128,9 +129,9 @@ export async function executeCode(
   request: CodeExecutionRequest,
   signal?: AbortSignal,
 ): Promise<CodeExecutionResult> {
-  if (!request.code.trim()) return { result: '代码不能为空。', isError: true }
+  if (!request.code.trim()) return { result: t('代码不能为空。'), isError: true }
   if (request.code.length > MAX_CODE_CHARACTERS) {
-    return { result: `代码长度超过 ${MAX_CODE_CHARACTERS.toLocaleString()} 字符限制。`, isError: true }
+    return { result: t('代码长度超过 {value0} 字符限制。', { value0: MAX_CODE_CHARACTERS.toLocaleString(getLanguage()) }), isError: true }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, request.timeoutMs ?? 8_000))
   if (request.language === 'javascript') {
@@ -148,7 +149,16 @@ function executeJavaScript(
   return new Promise((resolve) => {
     const worker = new Worker(JAVASCRIPT_WORKER_SOURCE, {
       eval: true,
-      workerData: { code, input, timeoutMs, maxOutput: MAX_OUTPUT_CHARACTERS },
+      workerData: {
+        code,
+        input,
+        timeoutMs,
+        maxOutput: MAX_OUTPUT_CHARACTERS,
+        messages: {
+          noOutput: t('code.noOutput'),
+          outputTruncated: t('code.outputTruncated'),
+        },
+      },
       resourceLimits: { maxOldGenerationSizeMb: 32, maxYoungGenerationSizeMb: 8, stackSizeMb: 4 },
     })
     let settled = false
@@ -160,15 +170,15 @@ function executeJavaScript(
       void worker.terminate()
       resolve(result)
     }
-    const onAbort = () => finish({ result: '代码执行已取消。', isError: true })
+    const onAbort = () => finish({ result: t('代码执行已取消。'), isError: true })
     const timer = setTimeout(
-      () => finish({ result: `代码执行超过 ${(timeoutMs / 1_000).toFixed(1)} 秒，已终止。`, isError: true }),
+      () => finish({ result: t('代码执行超过 {value0} 秒，已终止。', { value0: (timeoutMs / 1_000).toFixed(1) }), isError: true }),
       timeoutMs + 250,
     )
     worker.once('message', (message: CodeExecutionResult) => finish(message))
     worker.once('error', (error) => finish({ result: error.stack || error.message, isError: true }))
     worker.once('exit', (code) => {
-      if (!settled) finish({ result: `代码运行器异常退出（退出码 ${code}）。`, isError: true })
+      if (!settled) finish({ result: t('代码运行器异常退出（退出码 {value0}）。', { value0: code }), isError: true })
     })
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
@@ -197,7 +207,7 @@ async function executePython(
       : await resolvePythonCommand()
   if (!python) {
     return {
-      result: '未检测到可用的 Python 3 解释器。请改用 language="javascript"，或在系统 PATH 中安装 Python 3。',
+      result: t('未检测到可用的 Python 3 解释器。请改用 language="javascript"，或在系统 PATH 中安装 Python 3。'),
       isError: true,
     }
   }
@@ -208,6 +218,9 @@ async function executePython(
     const wrapper = PYTHON_WRAPPER
       .replace('__USER_INPUT__', JSON.stringify(JSON.stringify(input ?? null)))
       .replace('__USER_CODE__', JSON.stringify(code))
+      .replace('__MODULE_NOT_ALLOWED__', JSON.stringify(t('code.moduleNotAllowed')))
+      .replace('__DUNDER_NOT_ALLOWED__', JSON.stringify(t('code.dunderNotAllowed')))
+      .replace('__NAME_NOT_ALLOWED__', JSON.stringify(t('code.nameNotAllowed')))
     await writeFile(scriptPath, wrapper, { encoding: 'utf8', mode: 0o600 })
     return await runProcess(
       python.command,
@@ -281,19 +294,27 @@ function runProcess(
     }
     const onAbort = () => {
       child.kill()
-      finish({ result: '代码执行已取消。', isError: true })
+      finish({ result: t('代码执行已取消。'), isError: true })
     }
     const timer = setTimeout(() => {
       child.kill()
-      finish({ result: `代码执行超过 ${(timeoutMs / 1_000).toFixed(1)} 秒，已终止。\n${output}${truncated ? '\n[输出已截断]' : ''}`.trim(), isError: true, truncated })
+      finish({
+        result: t('代码执行超过 {value0} 秒，已终止。\n{value1}{value2}', {
+          value0: (timeoutMs / 1_000).toFixed(1),
+          value1: output,
+          value2: truncated ? `\n${t('code.outputTruncated')}` : '',
+        }).trim(),
+        isError: true,
+        truncated,
+      })
     }, timeoutMs)
     child.stdout?.on('data', append)
     child.stderr?.on('data', append)
     child.once('error', (error) => finish({ result: error.message, isError: true }))
     child.once('close', (code) => finish({
       result: output.trim()
-        ? `${output.trim()}${truncated ? '\n[输出已截断]' : ''}`
-        : `(进程退出码 ${code ?? 'unknown'}，无输出)`,
+        ? `${output.trim()}${truncated ? `\n${t('code.outputTruncated')}` : ''}`
+        : t('(进程退出码 {value0}，无输出)', { value0: code ?? 'unknown' }),
       isError: code !== 0,
       truncated,
     }))
