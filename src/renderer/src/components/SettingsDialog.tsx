@@ -1130,8 +1130,8 @@ export function SettingsDialog({
                   <h3>默认工作目录</h3>
                   <div className="settings-row workspace-default-row">
                     <div>
-                      <strong>新会话项目目录</strong>
-                      <small>新会话优先继承当前会话目录；没有当前目录时使用这里的默认值</small>
+                      <strong>默认工作目录</strong>
+                      <small>在新建对话面板中作为快捷选项；仍可复用已有目录或另选目录</small>
                     </div>
                     <div className="workspace-default-actions">
                       <button
@@ -1152,7 +1152,7 @@ export function SettingsDialog({
                     </div>
                   </div>
                   <p className="workspace-default-path" title={preferenceDraft.defaultWorkingDirectory}>
-                    {preferenceDraft.defaultWorkingDirectory || '未设置；新会话将保持无工作目录状态'}
+                    {preferenceDraft.defaultWorkingDirectory || '未设置；新建对话时需要选择工作目录'}
                   </p>
                 </section>
                 <section className="settings-card context-policy-card">

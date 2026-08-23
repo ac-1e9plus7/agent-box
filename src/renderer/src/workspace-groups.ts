@@ -7,6 +7,15 @@ export interface WorkspaceConversationGroup {
   updatedAt: string
 }
 
+export type NewConversationWorkspaceSource = 'current' | 'default' | 'recent'
+
+export interface NewConversationWorkspaceOption {
+  conversationCount: number
+  label: string
+  path: string
+  source: NewConversationWorkspaceSource
+}
+
 export function groupConversationsByWorkspace(conversations: Conversation[], query = ''): WorkspaceConversationGroup[] {
   const normalizedQuery = query.trim().toLocaleLowerCase()
   const filtered = conversations.filter((conversation) => {
@@ -30,6 +39,37 @@ export function groupConversationsByWorkspace(conversations: Conversation[], que
     }
   }
   return Array.from(groups.values()).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+}
+
+export function getNewConversationWorkspaceOptions(
+  conversations: Conversation[],
+  currentDirectory?: string,
+  defaultDirectory?: string,
+): NewConversationWorkspaceOption[] {
+  const existingGroups = groupConversationsByWorkspace(conversations).filter((group) => Boolean(group.path))
+  const groupByKey = new Map(existingGroups.map((group) => [workspaceKey(group.path), group]))
+  const seen = new Set<string>()
+  const options: NewConversationWorkspaceOption[] = []
+
+  const addOption = (path: string | undefined, source: NewConversationWorkspaceSource): void => {
+    const trimmed = path?.trim()
+    if (!trimmed) return
+    const key = workspaceKey(trimmed)
+    if (seen.has(key)) return
+    const group = groupByKey.get(key)
+    seen.add(key)
+    options.push({
+      conversationCount: group?.conversations.length ?? 0,
+      label: workspaceLabel(trimmed),
+      path: group?.path ?? trimmed,
+      source,
+    })
+  }
+
+  addOption(currentDirectory, 'current')
+  addOption(defaultDirectory, 'default')
+  for (const group of existingGroups) addOption(group.path, 'recent')
+  return options
 }
 
 function workspaceKey(directory?: string): string {

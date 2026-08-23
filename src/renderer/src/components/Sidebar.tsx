@@ -14,6 +14,7 @@ interface SidebarProps {
   onCollapse: () => void
   onDeleteConversation: (conversationId: string) => void
   onNewConversation: () => void
+  onNewConversationInWorkspace: (workingDirectory: string) => void
   onOpenSettings: () => void
   onQueryChange: (query: string) => void
   onRenameConversation: (conversationId: string, title: string) => void
@@ -30,6 +31,7 @@ export function Sidebar({
   onCollapse,
   onDeleteConversation,
   onNewConversation,
+  onNewConversationInWorkspace,
   onOpenSettings,
   onQueryChange,
   onRenameConversation,
@@ -37,6 +39,7 @@ export function Sidebar({
 }: SidebarProps): JSX.Element {
   const [editingId, setEditingId] = useState('')
   const [draftTitle, setDraftTitle] = useState('')
+  const newConversationShortcut = /Mac|iPhone|iPad/i.test(navigator.platform) ? '⌘ N' : 'Ctrl N'
 
   const startRename = (conversation: Conversation): void => {
     setEditingId(conversation.id)
@@ -78,7 +81,7 @@ export function Sidebar({
           <button className="new-chat-button" onClick={onNewConversation}>
             <Icon name="plus" size={17} />
             <span>新建对话</span>
-            <kbd>⌘ N</kbd>
+            <kbd>{newConversationShortcut}</kbd>
           </button>
           <label className="search-box">
             <Icon name="search" size={16} />
@@ -95,7 +98,23 @@ export function Sidebar({
         <nav className="conversation-nav" aria-label="会话历史">
           {groupedConversations.map((group) => (
             <section className="conversation-group" key={group.path || group.label}>
-              <h2 title={group.path || '未设置工作目录'}><Icon name={group.path ? 'folder' : 'message'} size={12} /> {group.label}</h2>
+              <div className="conversation-group-heading">
+                <h2 title={group.path || '未设置工作目录'}>
+                  <Icon name={group.path ? 'folder' : 'message'} size={12} />
+                  <span>{group.label}</span>
+                </h2>
+                {group.path && (
+                  <button
+                    aria-label={`在 ${group.label} 中新建对话`}
+                    className="workspace-new-chat"
+                    onClick={() => onNewConversationInWorkspace(group.path!)}
+                    title={`基于 ${group.path} 新建对话`}
+                    type="button"
+                  >
+                    <Icon name="plus" size={12} />
+                  </button>
+                )}
+              </div>
               <div className="conversation-list">
                 {group.conversations.map((conversation) => {
                   const isEditing = editingId === conversation.id

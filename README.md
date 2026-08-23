@@ -22,7 +22,7 @@
   - 自动适配 Windows PowerShell/cmd、macOS zsh/bash 与 Linux SHELL/bash/zsh/fish/sh，也可指定 Shell 可执行文件及逐行启动参数。
   - Agent 可通过受审批保护的 `agentbox_run_terminal` 执行命令；自定义 Shell 可用 `{command}` 参数模板适配不同命令行接口。
 - 📁 **会话工作目录与开发环境**：
-  - 每个会话绑定独立工作目录，新会话继承当前目录或全局默认目录；侧边栏自动按完整目录归组，终端与项目相对路径以该目录为边界。
+  - 新建会话必须绑定工作目录；可复用当前、默认或最近目录，也可从侧边栏目录分组中快捷新建。终端与项目相对路径以该目录为边界。
   - 可配置默认 JDK、Go、PHP 与 Python；Python 支持项目 `.venv`/`venv` 自动发现、系统解释器、普通 venv、Conda 环境名称/prefix 和自定义解释器。
 - 🧩 **Agent 多文件技能（Skills）系统**：
   - 采用 Markdown 规范 + **Python 3 / Shell 参考脚本** 标准，支持会话固定、`$skill-id` 显式调用、上下文自动检索和模型按需加载；回答会显示本轮实际激活的技能。

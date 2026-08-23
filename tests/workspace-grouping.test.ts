@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupConversationsByWorkspace } from '../src/renderer/src/workspace-groups'
+import { getNewConversationWorkspaceOptions, groupConversationsByWorkspace } from '../src/renderer/src/workspace-groups'
 import type { Conversation } from '../src/renderer/src/types'
 
 const conversation = (id: string, workingDirectory: string | undefined, updatedAt: string): Conversation => ({
@@ -33,5 +33,24 @@ describe('workspace conversation grouping', () => {
       conversation('backend task', '/repo/services/api', '2026-01-01T00:00:00.000Z'),
     ], 'services')
     expect(groups.flatMap((group) => group.conversations).map((item) => item.id)).toEqual(['backend task'])
+  })
+
+  it('offers current, default, and recent workspaces in a stable deduplicated order', () => {
+    const options = getNewConversationWorkspaceOptions([
+      conversation('current one', 'C:\\code\\alpha', '2026-01-02T00:00:00.000Z'),
+      conversation('current two', 'C:\\code\\alpha\\', '2026-01-03T00:00:00.000Z'),
+      conversation('recent', 'C:\\code\\beta', '2026-01-04T00:00:00.000Z'),
+      conversation('legacy', undefined, '2026-01-05T00:00:00.000Z'),
+    ], 'c:\\code\\alpha', 'D:\\projects\\default')
+
+    expect(options.map((option) => ({
+      count: option.conversationCount,
+      path: option.path,
+      source: option.source,
+    }))).toEqual([
+      { count: 2, path: 'C:\\code\\alpha', source: 'current' },
+      { count: 0, path: 'D:\\projects\\default', source: 'default' },
+      { count: 1, path: 'C:\\code\\beta', source: 'recent' },
+    ])
   })
 })

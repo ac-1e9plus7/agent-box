@@ -21,6 +21,7 @@ import type {
 import { ChatContent } from './components/ChatContent'
 import { Composer } from './components/Composer'
 import { Icon } from './components/Icon'
+import { NewConversationDialog } from './components/NewConversationDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import type { SettingsSavePayload } from './components/SettingsDialog'
 import { Sidebar } from './components/Sidebar'
@@ -78,6 +79,13 @@ interface ActiveStream {
   requestId: string
   conversationId: string
   assistantMessageId: string
+}
+
+interface CreateConversationOptions {
+  modeOverrides?: Pick<Conversation, 'reasoningEnabled' | 'webSearchMode' | 'agentMode'>
+  modelId?: string
+  preserveComposer?: boolean
+  workingDirectory: string
 }
 
 function createId(prefix: string): string {
@@ -276,6 +284,8 @@ export default function App(): JSX.Element {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [newConversationOpen, setNewConversationOpen] = useState(false)
+  const [creatingConversation, setCreatingConversation] = useState(false)
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState('')
   const [toast, setToast] = useState('')
@@ -286,6 +296,7 @@ export default function App(): JSX.Element {
   const toastTimerRef = useRef<number | undefined>(undefined)
   const autoRenamingRef = useRef<Set<string>>(new Set())
   const manualRenamedRef = useRef<Set<string>>(new Set())
+  const creatingConversationRef = useRef(false)
 
   const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const activeModel = models.find((model) => model.id === activeModelId)
@@ -333,20 +344,32 @@ export default function App(): JSX.Element {
     }
   }, [replaceConversations, showToast])
 
-  const createConversation = useCallback(async (
-    modelId?: string,
-    modeOverrides?: Pick<Conversation, 'reasoningEnabled' | 'webSearchMode' | 'agentMode'>
-  ): Promise<Conversation | undefined> => {
+  const createConversation = useCallback(async ({
+    modeOverrides,
+    modelId,
+    preserveComposer = false,
+    workingDirectory,
+  }: CreateConversationOptions): Promise<Conversation | undefined> => {
+    const resolvedWorkingDirectory = workingDirectory.trim()
+    if (!resolvedWorkingDirectory) {
+      showToast('新建对话前必须指定工作目录。')
+      return undefined
+    }
+    if (creatingConversationRef.current) return undefined
+
     const resolvedModel = models.find((model) => model.id === modelId)
       ?? models.find((model) => model.id === settings.defaultModelId)
       ?? models[0]
     if (!resolvedModel) {
+      setNewConversationOpen(false)
       setSettingsSection('models')
       setSettingsOpen(true)
       showToast('请先添加一个模型。')
       return undefined
     }
 
+    creatingConversationRef.current = true
+    setCreatingConversation(true)
     const now = new Date().toISOString()
     const resolvedProvider = providers.find((provider) => provider.id === resolvedModel.providerId)
     const conversation: Conversation = {
@@ -359,7 +382,7 @@ export default function App(): JSX.Element {
         )
       ),
       agentMode: modeOverrides?.agentMode ?? settings.defaultAgentMode ?? false,
-      workingDirectory: activeConversation?.workingDirectory || settings.defaultWorkingDirectory || undefined,
+      workingDirectory: resolvedWorkingDirectory,
       webSearchMode: effectiveWebSearchMode(
         resolvedModel,
         resolvedProvider,
@@ -378,15 +401,46 @@ export default function App(): JSX.Element {
       setAgentMode(Boolean(saved.agentMode))
       setReasoningEnabled(Boolean(saved.reasoningEnabled))
       setWebSearchMode(saved.webSearchMode ?? 'off')
-      setDraft('')
-      setAttachments([])
+      if (!preserveComposer) {
+        setDraft('')
+        setAttachments([])
+      }
+      setQuery('')
       setMobileSidebarOpen(false)
       return saved
     } catch (error) {
       showToast(`无法新建会话：${normalizeError(error)}`)
       return undefined
+    } finally {
+      creatingConversationRef.current = false
+      setCreatingConversation(false)
     }
-  }, [activeConversation?.workingDirectory, models, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, settings.defaultWorkingDirectory, showToast])
+  }, [models, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, showToast])
+
+  const openNewConversationDialog = useCallback((): void => {
+    setNewConversationOpen(true)
+    setMobileSidebarOpen(false)
+  }, [])
+
+  const handleNewConversationInWorkspace = useCallback(async (workingDirectory: string): Promise<void> => {
+    const created = await createConversation({
+      modelId: activeModelId,
+      preserveComposer: !activeConversation,
+      workingDirectory,
+    })
+    if (created) setNewConversationOpen(false)
+  }, [activeConversation, activeModelId, createConversation])
+
+  const handleChooseNewConversationDirectory = useCallback(async (): Promise<void> => {
+    try {
+      const selected = await window.agentbox.workspace.selectDirectory(
+        activeConversation?.workingDirectory || settings.defaultWorkingDirectory || undefined,
+      )
+      if (selected) await handleNewConversationInWorkspace(selected)
+    } catch (error) {
+      showToast(`无法选择工作目录：${normalizeError(error)}`)
+    }
+  }, [activeConversation?.workingDirectory, handleNewConversationInWorkspace, settings.defaultWorkingDirectory, showToast])
 
   const bootstrap = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -443,6 +497,23 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void bootstrap()
   }, [bootstrap])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (
+        !loading
+        && !settingsOpen
+        && !event.altKey
+        && (event.ctrlKey || event.metaKey)
+        && event.key.toLowerCase() === 'n'
+      ) {
+        event.preventDefault()
+        openNewConversationDialog()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [loading, openNewConversationDialog, settingsOpen])
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme
@@ -918,31 +989,25 @@ export default function App(): JSX.Element {
     void persistConversation(nextConversation)
   }, [activeConversation, persistConversation, replaceConversations])
 
-  const handleChangeWorkingDirectory = useCallback(async (): Promise<void> => {
-    if (!activeConversation) return
-    const selected = await window.agentbox.workspace.selectDirectory(
-      activeConversation.workingDirectory || settings.defaultWorkingDirectory || undefined,
-    )
-    if (!selected) return
-    const nextConversation: Conversation = {
-      ...activeConversation,
-      workingDirectory: selected,
-      updatedAt: new Date().toISOString(),
+  const handleChangeWorkingDirectory = useCallback(async (): Promise<Conversation | undefined> => {
+    if (!activeConversation) return undefined
+    try {
+      const selected = await window.agentbox.workspace.selectDirectory(
+        activeConversation.workingDirectory || settings.defaultWorkingDirectory || undefined,
+      )
+      if (!selected) return undefined
+      const nextConversation: Conversation = {
+        ...activeConversation,
+        workingDirectory: selected,
+        updatedAt: new Date().toISOString(),
+      }
+      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      return await persistConversation(nextConversation) ? nextConversation : undefined
+    } catch (error) {
+      showToast(`无法选择工作目录：${normalizeError(error)}`)
+      return undefined
     }
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    void persistConversation(nextConversation)
-  }, [activeConversation, persistConversation, replaceConversations, settings.defaultWorkingDirectory])
-
-  const handleClearWorkingDirectory = useCallback((): void => {
-    if (!activeConversation) return
-    const nextConversation: Conversation = {
-      ...activeConversation,
-      workingDirectory: undefined,
-      updatedAt: new Date().toISOString(),
-    }
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    void persistConversation(nextConversation)
-  }, [activeConversation, persistConversation, replaceConversations])
+  }, [activeConversation, persistConversation, replaceConversations, settings.defaultWorkingDirectory, showToast])
 
   const handleToggleReasoning = (): void => {
     if (!activeModel?.supportsReasoning) return
@@ -1085,6 +1150,16 @@ export default function App(): JSX.Element {
     if ((!content && currentAttachments.length === 0) || !activeModel) return
 
     if (activeConversation && streamingConversationIds.has(activeConversation.id)) return
+    if (!activeConversation) {
+      openNewConversationDialog()
+      showToast('请先为新对话选择工作目录。')
+      return
+    }
+    if (!activeConversation.workingDirectory) {
+      const assignedConversation = await handleChangeWorkingDirectory()
+      if (assignedConversation) showToast('工作目录已设置，请再次发送。')
+      return
+    }
 
     if (contextProjection?.blocked && (!allowContextTrimming || !contextProjection.canTrimOnce)) {
       showToast(contextProjection.message)
@@ -1093,11 +1168,7 @@ export default function App(): JSX.Element {
     if (!guardWebSearchAvailable()) return
     if (!guardProviderKey()) return
 
-    const conversation = activeConversation ?? await createConversation(activeModel.id, {
-      reasoningEnabled,
-      webSearchMode
-    })
-    if (!conversation) return
+    const conversation = activeConversation
 
     if (streamingConversationIds.has(conversation.id)) return
 
@@ -1703,7 +1774,8 @@ export default function App(): JSX.Element {
         onCloseMobile={() => setMobileSidebarOpen(false)}
         onCollapse={() => setSidebarCollapsed(true)}
         onDeleteConversation={(id) => void handleDeleteConversation(id)}
-        onNewConversation={() => void createConversation(activeModelId)}
+        onNewConversation={openNewConversationDialog}
+        onNewConversationInWorkspace={(workingDirectory) => void handleNewConversationInWorkspace(workingDirectory)}
         onOpenSettings={() => openSettings('general')}
         onRenameConversation={renameConversation}
         onQueryChange={setQuery}
@@ -1730,8 +1802,9 @@ export default function App(): JSX.Element {
           onRestoreSidebar={() => setSidebarCollapsed(false)}
           onToggleAgentMode={handleToggleAgentMode}
           onToggleReasoning={handleToggleReasoning}
-          onChangeWorkingDirectory={activeConversation ? () => void handleChangeWorkingDirectory() : undefined}
-          onClearWorkingDirectory={activeConversation ? handleClearWorkingDirectory : undefined}
+          onChangeWorkingDirectory={activeConversation
+            ? () => void handleChangeWorkingDirectory()
+            : openNewConversationDialog}
         />
 
         <section className="chat-stage">
@@ -1816,6 +1889,18 @@ export default function App(): JSX.Element {
         onToggleSkill={handleToggleSkill}
         onResetDefaultSkills={handleResetDefaultSkills}
       />
+
+      {newConversationOpen && (
+        <NewConversationDialog
+          busy={creatingConversation}
+          conversations={conversations}
+          currentDirectory={activeConversation?.workingDirectory}
+          defaultDirectory={settings.defaultWorkingDirectory}
+          onCancel={() => setNewConversationOpen(false)}
+          onChooseDirectory={() => void handleChooseNewConversationDirectory()}
+          onSelectWorkspace={(workingDirectory) => void handleNewConversationInWorkspace(workingDirectory)}
+        />
+      )}
 
       {toast && <div className="toast" role="status"><Icon name="info" size={16} /><span>{toast}</span></div>}
     </div>

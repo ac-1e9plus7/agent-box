@@ -24,7 +24,6 @@ interface TopbarProps {
   onToggleAgentMode?: () => void
   onToggleReasoning: () => void
   onChangeWorkingDirectory?: () => void
-  onClearWorkingDirectory?: () => void
 }
 
 export function Topbar({
@@ -46,8 +45,7 @@ export function Topbar({
   onRestoreSidebar,
   onToggleAgentMode,
   onToggleReasoning,
-  onChangeWorkingDirectory,
-  onClearWorkingDirectory
+  onChangeWorkingDirectory
 }: TopbarProps): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -122,11 +120,6 @@ export function Topbar({
               <Icon name="folder" size={12} />
               <span>{workingDirectoryLabel}</span>
             </button>
-            {workingDirectory && (
-              <button className="workspace-directory-clear" aria-label="清除当前会话工作目录" onClick={onClearWorkingDirectory} type="button">
-                <Icon name="close" size={11} />
-              </button>
-            )}
           </div>
         </div>
       </div>
