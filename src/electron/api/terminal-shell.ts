@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { basename } from 'node:path'
-import type { IntegratedTerminalShellConfig, TerminalShellTestResult } from '../../shared/types'
+import type { DeveloperRuntimeSettings, IntegratedTerminalShellConfig, TerminalShellTestResult } from '../../shared/types'
+import { buildDeveloperEnvironment } from './runtime-environments'
 
 export type TerminalShellKind = 'powershell' | 'cmd' | 'posix' | 'fish' | 'custom'
 
@@ -90,7 +91,7 @@ export async function resolveIntegratedTerminalShell(
 export async function executeTerminalCommand(
   config: IntegratedTerminalShellConfig,
   command: string,
-  options: { cwd?: string; timeoutMs?: number; signal?: AbortSignal } = {},
+  options: { cwd?: string; timeoutMs?: number; signal?: AbortSignal; developerRuntimes?: DeveloperRuntimeSettings } = {},
 ): Promise<TerminalCommandResult> {
   const shell = await resolveIntegratedTerminalShell(config)
   const fallbackShell = config.mode === 'custom'
@@ -110,7 +111,11 @@ export async function executeTerminalCommand(
     return { result: `终端命令超过 ${MAX_COMMAND_CHARACTERS.toLocaleString()} 字符限制。`, isError: true, shell }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, options.timeoutMs ?? 20_000))
-  const execution = await runShellProcess(shell, command, timeoutMs, options.cwd, options.signal)
+  const runtimeSettings = options.developerRuntimes
+  const environment = runtimeSettings
+    ? await buildDeveloperEnvironment(runtimeSettings, options.cwd, process.env)
+    : process.env
+  const execution = await runShellProcess(shell, command, timeoutMs, options.cwd, options.signal, environment)
   return { ...execution, shell }
 }
 
@@ -173,13 +178,14 @@ function runShellProcess(
   timeoutMs: number,
   cwd?: string,
   signal?: AbortSignal,
+  environment: NodeJS.ProcessEnv = process.env,
 ): Promise<Omit<TerminalCommandResult, 'shell'>> {
   return new Promise((resolve) => {
     const child = spawn(shell.executable, commandArguments(shell, command), {
       cwd,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: sanitizedTerminalEnvironment(process.env),
+      env: sanitizedTerminalEnvironment(environment),
     })
     let settled = false
     let output = ''

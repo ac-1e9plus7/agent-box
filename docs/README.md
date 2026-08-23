@@ -13,8 +13,9 @@
 | [3. API 协议与请求网关](./gateway-and-protocols.md) | 3 种 API 格式适配、流式解析、思考模式、联网搜索、代理转发 | `src/electron/api/` |
 | [4. Agent 技能（Skills）系统](./skills-system.md) | 多文件技能规范、Python 3 优先、Zip 导入导出生态、动态提示词注入 | `src/electron/storage/default-skills.ts`, `src/shared/skill-zip.ts` |
 | [5. MCP 外部工具协议与检索](./mcp-integration.md) | Stdio/SSE 传输、连接池管理器、BM25 智能工具检索、Agent 多轮循环调用 | `src/electron/mcp/`, `src/electron/api/gateway.ts` |
-| [6. 前端 UI 与交互系统](./ui-and-components.md) | 树状会话与分支版本、Markdown & LaTeX 公式渲染、多模态附件、快捷键 | `src/renderer/src/` |
-| [7. 开发、测试与持续集成](./development-and-testing.md) | 构建命令、TypeScript 类型配置、Vitest 测试规范、跨平台 CI/CD 打包 | `tests/`, `package.json`, `.github/workflows/` |
+| [6. 会话工作目录与开发运行时](./workspaces-and-runtimes.md) | 目录分组、终端 cwd、JDK/Go/PHP/Python、venv 与 Conda | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
+| [7. 前端 UI 与交互系统](./ui-and-components.md) | 树状会话与分支版本、Markdown & LaTeX 公式渲染、多模态附件、快捷键 | `src/renderer/src/` |
+| [8. 开发、测试与持续集成](./development-and-testing.md) | 构建命令、TypeScript 类型配置、Vitest 测试规范、跨平台 CI/CD 打包 | `tests/`, `package.json`, `.github/workflows/` |
 
 ---
 

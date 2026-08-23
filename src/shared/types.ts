@@ -55,6 +55,30 @@ export interface TerminalShellTestResult {
   message: string
 }
 
+export type RuntimeSelectionMode = 'auto' | 'custom'
+
+export interface DeveloperRuntimeSettings {
+  jdk: { mode: RuntimeSelectionMode; home: string }
+  go: { mode: RuntimeSelectionMode; executable: string; root: string }
+  php: { mode: RuntimeSelectionMode; executable: string }
+  python: {
+    mode: 'auto' | 'system' | 'venv' | 'conda' | 'custom'
+    executable: string
+    environment: string
+    condaExecutable: string
+  }
+}
+
+export type DeveloperRuntimeKind = 'jdk' | 'go' | 'php' | 'python'
+
+export interface RuntimeTestResult {
+  kind: DeveloperRuntimeKind
+  ok: boolean
+  executable?: string
+  version?: string
+  message: string
+}
+
 export type McpTransportType = 'stdio' | 'http' | 'sse'
 export type McpToolRetrievalMode = 'auto' | 'all'
 export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'full-access'
@@ -78,6 +102,8 @@ export interface AppSettings {
   systemPrompt: string
   proxy: ProxyConfig
   integratedTerminalShell: IntegratedTerminalShellConfig
+  defaultWorkingDirectory: string
+  developerRuntimes: DeveloperRuntimeSettings
 }
 
 export interface McpServerConfig {
@@ -367,6 +393,11 @@ export interface Conversation {
   agentMode?: boolean
   skillIds?: string[]
   mcpServerIds?: string[]
+  /**
+   * Absolute local directory reference used as the filesystem and terminal scope.
+   * Only this path string is persisted; project files are never copied into or encrypted by the vault.
+   */
+  workingDirectory?: string
   /** Defaults to off when omitted by an older vault. */
   webSearchMode?: WebSearchMode
   messages: Message[]
@@ -383,6 +414,7 @@ export interface ChatRequest {
   agentMode?: boolean
   skillIds?: string[]
   mcpServerIds?: string[]
+  workingDirectory?: string
   /** Overrides the model default for this request. */
   webSearchMode?: WebSearchMode
   /** Explicitly opts this one request into complete-turn trimming. */
@@ -470,6 +502,12 @@ export interface AgentboxAPI {
   }
   terminal: {
     testShell(config: IntegratedTerminalShellConfig): Promise<TerminalShellTestResult>
+  }
+  workspace: {
+    selectDirectory(initialPath?: string): Promise<string | undefined>
+  }
+  runtimes: {
+    test(kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string): Promise<RuntimeTestResult>
   }
   conversations: {
     list(): Promise<Conversation[]>

@@ -10,6 +10,7 @@ interface TopbarProps {
   agentMode?: boolean
   enabledSkillsCount?: number
   selectedSkillsCount?: number
+  workingDirectory?: string
   models: ModelConfig[]
   providers: ProviderConfig[]
   reasoningEnabled: boolean
@@ -22,6 +23,8 @@ interface TopbarProps {
   onRestoreSidebar: () => void
   onToggleAgentMode?: () => void
   onToggleReasoning: () => void
+  onChangeWorkingDirectory?: () => void
+  onClearWorkingDirectory?: () => void
 }
 
 export function Topbar({
@@ -30,6 +33,7 @@ export function Topbar({
   agentMode = false,
   enabledSkillsCount = 0,
   selectedSkillsCount = 0,
+  workingDirectory,
   models,
   providers,
   reasoningEnabled,
@@ -41,7 +45,9 @@ export function Topbar({
   onRenameConversation,
   onRestoreSidebar,
   onToggleAgentMode,
-  onToggleReasoning
+  onToggleReasoning,
+  onChangeWorkingDirectory,
+  onClearWorkingDirectory
 }: TopbarProps): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -53,6 +59,7 @@ export function Topbar({
     : reasoningEnabled
       ? `思考 · ${activeModel?.defaultReasoningEffort.toUpperCase()}`
       : '思考关闭'
+  const workingDirectoryLabel = workingDirectory?.split(/[\\/]/).filter(Boolean).at(-1) || '选择工作目录'
 
   const startEdit = (): void => {
     setDraft(activeTitle)
@@ -104,6 +111,23 @@ export function Topbar({
             </button>
           )}
           <span>{provider?.name ?? '未配置服务商'}</span>
+          <div className="workspace-control">
+            <button
+              className={`workspace-directory-button ${workingDirectory ? 'has-directory' : ''}`}
+              disabled={!onChangeWorkingDirectory}
+              onClick={onChangeWorkingDirectory}
+              title={workingDirectory || '为当前会话选择工作目录'}
+              type="button"
+            >
+              <Icon name="folder" size={12} />
+              <span>{workingDirectoryLabel}</span>
+            </button>
+            {workingDirectory && (
+              <button className="workspace-directory-clear" aria-label="清除当前会话工作目录" onClick={onClearWorkingDirectory} type="button">
+                <Icon name="close" size={11} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

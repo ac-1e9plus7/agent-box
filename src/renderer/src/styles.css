@@ -27,6 +27,7 @@
   --radius-lg: 18px;
   --sidebar-width: 272px;
   --content-width: 860px;
+  --font-mono: 'Cascadia Code', 'Cascadia Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -88,6 +89,13 @@
 
 * {
   box-sizing: border-box;
+}
+
+pre,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
 }
 
 html,
@@ -359,6 +367,9 @@ select:disabled {
 }
 
 .conversation-group h2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin: 0 0 5px;
   padding: 0 9px;
   color: var(--text-tertiary);
@@ -366,6 +377,52 @@ select:disabled {
   font-weight: 600;
   letter-spacing: .6px;
   text-transform: uppercase;
+}
+
+.workspace-control {
+  display: inline-flex;
+  max-width: 250px;
+  align-items: center;
+}
+
+.workspace-directory-button {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  background: transparent;
+  font-size: 9px;
+}
+
+.workspace-directory-button:hover,
+.workspace-directory-button.has-directory {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.workspace-directory-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-directory-clear {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  background: transparent;
+}
+
+.workspace-directory-clear:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .conversation-list {
@@ -1039,7 +1096,10 @@ select:disabled {
   border-radius: 5px;
   color: color-mix(in srgb, var(--text), var(--purple) 25%);
   background: var(--surface-soft);
-  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .message-body .katex-display {
@@ -1071,7 +1131,7 @@ select:disabled {
   padding: 2px 5px;
   border-radius: 4px;
   font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .code-block {
@@ -1080,6 +1140,7 @@ select:disabled {
   border: 1px solid var(--border);
   border-radius: 11px;
   background: color-mix(in srgb, var(--sidebar), #111 4%);
+  box-shadow: var(--shadow-sm);
 }
 
 .code-block-header {
@@ -1090,7 +1151,10 @@ select:disabled {
   padding: 0 11px 0 14px;
   border-bottom: 1px solid var(--border);
   color: var(--text-tertiary);
-  font: 10.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: color-mix(in srgb, var(--surface-soft), transparent 20%);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
 }
 
 .code-block-header button {
@@ -1101,7 +1165,7 @@ select:disabled {
   border-radius: 6px;
   color: var(--text-secondary);
   background: transparent;
-  font: 10.5px inherit;
+  font: inherit;
 }
 
 .code-block-header button:hover {
@@ -1114,8 +1178,22 @@ select:disabled {
   overflow: auto;
   overscroll-behavior: contain;
   padding: 15px;
-  font: 12.5px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-ligatures: none;
+  line-height: 1.65;
   tab-size: 2;
+  white-space: pre;
+}
+
+.code-block pre code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  color: inherit;
+  font: inherit;
+  white-space: inherit;
 }
 
 /* While a message is streaming, let long content expand and follow the chat
@@ -2505,6 +2583,103 @@ select:disabled {
   color: inherit;
   font-size: 9.5px;
   line-height: 1.45;
+}
+
+.workspace-default-actions,
+.runtime-path-input,
+.runtime-test-row,
+.runtime-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workspace-default-path,
+.runtime-intro,
+.runtime-mode-hint {
+  margin: 0;
+  padding: 0 15px 14px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.runtime-settings-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.runtime-card-header {
+  justify-content: space-between;
+  padding: 0 15px 12px;
+}
+
+.runtime-card-header h3 {
+  padding: 0;
+}
+
+.runtime-card-header small {
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+}
+
+.runtime-fields {
+  display: grid;
+  gap: 10px;
+  padding: 0 15px 13px;
+}
+
+.runtime-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.runtime-path-input input {
+  min-width: 0;
+  flex: 1;
+}
+
+.runtime-test-row {
+  min-height: 44px;
+  padding: 0 15px 13px;
+}
+
+.runtime-test-row > span {
+  min-width: 0;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  overflow-wrap: anywhere;
+}
+
+.runtime-test-row > span.is-ok {
+  color: var(--accent);
+}
+
+.runtime-test-row > span.is-error {
+  color: var(--danger);
+}
+
+.python-runtime-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 15px 13px;
+}
+
+.python-runtime-modes > button {
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text-secondary);
+  background: var(--surface-soft);
+  font-size: 10px;
+}
+
+.python-runtime-modes > button.is-active {
+  border-color: color-mix(in srgb, var(--accent), transparent 60%);
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .context-policy-options {

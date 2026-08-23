@@ -12,6 +12,13 @@ const baseSettings: AppSettings = {
   proxy: { mode: 'off', url: '' },
   integratedTerminalShell: { mode: 'auto', executable: '', args: [] },
   toolApprovalTimeoutMode: 'five-minutes',
+  developerRuntimes: {
+    jdk: { mode: 'auto', home: '' },
+    go: { mode: 'auto', executable: '', root: '' },
+    php: { mode: 'auto', executable: '' },
+    python: { mode: 'auto', executable: '', environment: '', condaExecutable: 'conda' },
+  },
+  defaultWorkingDirectory: '',
 }
 
 function model(over: Partial<ModelConfig> = {}): ModelConfig {

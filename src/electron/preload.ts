@@ -67,6 +67,12 @@ const agentboxApi: AgentboxAPI = {
   terminal: {
     testShell: (config) => ipcRenderer.invoke(IPC_CHANNELS.terminalTestShell, config),
   },
+  workspace: {
+    selectDirectory: (initialPath?: string) => ipcRenderer.invoke(IPC_CHANNELS.workspaceSelectDirectory, initialPath),
+  },
+  runtimes: {
+    test: (kind, settings, workingDirectory?: string) => ipcRenderer.invoke(IPC_CHANNELS.runtimeTest, kind, settings, workingDirectory),
+  },
   conversations: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.conversationsList),
     get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.conversationsGet, id),

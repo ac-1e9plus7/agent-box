@@ -21,6 +21,8 @@ export const IPC_CHANNELS = {
   mcpTestServer: 'mcp:test-server',
   mcpListTools: 'mcp:list-tools',
   terminalTestShell: 'terminal:test-shell',
+  workspaceSelectDirectory: 'workspace:select-directory',
+  runtimeTest: 'runtime:test',
   conversationsList: 'conversations:list',
   conversationsGet: 'conversations:get',
   conversationsSave: 'conversations:save',

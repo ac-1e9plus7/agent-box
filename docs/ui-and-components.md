@@ -19,6 +19,7 @@ AgentBox 的渲染层基于 React 19 构建，注重排版美学、数学表达�
 ## 📐 Markdown 排版与 LaTeX 数学公式渲染
 
 - **自然换行（Natural Linebreaks）**：采用 `remark-breaks`，单次回车即渲染为正常换行，符合即时通讯使用直觉。
+- **代码可读性**：行内代码、围栏代码块和工具输出统一使用跨平台等宽字体栈；块级代码保留空白与缩进，超长行通过独立横向滚动查看。
 - **全格式 LaTeX 支持**：结合 `remark-math` 与 `rehype-katex`：
   - 行内公式：`$E = mc^2$` 与 `\(E = mc^2\)`
   - 块级独立公式：`$$\int_{-\infty}^\infty e^{-x^2} dx = \sqrt{\pi}$$` 与 `\[...\]`

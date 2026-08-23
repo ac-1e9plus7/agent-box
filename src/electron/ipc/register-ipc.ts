@@ -1,12 +1,14 @@
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { isAbsolute, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { app, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type {
   AppSettings,
   ChatRequest,
   Conversation,
+  DeveloperRuntimeKind,
+  DeveloperRuntimeSettings,
   IntegratedTerminalShellConfig,
   McpServerInput,
   ModelInput,
@@ -17,7 +19,8 @@ import { ChatGateway } from '../api/gateway'
 import { McpManager } from '../mcp/mcp-manager'
 import { AppRepository } from '../storage/app-repository'
 import { testIntegratedTerminalShell } from '../api/terminal-shell'
-import { normalizeIntegratedTerminalShell } from '../storage/settings-schema'
+import { testDeveloperRuntime } from '../api/runtime-environments'
+import { normalizeDeveloperRuntimes, normalizeIntegratedTerminalShell } from '../storage/settings-schema'
 
 export function registerIpcHandlers(
   window: BrowserWindow,
@@ -125,6 +128,25 @@ export function registerIpcHandlers(
   register(IPC_CHANNELS.terminalTestShell, (_event, input: IntegratedTerminalShellConfig) => {
     assertRecord(input, '终端 Shell 配置')
     return testIntegratedTerminalShell(normalizeIntegratedTerminalShell(input))
+  })
+
+  register(IPC_CHANNELS.workspaceSelectDirectory, async (_event, initialPath?: string) => {
+    if (initialPath !== undefined && typeof initialPath !== 'string') throw new Error('工作目录无效。')
+    const result = await dialog.showOpenDialog(window, {
+      title: '选择会话工作目录',
+      defaultPath: initialPath && isAbsolute(initialPath) ? initialPath : app.getPath('home'),
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    if (result.canceled || !result.filePaths[0]) return undefined
+    return resolve(result.filePaths[0])
+  })
+
+  register(IPC_CHANNELS.runtimeTest, (_event, kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string) => {
+    if (!['jdk', 'go', 'php', 'python'].includes(String(kind))) throw new Error('运行时类型无效。')
+    if (workingDirectory !== undefined && (typeof workingDirectory !== 'string' || !isAbsolute(workingDirectory))) {
+      throw new Error('工作目录无效。')
+    }
+    return testDeveloperRuntime(kind, normalizeDeveloperRuntimes(settings), workingDirectory)
   })
 
   register(IPC_CHANNELS.conversationsList, () => repository.listConversations())

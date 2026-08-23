@@ -33,6 +33,10 @@ export class EncryptedStoreError extends Error {
  * 2. The complete JSON payload is encrypted with AES-256-GCM.
  * 3. No plaintext fallback is used when the OS key store is unavailable.
  * 4. Automatically detects and smoothly migrates legacy ChatBox Lite vaults.
+ *
+ * This store owns files only under `<userData>/vault`. Workspace/project
+ * directories are external execution scopes; their contents must never be
+ * imported, rewritten, or encrypted by this class.
  */
 export class EncryptedStore<T extends object> {
   private readonly userDataDirectory: string

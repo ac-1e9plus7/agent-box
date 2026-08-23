@@ -11,7 +11,7 @@ import type {
 export type ApiFormat = SharedApiFormat
 export type WebSearchMode = SharedWebSearchMode
 
-export type SettingsSection = 'general' | 'skills' | 'mcp' | 'models' | 'providers' | 'security' | 'about'
+export type SettingsSection = 'general' | 'runtimes' | 'skills' | 'mcp' | 'models' | 'providers' | 'security' | 'about'
 
 export type MessageStatus = 'complete' | 'streaming' | 'error'
 
@@ -78,6 +78,7 @@ export type IconName =
   | 'edit'
   | 'external'
   | 'file'
+  | 'folder'
   | 'globe'
   | 'image'
   | 'info'

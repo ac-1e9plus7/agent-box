@@ -3,6 +3,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Worker } from 'node:worker_threads'
+import type { DeveloperRuntimeSettings } from '../../shared/types'
+import { resolveDeveloperRuntime } from './runtime-environments'
 
 export type ExecutableLanguage = 'javascript' | 'python'
 
@@ -11,6 +13,8 @@ export interface CodeExecutionRequest {
   code: string
   input?: unknown
   timeoutMs?: number
+  workingDirectory?: string
+  runtimeSettings?: DeveloperRuntimeSettings
 }
 
 export interface CodeExecutionResult {
@@ -132,7 +136,7 @@ export async function executeCode(
   if (request.language === 'javascript') {
     return executeJavaScript(request.code, request.input, timeoutMs, signal)
   }
-  return executePython(request.code, request.input, timeoutMs, signal)
+  return executePython(request.code, request.input, timeoutMs, signal, request.runtimeSettings, request.workingDirectory)
 }
 
 function executeJavaScript(
@@ -176,8 +180,21 @@ async function executePython(
   input: unknown,
   timeoutMs: number,
   signal?: AbortSignal,
+  runtimeSettings?: DeveloperRuntimeSettings,
+  workingDirectory?: string,
 ): Promise<CodeExecutionResult> {
-  const python = await resolvePythonCommand()
+  const configuredRuntime = runtimeSettings
+    ? await resolveDeveloperRuntime('python', runtimeSettings, workingDirectory)
+    : undefined
+  const requiresConfiguredRuntime = Boolean(runtimeSettings && (
+    ['venv', 'conda', 'custom'].includes(runtimeSettings.python.mode)
+    || (runtimeSettings.python.mode === 'system' && runtimeSettings.python.executable)
+  ))
+  const python = configuredRuntime
+    ? { command: configuredRuntime.executable, prefixArgs: configuredRuntime.prefixArgs }
+    : requiresConfiguredRuntime
+      ? undefined
+      : await resolvePythonCommand()
   if (!python) {
     return {
       result: '未检测到可用的 Python 3 解释器。请改用 language="javascript"，或在系统 PATH 中安装 Python 3。',
@@ -194,10 +211,10 @@ async function executePython(
     await writeFile(scriptPath, wrapper, { encoding: 'utf8', mode: 0o600 })
     return await runProcess(
       python.command,
-      [...python.prefixArgs, '-I', '-S', '-u', scriptPath],
+      [...python.prefixArgs, '-I', '-u', scriptPath],
       timeoutMs,
       signal,
-      tempDirectory,
+      workingDirectory || tempDirectory,
     )
   } finally {
     await rm(tempDirectory, { recursive: true, force: true })

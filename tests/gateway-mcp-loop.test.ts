@@ -284,7 +284,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
     const executeMcp = vi.spyOn(mcpManager, 'executeTool')
-    const command = process.platform === 'win32' ? 'echo terminal-42' : 'printf terminal-42'
+    const command = 'node -p "process.cwd()"'
     let fetchCount = 0
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
       fetchCount += 1
@@ -305,6 +305,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       conversationId: 'conversation-run-terminal',
       modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
       messages: [{ id: 'user-run-terminal', role: 'user', content: '请通过终端输出 terminal-42', createdAt: new Date().toISOString() }],
+      workingDirectory: tempDirectory,
       agentMode: true,
       reasoningEnabled: false,
     }, (event) => events.push(event))
@@ -313,7 +314,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     expect(executeMcp).not.toHaveBeenCalled()
     expect(events.some((event) => event.type === 'tool-result'
       && event.callId === 'call-run-terminal'
-      && event.result.includes('terminal-42')
+      && event.result.includes(tempDirectory)
       && !event.isError)).toBe(true)
   })
 

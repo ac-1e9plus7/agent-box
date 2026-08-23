@@ -8,7 +8,7 @@ import type {
   SettingsSection,
   WebSearchMode
 } from '../types'
-import type { IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
+import type { DeveloperRuntimeKind, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, RuntimeTestResult, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
 import { exportSkillToZip, parseSkillFromZip } from '../../../shared/skill-zip'
 import { API_FORMAT_LABELS } from '../types'
 import { stepTokenValue } from '../token-step'
@@ -46,10 +46,13 @@ interface SettingsDialogProps {
   onTestMcpServer?: (input: McpServerInput) => Promise<McpServerTestResult>
   onListMcpTools?: (serverId?: string) => Promise<McpToolDefinition[]>
   onTestTerminalShell?: (config: IntegratedTerminalShellConfig) => Promise<TerminalShellTestResult>
+  onSelectDirectory?: (initialPath?: string) => Promise<string | undefined>
+  onTestRuntime?: (kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string) => Promise<RuntimeTestResult>
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
   { id: 'general', label: '通用', icon: 'settings' },
+  { id: 'runtimes', label: '开发运行时', icon: 'code' },
   { id: 'skills', label: 'Agent 技能', icon: 'bot' },
   { id: 'mcp', label: 'MCP 外部工具', icon: 'tool' },
   { id: 'models', label: '模型', icon: 'sparkles' },
@@ -226,7 +229,9 @@ export function SettingsDialog({
   onToggleMcpServer,
   onTestMcpServer,
   onListMcpTools,
-  onTestTerminalShell
+  onTestTerminalShell,
+  onSelectDirectory,
+  onTestRuntime
 }: SettingsDialogProps): JSX.Element | null {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection)
   const [modelDrafts, setModelDrafts] = useState<ModelConfig[]>(models)
@@ -249,6 +254,8 @@ export function SettingsDialog({
   const [clearError, setClearError] = useState('')
   const [terminalShellTest, setTerminalShellTest] = useState<TerminalShellTestResult | null>(null)
   const [testingTerminalShell, setTestingTerminalShell] = useState(false)
+  const [runtimeTestResults, setRuntimeTestResults] = useState<Partial<Record<DeveloperRuntimeKind, RuntimeTestResult>>>({})
+  const [testingRuntime, setTestingRuntime] = useState<DeveloperRuntimeKind | null>(null)
 
   // Skills UI state
   const [editingSkill, setEditingSkill] = useState<SkillInput | null>(null)
@@ -954,6 +961,21 @@ export function SettingsDialog({
     }
   }
 
+  const chooseDirectory = async (current?: string): Promise<string | undefined> => {
+    return onSelectDirectory ? onSelectDirectory(current || undefined) : undefined
+  }
+
+  const testRuntime = async (kind: DeveloperRuntimeKind): Promise<void> => {
+    if (!onTestRuntime) return
+    setTestingRuntime(kind)
+    try {
+      const result = await onTestRuntime(kind, preferenceDraft.developerRuntimes, preferenceDraft.defaultWorkingDirectory || undefined)
+      setRuntimeTestResults((current) => ({ ...current, [kind]: result }))
+    } finally {
+      setTestingRuntime(null)
+    }
+  }
+
   const testProvider = async (): Promise<void> => {
     if (!selectedProvider || !onTestProvider) return
     setTestState('testing')
@@ -1002,6 +1024,7 @@ export function SettingsDialog({
             <div>
               <h2>{settingsNav.find((item) => item.id === activeSection)?.label}</h2>
               <p>{activeSection === 'general' && '调整 AgentBox 的使用偏好'}</p>
+              <p>{activeSection === 'runtimes' && '配置项目默认 JDK、Go、PHP 与 Python 环境'}</p>
               <p>{activeSection === 'skills' && '管理、安装与自定义 Agent 智能体专业技能'}</p>
               <p>{activeSection === 'mcp' && '连接与管理 Model Context Protocol (MCP) 外部工具服务'}</p>
               <p>{activeSection === 'models' && '配置模型能力、上下文窗口与请求格式'}</p>
@@ -1102,6 +1125,35 @@ export function SettingsDialog({
                       ))}
                     </select>
                   </div>
+                </section>
+                <section className="settings-card">
+                  <h3>默认工作目录</h3>
+                  <div className="settings-row workspace-default-row">
+                    <div>
+                      <strong>新会话项目目录</strong>
+                      <small>新会话优先继承当前会话目录；没有当前目录时使用这里的默认值</small>
+                    </div>
+                    <div className="workspace-default-actions">
+                      <button
+                        className="secondary-button"
+                        onClick={async () => {
+                          const selected = await chooseDirectory(preferenceDraft.defaultWorkingDirectory)
+                          if (selected) setPreferenceDraft((current) => ({ ...current, defaultWorkingDirectory: selected }))
+                        }}
+                        type="button"
+                      >
+                        <Icon name="folder" size={14} /> 选择目录
+                      </button>
+                      {preferenceDraft.defaultWorkingDirectory && (
+                        <button className="icon-button" aria-label="清除默认工作目录" onClick={() => setPreferenceDraft((current) => ({ ...current, defaultWorkingDirectory: '' }))}>
+                          <Icon name="close" size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="workspace-default-path" title={preferenceDraft.defaultWorkingDirectory}>
+                    {preferenceDraft.defaultWorkingDirectory || '未设置；新会话将保持无工作目录状态'}
+                  </p>
                 </section>
                 <section className="settings-card context-policy-card">
                   <h3>上下文管理</h3>
@@ -1251,6 +1303,81 @@ export function SettingsDialog({
                       />
                     </label>
                   )}
+                </section>
+              </div>
+            )}
+
+            {activeSection === 'runtimes' && (
+              <div className="settings-section-content runtime-settings-panel">
+                <section className="settings-card">
+                  <h3>运行时解析规则</h3>
+                  <p className="runtime-intro">自动模式优先使用当前会话工作目录中的环境，再回退到系统环境变量与 PATH。配置会注入 Integrated terminal，并用于代码执行工具。</p>
+                </section>
+
+                {(['jdk', 'go', 'php'] as const).map((kind) => {
+                  const runtime = preferenceDraft.developerRuntimes[kind]
+                  const label = kind === 'jdk' ? 'JDK' : kind === 'go' ? 'Go' : 'PHP'
+                  const result = runtimeTestResults[kind]
+                  return (
+                    <section className="settings-card runtime-card" key={kind}>
+                      <div className="runtime-card-header">
+                        <div><h3>{label}</h3><small>{kind === 'jdk' ? '提供 JAVA_HOME 和 java' : kind === 'go' ? '提供 go 与可选 GOROOT' : '提供 php CLI'}</small></div>
+                        <div className="segmented-control">
+                          {(['auto', 'custom'] as const).map((mode) => (
+                            <button
+                              className={runtime.mode === mode ? 'is-active' : ''}
+                              key={mode}
+                              onClick={() => setPreferenceDraft((current) => ({
+                                ...current,
+                                developerRuntimes: {
+                                  ...current.developerRuntimes,
+                                  [kind]: { ...current.developerRuntimes[kind], mode }
+                                }
+                              }))}
+                            >
+                              {mode === 'auto' ? '自动' : '指定'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {runtime.mode === 'custom' && (
+                        <div className="runtime-fields">
+                          {kind === 'jdk' && (
+                            <label><FieldLabel hint="JDK 根目录，需包含 bin/java">JAVA_HOME</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.jdk.home} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.jdk.home); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
+                          )}
+                          {kind === 'go' && (
+                            <>
+                              <label><FieldLabel hint="go 或 go.exe 的路径；留空时使用 GOROOT/bin/go">Go 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.go.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, executable: event.target.value } } }))} /></label>
+                              <label><FieldLabel hint="可选 Go 安装根目录">GOROOT</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.go.root} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.go.root); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
+                            </>
+                          )}
+                          {kind === 'php' && (
+                            <label><FieldLabel hint="php 或 php.exe 的可执行文件路径">PHP 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.php.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, php: { ...current.developerRuntimes.php, executable: event.target.value } } }))} /></label>
+                          )}
+                        </div>
+                      )}
+                      <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === kind} onClick={() => void testRuntime(kind)}>{testingRuntime === kind ? '检测中…' : `检测 ${label}`}</button>{result && <span className={result.ok ? 'is-ok' : 'is-error'}>{result.message}</span>}</div>
+                    </section>
+                  )
+                })}
+
+                <section className="settings-card runtime-card">
+                  <div className="runtime-card-header"><div><h3>Python</h3><small>支持项目 .venv、普通 venv、Conda 与自定义解释器</small></div></div>
+                  <div className="python-runtime-modes">
+                    {(['auto', 'system', 'venv', 'conda', 'custom'] as const).map((mode) => (
+                      <button className={preferenceDraft.developerRuntimes.python.mode === mode ? 'is-active' : ''} key={mode} onClick={() => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, mode } } }))}>
+                        {mode === 'auto' ? '自动' : mode === 'system' ? '系统' : mode === 'venv' ? 'venv' : mode === 'conda' ? 'Conda' : '指定解释器'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="runtime-fields">
+                    {preferenceDraft.developerRuntimes.python.mode === 'auto' && <p className="runtime-mode-hint">依次检测工作目录的 .venv/venv、VIRTUAL_ENV、CONDA_PREFIX，再回退到系统 Python 3。</p>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'system' && <label><FieldLabel hint="可选；留空时自动尝试 python3/python/py -3">系统 Python 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'venv' && <label><FieldLabel hint="venv 根目录，Windows 使用 Scripts/python.exe，macOS/Linux 使用 bin/python">venv 路径</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.python.environment); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: path } } })) }}><Icon name="folder" size={13} /></button></div></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'conda' && <><label><FieldLabel hint="Conda 环境名称或绝对 prefix 路径">Conda 环境</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /></label><label><FieldLabel hint="默认 conda；也可指定 conda.exe/conda 的完整路径">Conda 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.condaExecutable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, condaExecutable: event.target.value } } }))} /></label></>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'custom' && <label><FieldLabel>Python 可执行文件</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
+                  </div>
+                  <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === 'python'} onClick={() => void testRuntime('python')}>{testingRuntime === 'python' ? '检测中…' : '检测 Python'}</button>{runtimeTestResults.python && <span className={runtimeTestResults.python.ok ? 'is-ok' : 'is-error'}>{runtimeTestResults.python.message}</span>}</div>
                 </section>
               </div>
             )}

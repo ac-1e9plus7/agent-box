@@ -19,6 +19,7 @@
     "src/renderer/src/file-helper.ts",
     "src/renderer/src/markdown-helper.ts",
     "src/renderer/src/composer-helper.ts",
+    "src/renderer/src/workspace-groups.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]

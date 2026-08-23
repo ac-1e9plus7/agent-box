@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -338,6 +338,7 @@ describe('AppRepository business constraints and relational integrity', () => {
       agentMode: true,
       skillIds: ['translator-polyglot'],
       mcpServerIds: ['filesystem'],
+      workingDirectory: process.cwd(),
       messages: [{
         id: 'assistant-with-skill',
         role: 'assistant',
@@ -356,6 +357,36 @@ describe('AppRepository business constraints and relational integrity', () => {
 
     expect(saved.skillIds).toEqual(['translator-polyglot'])
     expect(saved.mcpServerIds).toEqual(['filesystem'])
+    expect(saved.workingDirectory).toBe(process.cwd())
     expect(saved.messages[0]?.skillActivations?.[0]?.source).toBe('explicit')
+  })
+
+  it('stores only a workspace path reference and never encrypts project files', async () => {
+    const projectDirectory = mkdtempSync(join(tmpdir(), 'agentbox-project-boundary-'))
+    const sourcePath = join(projectDirectory, 'Main.java')
+    const originalBytes = Buffer.from('public class Main { public static void main(String[] args) {} }\n', 'utf8')
+    writeFileSync(sourcePath, originalBytes)
+    const entriesBefore = readdirSync(projectDirectory).sort()
+
+    try {
+      await repo.saveConversation({
+        id: 'workspace-boundary',
+        title: 'Workspace boundary',
+        modelId: 'openrouter-auto',
+        workingDirectory: projectDirectory,
+        messages: [{ id: 'u-workspace', role: 'user', content: 'inspect project', createdAt: timestamp }],
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      })
+
+      const reopened = new AppRepository(dir)
+      await reopened.initialize()
+      expect(reopened.getConversation('workspace-boundary')?.workingDirectory).toBe(projectDirectory)
+      expect(readFileSync(sourcePath)).toEqual(originalBytes)
+      expect(readdirSync(projectDirectory).sort()).toEqual(entriesBefore)
+      reopened.destroy()
+    } finally {
+      rmSync(projectDirectory, { recursive: true, force: true })
+    }
   })
 })

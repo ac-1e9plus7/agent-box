@@ -64,7 +64,14 @@ const emptySettings: AppSettings = {
   contextManagementMode: 'manual',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
-  integratedTerminalShell: { mode: 'auto', executable: '', args: [] }
+  integratedTerminalShell: { mode: 'auto', executable: '', args: [] },
+  defaultWorkingDirectory: '',
+  developerRuntimes: {
+    jdk: { mode: 'auto', home: '' },
+    go: { mode: 'auto', executable: '', root: '' },
+    php: { mode: 'auto', executable: '' },
+    python: { mode: 'auto', executable: '', environment: '', condaExecutable: 'conda' }
+  }
 }
 
 interface ActiveStream {
@@ -210,6 +217,7 @@ function toStoredConversation(conversation: Conversation): StoredConversation {
     agentMode: conversation.agentMode,
     skillIds: conversation.skillIds,
     mcpServerIds: conversation.mcpServerIds,
+    workingDirectory: conversation.workingDirectory,
     webSearchMode: conversation.webSearchMode ?? 'off',
     currentLeafId: conversation.currentLeafId,
     createdAt: conversation.createdAt,
@@ -351,6 +359,7 @@ export default function App(): JSX.Element {
         )
       ),
       agentMode: modeOverrides?.agentMode ?? settings.defaultAgentMode ?? false,
+      workingDirectory: activeConversation?.workingDirectory || settings.defaultWorkingDirectory || undefined,
       webSearchMode: effectiveWebSearchMode(
         resolvedModel,
         resolvedProvider,
@@ -377,7 +386,7 @@ export default function App(): JSX.Element {
       showToast(`无法新建会话：${normalizeError(error)}`)
       return undefined
     }
-  }, [models, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, showToast])
+  }, [activeConversation?.workingDirectory, models, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, settings.defaultWorkingDirectory, showToast])
 
   const bootstrap = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -909,6 +918,32 @@ export default function App(): JSX.Element {
     void persistConversation(nextConversation)
   }, [activeConversation, persistConversation, replaceConversations])
 
+  const handleChangeWorkingDirectory = useCallback(async (): Promise<void> => {
+    if (!activeConversation) return
+    const selected = await window.agentbox.workspace.selectDirectory(
+      activeConversation.workingDirectory || settings.defaultWorkingDirectory || undefined,
+    )
+    if (!selected) return
+    const nextConversation: Conversation = {
+      ...activeConversation,
+      workingDirectory: selected,
+      updatedAt: new Date().toISOString(),
+    }
+    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    void persistConversation(nextConversation)
+  }, [activeConversation, persistConversation, replaceConversations, settings.defaultWorkingDirectory])
+
+  const handleClearWorkingDirectory = useCallback((): void => {
+    if (!activeConversation) return
+    const nextConversation: Conversation = {
+      ...activeConversation,
+      workingDirectory: undefined,
+      updatedAt: new Date().toISOString(),
+    }
+    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    void persistConversation(nextConversation)
+  }, [activeConversation, persistConversation, replaceConversations])
+
   const handleToggleReasoning = (): void => {
     if (!activeModel?.supportsReasoning) return
     const nextEnabled = !reasoningEnabled
@@ -994,6 +1029,14 @@ export default function App(): JSX.Element {
 
   const handleTestTerminalShell = useCallback((config: AppSettings['integratedTerminalShell']) => (
     window.agentbox.terminal.testShell(config)
+  ), [])
+
+  const handleSelectDirectory = useCallback((initialPath?: string) => (
+    window.agentbox.workspace.selectDirectory(initialPath)
+  ), [])
+
+  const handleTestRuntime = useCallback((kind: Parameters<typeof window.agentbox.runtimes.test>[0], runtimes: AppSettings['developerRuntimes'], workingDirectory?: string) => (
+    window.agentbox.runtimes.test(kind, runtimes, workingDirectory)
   ), [])
 
 
@@ -1134,6 +1177,7 @@ export default function App(): JSX.Element {
         agentMode: nextConversation.agentMode ?? agentMode,
         skillIds: nextConversation.skillIds,
         mcpServerIds: nextConversation.mcpServerIds,
+        workingDirectory: nextConversation.workingDirectory,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -1272,6 +1316,7 @@ export default function App(): JSX.Element {
         agentMode: nextConversation.agentMode ?? agentMode,
         skillIds: nextConversation.skillIds,
         mcpServerIds: nextConversation.mcpServerIds,
+        workingDirectory: nextConversation.workingDirectory,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -1427,6 +1472,7 @@ export default function App(): JSX.Element {
         agentMode: nextConversation.agentMode ?? agentMode,
         skillIds: nextConversation.skillIds,
         mcpServerIds: nextConversation.mcpServerIds,
+        workingDirectory: nextConversation.workingDirectory,
         reasoningEnabled,
         webSearchMode,
         reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
@@ -1671,6 +1717,7 @@ export default function App(): JSX.Element {
           agentMode={agentMode}
           enabledSkillsCount={skills.filter((skill) => skill.enabled).length}
           selectedSkillsCount={activeConversation?.skillIds?.length ?? 0}
+          workingDirectory={activeConversation?.workingDirectory}
           models={models}
           providers={providers}
           reasoningEnabled={reasoningEnabled}
@@ -1683,6 +1730,8 @@ export default function App(): JSX.Element {
           onRestoreSidebar={() => setSidebarCollapsed(false)}
           onToggleAgentMode={handleToggleAgentMode}
           onToggleReasoning={handleToggleReasoning}
+          onChangeWorkingDirectory={activeConversation ? () => void handleChangeWorkingDirectory() : undefined}
+          onClearWorkingDirectory={activeConversation ? handleClearWorkingDirectory : undefined}
         />
 
         <section className="chat-stage">
@@ -1755,6 +1804,8 @@ export default function App(): JSX.Element {
         onTestMcpServer={handleTestMcpServer}
         onListMcpTools={handleListMcpTools}
         onTestTerminalShell={handleTestTerminalShell}
+        onSelectDirectory={handleSelectDirectory}
+        onTestRuntime={handleTestRuntime}
         onClose={() => setSettingsOpen(false)}
         onClearData={handleClearAllData}
         onDiscoverModels={discoverModels}

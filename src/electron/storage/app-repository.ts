@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { isAbsolute, normalize } from 'node:path'
 import type {
   ApiFormat,
   AppSettings,
@@ -21,7 +22,7 @@ import type {
 import { EncryptedStore } from './encrypted-store'
 import { createOpenRouterAutoModel } from './default-models'
 import { DEFAULT_SKILLS } from './default-skills'
-import { normalizeAppSettings } from './settings-schema'
+import { defaultDeveloperRuntimeSettings, normalizeAppSettings } from './settings-schema'
 import { isApiKeyOptional, isLoopbackUrl } from '../api/provider-policy'
 import { assertConversationMutationAllowed } from './vault-resource-limits'
 import {
@@ -78,6 +79,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
   integratedTerminalShell: { mode: 'auto', executable: '', args: [] },
+  developerRuntimes: defaultDeveloperRuntimeSettings(),
+  defaultWorkingDirectory: '',
 }
 
 export class AppRepository {
@@ -139,6 +142,10 @@ export class AppRepository {
       if (patch.integratedTerminalShell !== undefined) {
         next.integratedTerminalShell = patch.integratedTerminalShell
       }
+      if (patch.defaultWorkingDirectory !== undefined) {
+        next.defaultWorkingDirectory = patch.defaultWorkingDirectory
+      }
+      if (patch.developerRuntimes !== undefined) next.developerRuntimes = patch.developerRuntimes
       draft.settings = normalizeAppSettings(next)
       return structuredClone(draft.settings)
     })
@@ -1002,6 +1009,9 @@ function validateConversation(value: unknown): Conversation {
     value.webSearchMode,
     'conversation web search mode',
   )
+  const workingDirectory = typeof value.workingDirectory === 'string' && value.workingDirectory.trim()
+    ? normalizeConversationWorkingDirectory(value.workingDirectory)
+    : undefined
   const messages = requireArray(
     value.messages,
     'messages',
@@ -1080,6 +1090,7 @@ function validateConversation(value: unknown): Conversation {
     agentMode: value.agentMode,
     skillIds,
     mcpServerIds,
+    workingDirectory,
     webSearchMode,
     messages,
     currentLeafId,
@@ -1190,6 +1201,13 @@ function sanitizeHeaders(value: Record<string, string>): Record<string, string> 
     output[name] = rawValue
   }
   return output
+}
+
+function normalizeConversationWorkingDirectory(value: string): string {
+  if (value.length > 4_096 || /[\r\n\0]/.test(value) || !isAbsolute(value)) {
+    throw new Error('Invalid conversation working directory')
+  }
+  return normalize(value)
 }
 
 function sanitizeMcpHeaders(value: Record<string, string>): Record<string, string> {

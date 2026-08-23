@@ -1,4 +1,5 @@
-import type { AppSettings, IntegratedTerminalShellConfig, ProxyConfig, ProxyMode } from '../../shared/types'
+import { isAbsolute } from 'node:path'
+import type { AppSettings, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, ProxyConfig, ProxyMode } from '../../shared/types'
 import { isLoopbackUrl } from '../api/provider-policy'
 
 /**
@@ -58,6 +59,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   }
   const proxy = normalizeProxy(value.proxy)
   const integratedTerminalShell = normalizeIntegratedTerminalShell(value.integratedTerminalShell)
+  const developerRuntimes = normalizeDeveloperRuntimes(value.developerRuntimes)
+  const defaultWorkingDirectory = normalizeOptionalDirectory(value.defaultWorkingDirectory, 'default working directory')
   const settings: AppSettings = {
     theme: value.theme as AppSettings['theme'],
     sendShortcut: value.sendShortcut as AppSettings['sendShortcut'],
@@ -75,11 +78,77 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     systemPrompt: value.systemPrompt,
     proxy,
     integratedTerminalShell,
+    defaultWorkingDirectory,
+    developerRuntimes,
   }
   if (value.titleGenerationModelId !== undefined) {
     settings.titleGenerationModelId = value.titleGenerationModelId as string
   }
   return settings
+}
+
+export function defaultDeveloperRuntimeSettings(): DeveloperRuntimeSettings {
+  return {
+    jdk: { mode: 'auto', home: '' },
+    go: { mode: 'auto', executable: '', root: '' },
+    php: { mode: 'auto', executable: '' },
+    python: { mode: 'auto', executable: '', environment: '', condaExecutable: 'conda' },
+  }
+}
+
+export function normalizeDeveloperRuntimes(value: unknown): DeveloperRuntimeSettings {
+  if (value === undefined || value === null) return defaultDeveloperRuntimeSettings()
+  if (!isRecord(value)) throw new Error('Invalid developer runtimes')
+  const defaults = defaultDeveloperRuntimeSettings()
+  const jdk = normalizeRuntimeRecord(value.jdk, defaults.jdk, ['home'])
+  const go = normalizeRuntimeRecord(value.go, defaults.go, ['executable', 'root'])
+  const php = normalizeRuntimeRecord(value.php, defaults.php, ['executable'])
+  if (!isRecord(value.python)) throw new Error('Invalid Python runtime')
+  const pythonMode = String(value.python.mode ?? 'auto')
+  if (!['auto', 'system', 'venv', 'conda', 'custom'].includes(pythonMode)) {
+    throw new Error('Invalid Python runtime mode')
+  }
+  const python = {
+    mode: pythonMode as DeveloperRuntimeSettings['python']['mode'],
+    executable: normalizeRuntimePath(value.python.executable ?? ''),
+    environment: normalizeRuntimePath(value.python.environment ?? ''),
+    condaExecutable: normalizeRuntimePath(value.python.condaExecutable ?? 'conda') || 'conda',
+  }
+  if (python.mode === 'venv' && !python.environment) throw new Error('Python venv 路径不能为空。')
+  if (python.mode === 'conda' && !python.environment) throw new Error('Conda 环境名称或路径不能为空。')
+  if (python.mode === 'custom' && !python.executable) throw new Error('Python 可执行文件不能为空。')
+  return { jdk, go, php, python }
+}
+
+function normalizeRuntimeRecord<T extends { mode: 'auto' | 'custom' }>(
+  value: unknown,
+  defaults: T,
+  fields: Array<Exclude<keyof T, 'mode'>>,
+): T {
+  if (value === undefined || value === null) return { ...defaults }
+  if (!isRecord(value)) throw new Error('Invalid developer runtime')
+  const mode = String(value.mode ?? 'auto')
+  if (mode !== 'auto' && mode !== 'custom') throw new Error('Invalid developer runtime mode')
+  const result = { ...defaults, mode } as T
+  for (const field of fields) result[field] = normalizeRuntimePath(value[String(field)] ?? '') as T[typeof field]
+  if (mode === 'custom' && fields.every((field) => !String(result[field] || '').trim())) {
+    throw new Error('自定义运行时路径不能为空。')
+  }
+  return result
+}
+
+function normalizeRuntimePath(value: unknown): string {
+  if (typeof value !== 'string' || value.length > 4_096 || /[\r\n\0]/.test(value)) {
+    throw new Error('Invalid runtime path')
+  }
+  return value.trim()
+}
+
+function normalizeOptionalDirectory(value: unknown, label: string): string {
+  if (value === undefined || value === null || value === '') return ''
+  const directory = normalizeRuntimePath(value)
+  if (!isAbsolute(directory)) throw new Error(`Invalid ${label}`)
+  return directory
 }
 
 export function normalizeIntegratedTerminalShell(value: unknown): IntegratedTerminalShellConfig {

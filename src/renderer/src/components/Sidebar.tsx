@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { JSX } from 'react'
 import type { Conversation } from '../types'
+import { groupConversationsByWorkspace } from '../workspace-groups'
 import { Icon } from './Icon'
 
 interface SidebarProps {
@@ -18,21 +19,6 @@ interface SidebarProps {
   onRenameConversation: (conversationId: string, title: string) => void
   onSelectConversation: (conversationId: string) => void
 }
-
-function getGroup(updatedAt: string): '今天' | '昨天' | '最近 7 天' | '更早' {
-  const now = new Date()
-  const date = new Date(updatedAt)
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const target = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-  const days = Math.floor((today - target) / 86_400_000)
-
-  if (days <= 0) return '今天'
-  if (days === 1) return '昨天'
-  if (days < 7) return '最近 7 天'
-  return '更早'
-}
-
-const groupOrder = ['今天', '昨天', '最近 7 天', '更早'] as const
 
 export function Sidebar({
   activeConversationId,
@@ -67,17 +53,7 @@ export function Sidebar({
   }
 
   const groupedConversations = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase()
-    const filtered = conversations.filter((conversation) =>
-      conversation.title.toLocaleLowerCase().includes(normalizedQuery)
-    )
-
-    return groupOrder
-      .map((label) => ({
-        label,
-        conversations: filtered.filter((conversation) => getGroup(conversation.updatedAt) === label)
-      }))
-      .filter((group) => group.conversations.length > 0)
+    return groupConversationsByWorkspace(conversations, query)
   }, [conversations, query])
 
   return (
@@ -118,8 +94,8 @@ export function Sidebar({
 
         <nav className="conversation-nav" aria-label="会话历史">
           {groupedConversations.map((group) => (
-            <section className="conversation-group" key={group.label}>
-              <h2>{group.label}</h2>
+            <section className="conversation-group" key={group.path || group.label}>
+              <h2 title={group.path || '未设置工作目录'}><Icon name={group.path ? 'folder' : 'message'} size={12} /> {group.label}</h2>
               <div className="conversation-list">
                 {group.conversations.map((conversation) => {
                   const isEditing = editingId === conversation.id

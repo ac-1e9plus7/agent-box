@@ -51,6 +51,7 @@ const paths: Record<IconName, ReactNode> = {
   edit: <path d="m14.5 5.5 4 4M5 19l3.6-.7L19 7.9a1.7 1.7 0 0 0-2.4-2.4L6.2 15.9 5 19Z" />,
   external: <path d="M13 5h6v6M19 5l-8 8M10 6H5v13h13v-5" />,
   file: <path d="M6.5 3.5h7l4 4v13h-11zM13.5 3.5v4h4M9 12h6M9 16h6" />,
+  folder: <path d="M3 6.5h7l2-2h9v15H3z" />,
   globe: (
     <>
       <circle cx="12" cy="12" r="8.5" />
