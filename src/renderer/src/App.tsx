@@ -60,9 +60,11 @@ const emptySettings: AppSettings = {
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
+  toolApprovalTimeoutMode: 'five-minutes',
   contextManagementMode: 'manual',
   systemPrompt: '',
-  proxy: { mode: 'off', url: '' }
+  proxy: { mode: 'off', url: '' },
+  integratedTerminalShell: { mode: 'auto', executable: '', args: [] }
 }
 
 interface ActiveStream {
@@ -207,6 +209,7 @@ function toStoredConversation(conversation: Conversation): StoredConversation {
     reasoningEnabled: conversation.reasoningEnabled,
     agentMode: conversation.agentMode,
     skillIds: conversation.skillIds,
+    mcpServerIds: conversation.mcpServerIds,
     webSearchMode: conversation.webSearchMode ?? 'off',
     currentLeafId: conversation.currentLeafId,
     createdAt: conversation.createdAt,
@@ -594,6 +597,25 @@ export default function App(): JSX.Element {
     }
     if (!activeStream) return
 
+    if (event.type === 'skill-activated') {
+      replaceConversations((current) => current.map((conversation) => {
+        if (conversation.id !== activeStream!.conversationId) return conversation
+        return {
+          ...conversation,
+          messages: conversation.messages.map((message) => {
+            if (message.id !== activeStream!.assistantMessageId) return message
+            const currentActivations = message.skillActivations ?? []
+            const existingIndex = currentActivations.findIndex((item) => item.id === event.skill.id)
+            const nextActivations = [...currentActivations]
+            if (existingIndex >= 0) nextActivations[existingIndex] = event.skill
+            else nextActivations.push(event.skill)
+            return { ...message, skillActivations: nextActivations }
+          })
+        }
+      }))
+      return
+    }
+
     if (event.type === 'agent-provider-item') {
       replaceConversations((current) => current.map((conversation) => {
         if (conversation.id !== activeStream!.conversationId) return conversation
@@ -876,6 +898,17 @@ export default function App(): JSX.Element {
     void persistConversation(nextConversation)
   }, [activeConversation, persistConversation, replaceConversations])
 
+  const handleSkillSelectionChange = useCallback((skillIds: string[]): void => {
+    if (!activeConversation) return
+    const nextConversation: Conversation = {
+      ...activeConversation,
+      skillIds: skillIds.length > 0 ? skillIds : undefined,
+      updatedAt: new Date().toISOString()
+    }
+    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    void persistConversation(nextConversation)
+  }, [activeConversation, persistConversation, replaceConversations])
+
   const handleToggleReasoning = (): void => {
     if (!activeModel?.supportsReasoning) return
     const nextEnabled = !reasoningEnabled
@@ -958,6 +991,10 @@ export default function App(): JSX.Element {
     setMcpTools(tools)
     return tools
   }, [])
+
+  const handleTestTerminalShell = useCallback((config: AppSettings['integratedTerminalShell']) => (
+    window.agentbox.terminal.testShell(config)
+  ), [])
 
 
   const handleWebSearchModeChange = (mode: WebSearchMode): void => {
@@ -1632,7 +1669,8 @@ export default function App(): JSX.Element {
           activeModel={activeModel}
           activeTitle={activeConversation?.title ?? '新对话'}
           agentMode={agentMode}
-          activeSkillsCount={skills.filter((s) => s.enabled).length}
+          enabledSkillsCount={skills.filter((skill) => skill.enabled).length}
+          selectedSkillsCount={activeConversation?.skillIds?.length ?? 0}
           models={models}
           providers={providers}
           reasoningEnabled={reasoningEnabled}
@@ -1673,11 +1711,15 @@ export default function App(): JSX.Element {
             disabled={!activeModel}
             draft={draft}
             agentMode={agentMode}
+            skills={skills}
+            selectedSkillIds={activeConversation?.skillIds}
             mcpToolsCount={mcpTools.length}
             mcpServers={mcpServers}
             selectedMcpServerIds={activeConversation?.mcpServerIds}
             onOpenMcpSettings={() => openSettings('mcp')}
+            onOpenSkillsSettings={() => openSettings('skills')}
             onMcpServerSelectionChange={handleMcpServerSelectionChange}
+            onSkillSelectionChange={handleSkillSelectionChange}
             reasoningEnabled={reasoningEnabled}
             webSearchAvailable={webSearchAvailable}
             webSearchMode={webSearchMode}
@@ -1712,6 +1754,7 @@ export default function App(): JSX.Element {
         onToggleMcpServer={handleToggleMcpServer}
         onTestMcpServer={handleTestMcpServer}
         onListMcpTools={handleListMcpTools}
+        onTestTerminalShell={handleTestTerminalShell}
         onClose={() => setSettingsOpen(false)}
         onClearData={handleClearAllData}
         onDiscoverModels={discoverModels}

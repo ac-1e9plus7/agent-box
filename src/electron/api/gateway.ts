@@ -11,6 +11,7 @@ import type {
   RemoteModel,
   Skill,
   StreamEvent,
+  ToolApprovalTimeoutMode,
   ToolCallExecution,
   WebCitation,
 } from '../../shared/types'
@@ -32,7 +33,13 @@ import {
   type ProtocolErrorData,
 } from './protocol-adapters'
 import { buildRequestBody, RequestAdapterError } from './request-adapters'
-import { retrieveRelevantSkills } from './skill-retriever'
+import { executeCode, type ExecutableLanguage } from './code-executor'
+import { executeTerminalCommand } from './terminal-shell'
+import {
+  buildSkillRetrievalQuery,
+  retrieveExplicitlyMentionedSkills,
+  retrieveRelevantSkills,
+} from './skill-retriever'
 import {
   buildProviderHeaders,
   providerHasUsableAuthentication,
@@ -49,6 +56,15 @@ type StreamEmitter = (event: StreamEvent) => void
 const MODEL_DISCOVERY_TIMEOUT_MS = 30_000
 const MAX_MODEL_RESPONSE_BYTES = 32 * 1024 * 1024
 const MAX_ERROR_RESPONSE_BYTES = 32 * 1024
+const SKILL_LOADER_SERVER_ID = 'agentbox-skills'
+const SKILL_LOADER_TOOL_NAME = 'load_skill'
+const SKILL_LOADER_MODEL_NAME = 'agentbox_load_skill'
+const CODE_RUNNER_SERVER_ID = 'agentbox-code-runner'
+const CODE_RUNNER_TOOL_NAME = 'run_code'
+const CODE_RUNNER_MODEL_NAME = 'agentbox_run_code'
+const TERMINAL_RUNNER_SERVER_ID = 'agentbox-integrated-terminal'
+const TERMINAL_RUNNER_TOOL_NAME = 'run_terminal'
+const TERMINAL_RUNNER_MODEL_NAME = 'agentbox_run_terminal'
 
 export class GatewayError extends Error {
   constructor(
@@ -66,7 +82,7 @@ export class ChatGateway {
   private readonly controllers = new Map<string, AbortController>()
   private readonly pendingToolApprovals = new Map<
     string,
-    { resolve: (approved: boolean) => void; timer: ReturnType<typeof setTimeout>; requestId: string }
+    { resolve: (approved: boolean) => void; timer?: ReturnType<typeof setTimeout>; requestId: string }
   >()
   private proxyAgent: ProxyAgent | undefined
   private proxyUrl: string | undefined
@@ -135,6 +151,10 @@ export class ChatGateway {
         120_000,
       )
     }
+    const pauseStallTimer = () => {
+      clearTimeout(stallTimer)
+      stallTimer = undefined
+    }
 
     try {
       resetStallTimer()
@@ -156,6 +176,7 @@ export class ChatGateway {
       const settings = this.repository.getSettings()
       const isAgentMode = Boolean(request.agentMode)
       const lastUserMessage = requestMessages.filter((message) => message.role === 'user').at(-1)?.content || ''
+      const skillRoutingQuery = buildSkillRetrievalQuery(requestMessages)
       let allMcpTools: McpToolDefinition[] = []
       let effectiveMcpTools: McpToolDefinition[] = []
       if (isAgentMode && this.mcpManager && settings.mcpEnabled !== false) {
@@ -168,25 +189,45 @@ export class ChatGateway {
         }
       }
 
+      let enabledSkills: Skill[] = []
+      let activeSkills: Skill[] = []
+      let effectiveAgentTools = effectiveMcpTools
       let effectiveSystemPrompt = settings.systemPrompt
       if (isAgentMode) {
-        const enabledSkills = this.repository.listSkills().filter((skill) => skill.enabled)
-        const selectedSkills = request.skillIds?.length
+        enabledSkills = this.repository.listSkills().filter((skill) => skill.enabled)
+        const mentionedSkills = retrieveExplicitlyMentionedSkills(lastUserMessage, enabledSkills)
+        const initialSource = request.skillIds?.length || mentionedSkills.length > 0 ? 'explicit' as const : 'automatic' as const
+        activeSkills = request.skillIds?.length
           ? enabledSkills.filter((skill) => request.skillIds!.includes(skill.id))
-          : retrieveRelevantSkills(lastUserMessage, enabledSkills, 2)
+          : mentionedSkills.length > 0
+            ? mentionedSkills
+            : retrieveRelevantSkills(skillRoutingQuery, enabledSkills, 2)
+        const internalTools = [
+          createSkillLoaderTool(enabledSkills),
+          createCodeRunnerTool(enabledSkills),
+          createTerminalRunnerTool(),
+        ].filter((tool): tool is McpToolDefinition => Boolean(tool))
+        effectiveAgentTools = [...effectiveMcpTools, ...internalTools]
         effectiveSystemPrompt = buildAgentSystemPrompt(
-          selectedSkills,
+          activeSkills,
           settings.systemPrompt,
-          effectiveMcpTools,
+          effectiveAgentTools,
           enabledSkills,
         )
+        for (const skill of activeSkills) {
+          emit({
+            type: 'skill-activated',
+            requestId,
+            skill: { id: skill.id, name: skill.name, source: initialSource, turn: 0 },
+          })
+        }
       }
       const messages = addConfiguredSystemPrompt(
         requestMessages,
         effectiveSystemPrompt,
       )
       const toolDefinitionTokens = estimateTextTokens(JSON.stringify(
-        effectiveMcpTools.map((tool) => ({
+        effectiveAgentTools.map((tool) => ({
           name: tool.modelName || tool.name,
           description: tool.description,
           parameters: tool.inputSchema,
@@ -227,7 +268,7 @@ export class ChatGateway {
                 currentTurnMessages,
                 request,
                 maxOutputTokens,
-                effectiveMcpTools.length > 0 ? effectiveMcpTools : undefined,
+                effectiveAgentTools.length > 0 ? effectiveAgentTools : undefined,
               ),
             ),
             signal: controller.signal,
@@ -267,20 +308,24 @@ export class ChatGateway {
           wrappedBody,
           requestId,
           emit,
-          effectiveMcpTools,
+          effectiveAgentTools,
           turn,
         )
+        // The 120-second watchdog protects network inactivity only. Tool
+        // approval intentionally has its own five-minute timeout and must not
+        // be aborted by a stale response-stream timer.
+        pauseStallTimer()
 
-        if (streamResult.toolCalls.length > 0 && this.mcpManager && isAgentMode) {
+        if (streamResult.toolCalls.length > 0 && isAgentMode) {
           if (toolTurns >= MAX_AGENT_TOOL_TURNS) {
             for (const rawCall of streamResult.toolCalls) {
-              const tool = effectiveMcpTools.find((item) => (item.modelName || item.name) === rawCall.name)
+              const tool = effectiveAgentTools.find((item) => (item.modelName || item.name) === rawCall.name)
               emit({
                 type: 'tool-result',
                 requestId,
                 callId: rawCall.id,
                 toolName: tool?.name || rawCall.name,
-                result: `已达到 ${MAX_AGENT_TOOL_TURNS} 轮 MCP 工具执行上限，本次调用未执行。`,
+                result: `已达到 ${MAX_AGENT_TOOL_TURNS} 轮 Agent 工具执行上限，本次调用未执行。`,
                 isError: true,
                 turn,
               })
@@ -305,9 +350,10 @@ export class ChatGateway {
             signature: block.signature || undefined,
           })))
           if (streamResult.text) agentTrace.push({ type: 'assistant_text', turn, text: streamResult.text })
+          let skillLoadedThisTurn = false
 
           for (const rawCall of streamResult.toolCalls) {
-            const toolDef = effectiveMcpTools.find((tool) => (tool.modelName || tool.name) === rawCall.name)
+            const toolDef = effectiveAgentTools.find((tool) => (tool.modelName || tool.name) === rawCall.name)
             const displayName = toolDef?.name || rawCall.name
             let parsedValue: unknown
             let argumentError: string | undefined
@@ -321,9 +367,15 @@ export class ChatGateway {
               ? validateToolArguments(toolDef, parsedValue)
               : undefined
             const parsedArgs = validation?.ok ? validation.args : {}
+            const isSkillLoader = toolDef?.serverId === SKILL_LOADER_SERVER_ID
+            const isCodeRunner = toolDef?.serverId === CODE_RUNNER_SERVER_ID
+            const isTerminalRunner = toolDef?.serverId === TERMINAL_RUNNER_SERVER_ID
+            const isInternalTool = isSkillLoader || isCodeRunner || isTerminalRunner
             const failure = !toolDef
               ? '模型请求了本轮未授权或不存在的工具，调用已拒绝。'
-              : argumentError || (validation && !validation.ok ? validation.message : undefined)
+              : argumentError
+                || (validation && !validation.ok ? validation.message : undefined)
+                || (!isInternalTool && !this.mcpManager ? 'MCP 工具管理器不可用。' : undefined)
 
             if (failure || !toolDef) {
               emit({ type: 'tool-call-complete', requestId, callId: rawCall.id, toolName: displayName, modelToolName: rawCall.name, args: parsedArgs, turn })
@@ -347,7 +399,64 @@ export class ChatGateway {
               continue
             }
 
-            const approval = evaluateToolApproval(settings.mcpToolApprovalPolicy ?? 'sensitive', toolDef)
+            if (isSkillLoader) {
+              emit({ type: 'tool-call-complete', requestId, callId: rawCall.id, toolName: toolDef.name, modelToolName: toolDef.modelName || toolDef.name, args: parsedArgs, turn })
+              const skillId = typeof parsedArgs.skill_id === 'string' ? parsedArgs.skill_id : ''
+              const skill = enabledSkills.find((item) => item.id === skillId)
+              const alreadyActive = Boolean(skill && activeSkills.some((item) => item.id === skill.id))
+              const loadFailed = !skill
+              const result = !skill
+                ? `技能 ${skillId || '(空)'} 不存在、未启用或不在本轮目录中。`
+                : alreadyActive
+                  ? `技能「${skill.name}」已经处于激活状态。`
+                  : `已加载技能「${skill.name}」；后续回答必须遵循该技能的完整指令。`
+
+              if (skill && !alreadyActive) {
+                activeSkills = [...activeSkills, skill]
+                skillLoadedThisTurn = true
+                emit({
+                  type: 'skill-activated',
+                  requestId,
+                  skill: { id: skill.id, name: skill.name, source: 'model', turn },
+                })
+              }
+
+              emit({ type: 'tool-result', requestId, callId: rawCall.id, toolName: toolDef.name, result, isError: loadFailed, turn })
+              toolExecutions.push({
+                id: rawCall.id,
+                toolName: toolDef.name,
+                modelToolName: toolDef.modelName || toolDef.name,
+                serverId: toolDef.serverId,
+                serverName: toolDef.serverName,
+                turn,
+                args: parsedArgs,
+                result,
+                isError: loadFailed,
+                riskLevel: 'low',
+                approvalReason: '加载本地只读技能指令，不执行技能脚本。',
+                status: loadFailed ? 'error' : 'complete',
+              })
+              agentTrace.push(
+                { type: 'tool_call', turn, callId: rawCall.id, toolName: toolDef.name, modelToolName: toolDef.modelName || toolDef.name, serverId: toolDef.serverId, serverName: toolDef.serverName, args: parsedArgs },
+                { type: 'tool_result', turn, callId: rawCall.id, toolName: toolDef.name, result, isError: loadFailed },
+              )
+              continue
+            }
+
+            const approvalPolicy = settings.mcpToolApprovalPolicy ?? 'sensitive'
+            const approval = isCodeRunner
+              ? {
+                  required: approvalPolicy !== 'full-access',
+                  riskLevel: 'sensitive' as const,
+                  reason: '将执行模型生成的代码。运行器带有隔离、超时和输出限制，但代码执行仍可能消耗本机资源。',
+                }
+              : isTerminalRunner
+                ? {
+                    required: approvalPolicy !== 'full-access',
+                    riskLevel: 'sensitive' as const,
+                    reason: '将在所选集成终端 Shell 中执行模型生成的命令。命令可能读写文件、启动程序或访问网络。',
+                  }
+              : evaluateToolApproval(approvalPolicy, toolDef)
             if (approval.required) {
               emit({
                 type: 'tool-approval-required',
@@ -361,7 +470,12 @@ export class ChatGateway {
                 reason: approval.reason,
                 turn,
               })
-              const approved = await this.waitForToolApproval(requestId, rawCall.id, controller.signal)
+              const approved = await this.waitForToolApproval(
+                requestId,
+                rawCall.id,
+                controller.signal,
+                settings.toolApprovalTimeoutMode ?? 'five-minutes',
+              )
               if (!approved) {
                 const deniedResult = '用户拒绝了该工具调用。'
                 emit({ type: 'tool-result', requestId, callId: rawCall.id, toolName: toolDef.name, result: deniedResult, isError: true, denied: true, turn })
@@ -388,7 +502,86 @@ export class ChatGateway {
             }
 
             emit({ type: 'tool-call-complete', requestId, callId: rawCall.id, toolName: toolDef.name, modelToolName: toolDef.modelName || toolDef.name, args: parsedArgs, turn })
-            const execResult = await this.mcpManager.executeTool(
+            if (isCodeRunner) {
+              const language = parsedArgs.language as ExecutableLanguage
+              const timeoutSeconds = typeof parsedArgs.timeout_seconds === 'number' ? parsedArgs.timeout_seconds : undefined
+              const execResult = await executeCode({
+                language,
+                code: String(parsedArgs.code || ''),
+                input: parsedArgs.input,
+                timeoutMs: timeoutSeconds ? timeoutSeconds * 1_000 : undefined,
+              }, controller.signal)
+              emit({
+                type: 'tool-result',
+                requestId,
+                callId: rawCall.id,
+                toolName: toolDef.name,
+                result: execResult.result,
+                resultTruncated: execResult.truncated,
+                isError: execResult.isError,
+                turn,
+              })
+              toolExecutions.push({
+                id: rawCall.id,
+                toolName: toolDef.name,
+                modelToolName: toolDef.modelName || toolDef.name,
+                serverId: toolDef.serverId,
+                serverName: toolDef.serverName,
+                turn,
+                args: parsedArgs,
+                result: execResult.result,
+                resultTruncated: execResult.truncated,
+                isError: execResult.isError,
+                riskLevel: approval.riskLevel,
+                approvalReason: approval.reason,
+                status: execResult.isError ? 'error' : 'complete',
+              })
+              agentTrace.push(
+                { type: 'tool_call', turn, callId: rawCall.id, toolName: toolDef.name, modelToolName: toolDef.modelName || toolDef.name, serverId: toolDef.serverId, serverName: toolDef.serverName, args: parsedArgs },
+                { type: 'tool_result', turn, callId: rawCall.id, toolName: toolDef.name, result: execResult.result, resultTruncated: execResult.truncated, isError: execResult.isError },
+              )
+              continue
+            }
+            if (isTerminalRunner) {
+              const timeoutSeconds = typeof parsedArgs.timeout_seconds === 'number' ? parsedArgs.timeout_seconds : undefined
+              const execResult = await executeTerminalCommand(
+                settings.integratedTerminalShell,
+                String(parsedArgs.command || ''),
+                { timeoutMs: timeoutSeconds ? timeoutSeconds * 1_000 : undefined, signal: controller.signal },
+              )
+              const result = `[Shell: ${execResult.shell.displayName} · ${execResult.shell.executable}]\n${execResult.result}`
+              emit({
+                type: 'tool-result',
+                requestId,
+                callId: rawCall.id,
+                toolName: toolDef.name,
+                result,
+                resultTruncated: execResult.truncated,
+                isError: execResult.isError,
+                turn,
+              })
+              toolExecutions.push({
+                id: rawCall.id,
+                toolName: toolDef.name,
+                modelToolName: toolDef.modelName || toolDef.name,
+                serverId: toolDef.serverId,
+                serverName: toolDef.serverName,
+                turn,
+                args: parsedArgs,
+                result,
+                resultTruncated: execResult.truncated,
+                isError: execResult.isError,
+                riskLevel: approval.riskLevel,
+                approvalReason: approval.reason,
+                status: execResult.isError ? 'error' : 'complete',
+              })
+              agentTrace.push(
+                { type: 'tool_call', turn, callId: rawCall.id, toolName: toolDef.name, modelToolName: toolDef.modelName || toolDef.name, serverId: toolDef.serverId, serverName: toolDef.serverName, args: parsedArgs },
+                { type: 'tool_result', turn, callId: rawCall.id, toolName: toolDef.name, result, resultTruncated: execResult.truncated, isError: execResult.isError },
+              )
+              continue
+            }
+            const execResult = await this.mcpManager!.executeTool(
               toolDef.serverId,
               toolDef.name,
               parsedArgs,
@@ -437,8 +630,15 @@ export class ChatGateway {
             agentTrace,
             createdAt: new Date().toISOString(),
           }
+          const nextTurnMessages = [...currentTurnMessages, assistantMsg]
+          if (skillLoadedThisTurn) {
+            replaceConfiguredSystemPrompt(
+              nextTurnMessages,
+              buildAgentSystemPrompt(activeSkills, settings.systemPrompt, effectiveAgentTools, enabledSkills),
+            )
+          }
           currentTurnMessages = prepareMessagesForContext(
-            [...currentTurnMessages, assistantMsg],
+            nextTurnMessages,
             effectiveContextWindow,
             maxOutputTokens,
             contextMode,
@@ -483,7 +683,12 @@ export class ChatGateway {
     pending.resolve(approved)
   }
 
-  private waitForToolApproval(requestId: string, callId: string, signal: AbortSignal): Promise<boolean> {
+  private waitForToolApproval(
+    requestId: string,
+    callId: string,
+    signal: AbortSignal,
+    timeoutMode: ToolApprovalTimeoutMode,
+  ): Promise<boolean> {
     return new Promise((resolve) => {
       const key = approvalKey(requestId, callId)
       const finish = (approved: boolean) => {
@@ -494,7 +699,9 @@ export class ChatGateway {
         resolve(approved)
       }
       const onAbort = () => finish(false)
-      const timer = setTimeout(() => finish(false), 5 * 60_000)
+      const timer = timeoutMode === 'never'
+        ? undefined
+        : setTimeout(() => finish(false), 5 * 60_000)
       this.pendingToolApprovals.set(key, { resolve: finish, timer, requestId })
       if (signal.aborted) finish(false)
       else signal.addEventListener('abort', onAbort, { once: true })
@@ -603,6 +810,92 @@ export class ChatGateway {
   }
 }
 
+function createSkillLoaderTool(skills: Skill[]): McpToolDefinition | undefined {
+  if (skills.length === 0) return undefined
+  return {
+    name: SKILL_LOADER_TOOL_NAME,
+    modelName: SKILL_LOADER_MODEL_NAME,
+    description: '按技能 ID 加载一个本地只读技能的完整 SKILL.md、参考文档和参考脚本。仅在当前已激活技能不足以完成任务时调用；该工具不会执行脚本。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        skill_id: {
+          type: 'string',
+          enum: skills.map((skill) => skill.id),
+          description: '可用技能目录中的技能 ID。',
+        },
+      },
+      required: ['skill_id'],
+      additionalProperties: false,
+    },
+    annotations: {
+      title: '加载技能',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+    serverId: SKILL_LOADER_SERVER_ID,
+    serverName: 'AgentBox Skills',
+  }
+}
+
+function createCodeRunnerTool(skills: Skill[]): McpToolDefinition | undefined {
+  if (!skills.some((skill) => skill.files.some((file) => file.kind === 'python'))) return undefined
+  return {
+    name: CODE_RUNNER_TOOL_NAME,
+    modelName: CODE_RUNNER_MODEL_NAME,
+    description: '执行短小、无外部依赖的算法或数据验证代码。JavaScript 在隔离 Worker 中运行；Python 仅在本机存在 Python 3 时运行。执行可能消耗本机资源，通常需要用户审批。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        language: {
+          type: 'string',
+          enum: ['javascript', 'python'],
+          description: '优先使用 javascript 保证可用；只有用户明确需要 Python 或代码必须使用 Python 时才选择 python。',
+        },
+        code: { type: 'string', minLength: 1, maxLength: 100_000 },
+        input: { description: '可选 JSON 输入；JavaScript 中通过 input、Python 中通过 input_data 访问。' },
+        timeout_seconds: { type: 'number', minimum: 0.5, maximum: 20 },
+      },
+      required: ['language', 'code'],
+      additionalProperties: false,
+    },
+    annotations: {
+      title: '运行代码',
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+    serverId: CODE_RUNNER_SERVER_ID,
+    serverName: 'AgentBox Code Runner',
+  }
+}
+
+function createTerminalRunnerTool(): McpToolDefinition {
+  return {
+    name: TERMINAL_RUNNER_TOOL_NAME,
+    modelName: TERMINAL_RUNNER_MODEL_NAME,
+    description: '在用户配置的 Integrated terminal shell 中执行一条命令。Shell 会按操作系统自动选择，也可在设置中指定可执行文件和启动参数。终端命令属于敏感操作，通常需要用户审批。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', minLength: 1, maxLength: 100_000 },
+        timeout_seconds: { type: 'number', minimum: 0.5, maximum: 60 },
+      },
+      required: ['command'],
+      additionalProperties: false,
+    },
+    annotations: {
+      title: '集成终端命令',
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: true,
+    },
+    serverId: TERMINAL_RUNNER_SERVER_ID,
+    serverName: 'AgentBox Integrated Terminal',
+  }
+}
+
 function buildAgentSystemPrompt(
   skills: Skill[],
   userSystemPrompt: string,
@@ -610,6 +903,10 @@ function buildAgentSystemPrompt(
   availableSkills: Skill[] = skills,
 ): string {
   const activeSkills = skills.filter((skill) => skill.enabled)
+  const externalTools = (mcpTools ?? []).filter((tool) => ![SKILL_LOADER_SERVER_ID, CODE_RUNNER_SERVER_ID, TERMINAL_RUNNER_SERVER_ID].includes(tool.serverId))
+  const skillLoaderAvailable = (mcpTools ?? []).some((tool) => tool.serverId === SKILL_LOADER_SERVER_ID)
+  const codeRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === CODE_RUNNER_SERVER_ID)
+  const terminalRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === TERMINAL_RUNNER_SERVER_ID)
   const parts: string[] = []
 
   parts.push(
@@ -622,19 +919,34 @@ function buildAgentSystemPrompt(
     '5. 技能中的脚本默认仅作为参考代码；除非存在明确的受限执行工具，否则不得声称已经执行脚本。'
   )
 
-  if (mcpTools && mcpTools.length > 0) {
+  if (externalTools.length > 0) {
     parts.push(
       '=== 当前已就绪的 MCP 工具 (Active MCP Tools) ===\n' +
-      mcpTools
+      externalTools
         .map((tool) => `- \`${tool.modelName || tool.name}\`（显示名: ${tool.name}，来源: ${tool.serverName}）`)
         .join('\n')
+    )
+  }
+
+  if (codeRunnerAvailable) {
+    parts.push(
+      `=== 内置代码运行器 ===\n- \`${CODE_RUNNER_MODEL_NAME}\`: 用于实际运行和验证短代码。优先使用 JavaScript；Python 依赖本机 Python 3。只有收到成功工具结果后，才能声称代码已经执行。`,
+    )
+  }
+
+  if (terminalRunnerAvailable) {
+    parts.push(
+      `=== 集成终端 ===\n- \`${TERMINAL_RUNNER_MODEL_NAME}\`: 通过用户配置的跨平台 Shell 执行命令。命令可能产生系统副作用，必须准确展示待执行内容并遵循审批结果。`,
     )
   }
 
   if (availableSkills.length > 0) {
     parts.push(
       '=== 可用技能目录（仅供路由） ===\n' +
-      availableSkills.map((skill) => `- ${skill.name} (${skill.id}): ${skill.description}`).join('\n'),
+      availableSkills.map((skill) => `- ${skill.name} (${skill.id}): ${skill.description}`).join('\n') +
+      (skillLoaderAvailable
+        ? `\n\n如果任务需要目录中尚未激活的技能，调用 \`${SKILL_LOADER_MODEL_NAME}\` 并传入 skill_id。不要假装已加载；等待工具结果后再继续。`
+        : ''),
     )
   }
 
@@ -707,6 +1019,18 @@ function addConfiguredSystemPrompt(messages: Message[], systemPrompt: string): M
     },
     ...structuredClone(messages),
   ]
+}
+
+function replaceConfiguredSystemPrompt(messages: Message[], systemPrompt: string): void {
+  const promptIndex = messages.findIndex((message) => message.id === 'configured-system-prompt')
+  const replacement: Message = {
+    id: 'configured-system-prompt',
+    role: 'system',
+    content: systemPrompt.trim(),
+    createdAt: new Date(0).toISOString(),
+  }
+  if (promptIndex >= 0) messages[promptIndex] = replacement
+  else messages.unshift(replacement)
 }
 
 function validateChatRequest(request: ChatRequest): Message[] {

@@ -64,6 +64,9 @@ const agentboxApi: AgentboxAPI = {
     listTools: (serverId?: string) =>
       ipcRenderer.invoke(IPC_CHANNELS.mcpListTools, serverId),
   },
+  terminal: {
+    testShell: (config) => ipcRenderer.invoke(IPC_CHANNELS.terminalTestShell, config),
+  },
   conversations: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.conversationsList),
     get: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.conversationsGet, id),

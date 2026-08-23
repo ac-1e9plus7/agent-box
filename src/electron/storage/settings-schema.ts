@@ -1,4 +1,4 @@
-import type { AppSettings, ProxyConfig, ProxyMode } from '../../shared/types'
+import type { AppSettings, IntegratedTerminalShellConfig, ProxyConfig, ProxyMode } from '../../shared/types'
 import { isLoopbackUrl } from '../api/provider-policy'
 
 /**
@@ -47,11 +47,17 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (!['auto', 'all'].includes(String(mcpToolRetrievalMode))) {
     throw new Error('Invalid MCP tool retrieval mode')
   }
-  const mcpToolApprovalPolicy = value.mcpToolApprovalPolicy ?? 'sensitive'
-  if (!['always', 'sensitive', 'never'].includes(String(mcpToolApprovalPolicy))) {
+  const storedApprovalPolicy = value.mcpToolApprovalPolicy ?? 'sensitive'
+  if (!['always', 'sensitive', 'never', 'full-access'].includes(String(storedApprovalPolicy))) {
     throw new Error('Invalid MCP tool approval policy')
   }
+  const mcpToolApprovalPolicy = storedApprovalPolicy === 'never' ? 'full-access' : storedApprovalPolicy
+  const toolApprovalTimeoutMode = value.toolApprovalTimeoutMode ?? 'five-minutes'
+  if (!['five-minutes', 'never'].includes(String(toolApprovalTimeoutMode))) {
+    throw new Error('Invalid tool approval timeout mode')
+  }
   const proxy = normalizeProxy(value.proxy)
+  const integratedTerminalShell = normalizeIntegratedTerminalShell(value.integratedTerminalShell)
   const settings: AppSettings = {
     theme: value.theme as AppSettings['theme'],
     sendShortcut: value.sendShortcut as AppSettings['sendShortcut'],
@@ -65,13 +71,37 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
     mcpToolRetrievalMode: mcpToolRetrievalMode as AppSettings['mcpToolRetrievalMode'],
     mcpToolApprovalPolicy: mcpToolApprovalPolicy as AppSettings['mcpToolApprovalPolicy'],
+    toolApprovalTimeoutMode: toolApprovalTimeoutMode as AppSettings['toolApprovalTimeoutMode'],
     systemPrompt: value.systemPrompt,
     proxy,
+    integratedTerminalShell,
   }
   if (value.titleGenerationModelId !== undefined) {
     settings.titleGenerationModelId = value.titleGenerationModelId as string
   }
   return settings
+}
+
+export function normalizeIntegratedTerminalShell(value: unknown): IntegratedTerminalShellConfig {
+  if (value === undefined || value === null) return { mode: 'auto', executable: '', args: [] }
+  if (!isRecord(value)) throw new Error('Invalid integrated terminal shell')
+  const mode = value.mode === undefined ? 'auto' : String(value.mode)
+  if (mode !== 'auto' && mode !== 'custom') throw new Error('Invalid integrated terminal shell mode')
+  if (typeof value.executable !== 'string' || value.executable.length > 2_000 || /[\r\n\0]/.test(value.executable)) {
+    throw new Error('Invalid integrated terminal shell executable')
+  }
+  if (!Array.isArray(value.args) || value.args.length > 64) {
+    throw new Error('Invalid integrated terminal shell arguments')
+  }
+  const args = value.args.map((argument) => {
+    if (typeof argument !== 'string' || argument.length > 4_096 || argument.includes('\0')) {
+      throw new Error('Invalid integrated terminal shell argument')
+    }
+    return argument
+  })
+  const executable = value.executable.trim()
+  if (mode === 'custom' && !executable) throw new Error('自定义终端 Shell 可执行文件不能为空。')
+  return { mode: mode as IntegratedTerminalShellConfig['mode'], executable, args }
 }
 
 /**

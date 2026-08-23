@@ -8,7 +8,8 @@ interface TopbarProps {
   activeModel?: ModelConfig
   activeTitle: string
   agentMode?: boolean
-  activeSkillsCount?: number
+  enabledSkillsCount?: number
+  selectedSkillsCount?: number
   models: ModelConfig[]
   providers: ProviderConfig[]
   reasoningEnabled: boolean
@@ -27,7 +28,8 @@ export function Topbar({
   activeModel,
   activeTitle,
   agentMode = false,
-  activeSkillsCount = 0,
+  enabledSkillsCount = 0,
+  selectedSkillsCount = 0,
   models,
   providers,
   reasoningEnabled,
@@ -126,10 +128,14 @@ export function Topbar({
         <button
           className={`agent-header-button ${agentMode ? 'is-active' : ''}`}
           onClick={onToggleAgentMode}
-          title={agentMode ? `Agent 模式已开启（已激活 ${activeSkillsCount} 个技能）` : '点击开启 Agent 智能体模式'}
+          title={agentMode
+            ? selectedSkillsCount > 0
+              ? `Agent 模式已开启（本会话固定 ${selectedSkillsCount}/${enabledSkillsCount} 个技能）`
+              : `Agent 模式已开启（${enabledSkillsCount} 个技能可用，本轮自动路由）`
+            : '点击开启 Agent 智能体模式'}
         >
           <Icon name="bot" size={16} />
-          <span>{agentMode ? `Agent 模式 (${activeSkillsCount})` : 'Agent 模式'}</span>
+          <span>{agentMode ? `Agent 模式 (${selectedSkillsCount > 0 ? selectedSkillsCount : '自动'})` : 'Agent 模式'}</span>
           <span className="toggle-dot" />
         </button>
         <button

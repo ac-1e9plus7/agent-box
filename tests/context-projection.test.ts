@@ -10,6 +10,8 @@ const baseSettings: AppSettings = {
   defaultReasoningEffort: 'medium',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
+  integratedTerminalShell: { mode: 'auto', executable: '', args: [] },
+  toolApprovalTimeoutMode: 'five-minutes',
 }
 
 function model(over: Partial<ModelConfig> = {}): ModelConfig {

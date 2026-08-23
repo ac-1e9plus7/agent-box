@@ -12,6 +12,7 @@ import type {
   ProviderRouting,
   ProviderView,
   Skill,
+  SkillActivation,
   SkillFile,
   SkillFileKind,
   SkillInput,
@@ -73,8 +74,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
+  toolApprovalTimeoutMode: 'five-minutes',
   systemPrompt: '',
   proxy: { mode: 'off', url: '' },
+  integratedTerminalShell: { mode: 'auto', executable: '', args: [] },
 }
 
 export class AppRepository {
@@ -128,8 +131,14 @@ export class AppRepository {
       if (patch.mcpToolApprovalPolicy !== undefined) {
         next.mcpToolApprovalPolicy = patch.mcpToolApprovalPolicy
       }
+      if (patch.toolApprovalTimeoutMode !== undefined) {
+        next.toolApprovalTimeoutMode = patch.toolApprovalTimeoutMode
+      }
       if (patch.systemPrompt !== undefined) next.systemPrompt = patch.systemPrompt
       if (patch.proxy !== undefined) next.proxy = patch.proxy
+      if (patch.integratedTerminalShell !== undefined) {
+        next.integratedTerminalShell = patch.integratedTerminalShell
+      }
       draft.settings = normalizeAppSettings(next)
       return structuredClone(draft.settings)
     })
@@ -239,7 +248,15 @@ export class AppRepository {
   }
 
   listSkills(): Skill[] {
-    return structuredClone(this.store.read().skills ?? DEFAULT_SKILLS)
+    const storedSkills = this.store.read().skills ?? DEFAULT_SKILLS
+    const skills = storedSkills.map((skill) => {
+      if (!skill.isBuiltIn) return skill
+      const currentDefault = DEFAULT_SKILLS.find((item) => item.id === skill.id)
+      // Keep user enablement and edited instructions, while allowing built-in
+      // trigger metadata to improve across application updates.
+      return currentDefault ? { ...skill, description: currentDefault.description } : skill
+    })
+    return structuredClone(skills)
   }
 
   getSkill(id: string): Skill | undefined {
@@ -858,6 +875,26 @@ function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefi
   })
 }
 
+function parseStoredSkillActivations(value: unknown): SkillActivation[] | undefined {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value) || value.length > 50) throw new Error('Invalid skill activations')
+  const parsed = value.map((item): SkillActivation => {
+    if (!isRecord(item)) throw new Error('Invalid skill activation item')
+    requireNonEmptyString(item.id, 'skill activation id', 100)
+    requireNonEmptyString(item.name, 'skill activation name', 200)
+    if (!['automatic', 'explicit', 'model'].includes(String(item.source))) {
+      throw new Error('Invalid skill activation source')
+    }
+    return {
+      id: item.id,
+      name: item.name,
+      source: item.source as SkillActivation['source'],
+      turn: Number.isInteger(item.turn) && Number(item.turn) >= 0 ? Number(item.turn) : undefined,
+    }
+  })
+  return parsed.length > 0 ? parsed : undefined
+}
+
 function parseStoredAgentTrace(value: unknown): import('../../shared/types').AgentTraceItem[] | undefined {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value) || value.length > 300) throw new Error('Invalid agent trace')
@@ -989,6 +1026,7 @@ function validateConversation(value: unknown): Conversation {
     const citations = parseStoredCitations(message.citations)
     const usage = parseStoredTokenUsage(message.usage)
     const attachments = parseStoredAttachments(message.attachments)
+    const skillActivations = parseStoredSkillActivations(message.skillActivations)
     const toolExecutions = parseStoredToolExecutions(message.toolExecutions)
     const agentTrace = parseStoredAgentTrace(message.agentTrace)
     const parentMessageId =
@@ -1007,6 +1045,7 @@ function validateConversation(value: unknown): Conversation {
       usage,
       modelId: typeof message.modelId === 'string' && message.modelId.trim() ? message.modelId.trim() : undefined,
       attachments,
+      skillActivations,
       toolExecutions,
       agentTrace,
       createdAt: message.createdAt,
@@ -1019,6 +1058,7 @@ function validateConversation(value: unknown): Conversation {
       (message.reasoning?.length ?? 0) +
       citationCharacterCount(message.citations) +
       attachmentCharacterCount(message.attachments) +
+      JSON.stringify(message.skillActivations ?? []).length +
       JSON.stringify(message.agentTrace ?? []).length +
       (message.agentTrace?.length ? 0 : JSON.stringify(message.toolExecutions ?? []).length),
     0,

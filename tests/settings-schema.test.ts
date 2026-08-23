@@ -32,6 +32,61 @@ describe('settings schema migration', () => {
       }),
     ).toThrow('Invalid context management mode')
   })
+
+  it('defaults legacy settings to automatic integrated terminal shell selection', () => {
+    expect(normalizeAppSettings(legacySettings).integratedTerminalShell).toEqual({
+      mode: 'auto',
+      executable: '',
+      args: [],
+    })
+  })
+
+  it('accepts a custom cross-platform shell and argument template', () => {
+    expect(normalizeAppSettings({
+      ...legacySettings,
+      integratedTerminalShell: {
+        mode: 'custom',
+        executable: '/usr/bin/nu',
+        args: ['-c', '{command}'],
+      },
+    }).integratedTerminalShell).toEqual({
+      mode: 'custom',
+      executable: '/usr/bin/nu',
+      args: ['-c', '{command}'],
+    })
+  })
+
+  it('rejects an empty custom integrated terminal shell', () => {
+    expect(() => normalizeAppSettings({
+      ...legacySettings,
+      integratedTerminalShell: { mode: 'custom', executable: '', args: [] },
+    })).toThrow('自定义终端 Shell 可执行文件不能为空')
+  })
+
+  it('defaults approval waiting to five minutes', () => {
+    expect(normalizeAppSettings(legacySettings).toolApprovalTimeoutMode).toBe('five-minutes')
+  })
+
+  it('accepts approval waiting without a timeout', () => {
+    expect(normalizeAppSettings({
+      ...legacySettings,
+      toolApprovalTimeoutMode: 'never',
+    }).toolApprovalTimeoutMode).toBe('never')
+  })
+
+  it('migrates the legacy never-confirm policy to Full Access', () => {
+    expect(normalizeAppSettings({
+      ...legacySettings,
+      mcpToolApprovalPolicy: 'never',
+    }).mcpToolApprovalPolicy).toBe('full-access')
+  })
+
+  it('preserves an explicit Full Access policy', () => {
+    expect(normalizeAppSettings({
+      ...legacySettings,
+      mcpToolApprovalPolicy: 'full-access',
+    }).mcpToolApprovalPolicy).toBe('full-access')
+  })
 })
 
 describe('proxy settings', () => {

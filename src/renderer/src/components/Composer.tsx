@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, CSSProperties, DragEvent, JSX } from 'react'
-import type { McpServerConfig, MessageAttachment } from '../../../shared/types'
+import type { McpServerConfig, MessageAttachment, Skill } from '../../../shared/types'
 import type { ModelConfig, WebSearchMode } from '../types'
 import { formatFileSize, processSelectedFiles } from '../file-helper'
 import { handleComposerKeyDown } from '../composer-helper'
@@ -19,6 +19,8 @@ interface ComposerProps {
   disabled?: boolean
   draft: string
   agentMode?: boolean
+  skills?: Skill[]
+  selectedSkillIds?: string[]
   mcpToolsCount?: number
   mcpServers?: McpServerConfig[]
   selectedMcpServerIds?: string[]
@@ -32,7 +34,9 @@ interface ComposerProps {
   onOpenContextSettings: () => void
   onOpenModelSettings: () => void
   onOpenMcpSettings?: () => void
+  onOpenSkillsSettings?: () => void
   onMcpServerSelectionChange?: (serverIds: string[]) => void
+  onSkillSelectionChange?: (skillIds: string[]) => void
   onSend: () => void
   onSendWithTrim: () => void
   onStop: () => void
@@ -61,6 +65,8 @@ export function Composer({
   disabled,
   draft,
   agentMode = false,
+  skills = [],
+  selectedSkillIds,
   mcpToolsCount,
   mcpServers = [],
   selectedMcpServerIds,
@@ -74,7 +80,9 @@ export function Composer({
   onOpenContextSettings,
   onOpenModelSettings,
   onOpenMcpSettings,
+  onOpenSkillsSettings,
   onMcpServerSelectionChange,
+  onSkillSelectionChange,
   onSend,
   onSendWithTrim,
   onStop,
@@ -105,6 +113,8 @@ export function Composer({
     : '当前仅 OpenRouter 连接支持联网搜索。'
   const enabledMcpServers = mcpServers.filter((server) => server.enabled)
   const effectiveMcpServerIds = selectedMcpServerIds ?? enabledMcpServers.map((server) => server.id)
+  const enabledSkills = skills.filter((skill) => skill.enabled)
+  const fixedSkillIds = selectedSkillIds ?? []
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -294,6 +304,47 @@ export function Composer({
               <span>Agent</span>
               {agentMode && <Icon name="check" size={13} />}
             </button>
+            {agentMode && enabledSkills.length > 0 && (
+              <details className="mcp-conversation-selector skill-conversation-selector">
+                <summary
+                  className={`mcp-indicator-pill skill-indicator-pill ${fixedSkillIds.length > 0 ? 'is-active' : ''}`}
+                  title="固定本会话技能；不选择时由 Agent 自动路由"
+                >
+                  <Icon name="sparkles" size={14} />
+                  <span>Skills · {fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : '自动'}</span>
+                  <Icon name="chevron-down" size={12} />
+                </summary>
+                <div className="mcp-conversation-menu skill-conversation-menu">
+                  <strong>本会话技能路由</strong>
+                  <button
+                    className={fixedSkillIds.length === 0 ? 'is-selected' : ''}
+                    type="button"
+                    onClick={() => onSkillSelectionChange?.([])}
+                  >
+                    自动选择相关技能
+                  </button>
+                  <div className="mcp-conversation-options">
+                    {enabledSkills.map((skill) => (
+                      <label key={skill.id} title={skill.description}>
+                        <input
+                          type="checkbox"
+                          checked={fixedSkillIds.includes(skill.id)}
+                          onChange={(event) => {
+                            const next = event.target.checked
+                              ? [...new Set([...fixedSkillIds, skill.id])]
+                              : fixedSkillIds.filter((id) => id !== skill.id)
+                            onSkillSelectionChange?.(next)
+                          }}
+                        />
+                        <span>{skill.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <small>固定技能会在每轮预加载；自动模式按请求匹配，模型也可按需加载目录中的其他技能。</small>
+                  <button type="button" onClick={onOpenSkillsSettings}>管理 Skills</button>
+                </div>
+              </details>
+            )}
             {agentMode && enabledMcpServers.length > 0 && (
               <details className="mcp-conversation-selector">
                 <summary className="mcp-indicator-pill" title="选择本会话允许使用的 MCP 服务">

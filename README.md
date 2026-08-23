@@ -17,9 +17,13 @@
 - 🛠️ **MCP (Model Context Protocol) 外部工具集成**：
   - 基于官方 MCP TypeScript SDK，支持 **Stdio** 与 **Streamable HTTP**，并兼容旧式 HTTP+SSE 服务。
   - 内置 **BM25 智能工具检索**，根据问题意图动态筛选 Top-K 工具注入上下文，防止 Token 膨胀。
-  - 支持最多 6 轮 **Agent 自主多轮执行循环**、会话级服务白名单、敏感操作审批与交互式调用卡片。
+  - 支持最多 6 轮 **Agent 自主多轮执行循环**、会话级服务白名单、敏感操作审批与交互式调用卡片；审批可选择 5 分钟或永不超时，并提供明确警告的 **Full Access** 模式。
+- 💻 **跨平台 Integrated terminal shell**：
+  - 自动适配 Windows PowerShell/cmd、macOS zsh/bash 与 Linux SHELL/bash/zsh/fish/sh，也可指定 Shell 可执行文件及逐行启动参数。
+  - Agent 可通过受审批保护的 `agentbox_run_terminal` 执行命令；自定义 Shell 可用 `{command}` 参数模板适配不同命令行接口。
 - 🧩 **Agent 多文件技能（Skills）系统**：
-  - 采用 Markdown 规范 + **Python 3 / Shell 参考脚本** 标准，通过按需检索和 Prompt Augmentation 注入专家能力；脚本不会被隐式执行。
+  - 采用 Markdown 规范 + **Python 3 / Shell 参考脚本** 标准，支持会话固定、`$skill-id` 显式调用、上下文自动检索和模型按需加载；回答会显示本轮实际激活的技能。
+  - 内置受审批保护的 `agentbox_run_code`：JavaScript 在隔离 Worker 中运行，Python 在本机解释器可用时以受限模式运行；技能包脚本本身不会被隐式执行。
   - 支持以 **.zip 压缩包** 形式一键导出与导入外部技能，内置 5 大专业领域预置技能。
 - 📐 **Markdown 与 LaTeX 数学公式渲染**：聊天气泡支持自然换行；全面支持行内公式、独立块级公式、矩阵/方程组对齐环境与代码块高亮，具备横向滚动防溢出。
 - 🖼️ **多模态与智能附件**：支持文件拖拽、剪贴板粘贴与图片智能尺寸优化（最大 2048px），原生适配各协议图片/文档块并提供高清灯箱预览。

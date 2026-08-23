@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { parseAnthropicEvent, parseChatCompletionEvent, parseResponsesEvent } from '../src/electron/api/protocol-adapters'
 import { buildRequestBody } from '../src/electron/api/request-adapters'
-import { retrieveRelevantSkills } from '../src/electron/api/skill-retriever'
+import {
+  buildSkillRetrievalQuery,
+  retrieveExplicitlyMentionedSkills,
+  retrieveRelevantSkills,
+} from '../src/electron/api/skill-retriever'
+import { DEFAULT_SKILLS } from '../src/electron/storage/default-skills'
 import { createModelToolName } from '../src/electron/mcp/mcp-client'
 import { evaluateToolApproval, validateToolArguments } from '../src/electron/mcp/tool-policy'
 import type { ChatRequest, McpToolDefinition, Message, ModelConfig, Skill } from '../src/shared/types'
@@ -194,7 +199,7 @@ describe('tool security policy', () => {
     expect(evaluateToolApproval('sensitive', tool).required).toBe(false)
     expect(evaluateToolApproval('sensitive', { ...tool, annotations: undefined }).required).toBe(true)
     expect(evaluateToolApproval('always', tool).required).toBe(true)
-    expect(evaluateToolApproval('never', { ...tool, annotations: undefined }).required).toBe(false)
+    expect(evaluateToolApproval('full-access', { ...tool, annotations: undefined }).required).toBe(false)
   })
 
   it('creates stable, server-scoped, provider-safe aliases', () => {
@@ -229,5 +234,36 @@ describe('progressive skill loading', () => {
   it('loads only skills relevant to the current request', () => {
     expect(retrieveRelevantSkills('请把这段内容翻译成中文', skills).map((skill) => skill.id)).toEqual(['translator'])
     expect(retrieveRelevantSkills('今天天气如何', skills)).toEqual([])
+  })
+
+  it.each([
+    ['写一个快速排序', 'code-interpreter'],
+    ['检查这段代码为什么报错', 'code-interpreter'],
+    ['分析这个 CSV 并画图', 'data-analyst'],
+    ['把这段英文翻译成中文', 'translator-polyglot'],
+    ['总结这篇 PDF 研报', 'web-extractor'],
+    ['帮我优化 system prompt', 'prompt-optimizer'],
+  ])('routes a real built-in request %s to %s', (query, expectedId) => {
+    expect(retrieveRelevantSkills(query, DEFAULT_SKILLS).map((skill) => skill.id)).toContain(expectedId)
+  })
+
+  it('treats a $skill id as an explicit invocation', () => {
+    expect(retrieveExplicitlyMentionedSkills('请使用 $translator-polyglot', DEFAULT_SKILLS).map((skill) => skill.id))
+      .toEqual(['translator-polyglot'])
+  })
+
+  it('uses recent context and attachment metadata for routing', () => {
+    const query = buildSkillRetrievalQuery([
+      { id: 'u1', role: 'user', content: '这是销售数据', createdAt: timestamp },
+      {
+        id: 'u2',
+        role: 'user',
+        content: '继续处理',
+        attachments: [{ id: 'a1', name: 'sales.csv', mimeType: 'text/csv', size: 12, data: 'region,revenue', type: 'text' }],
+        createdAt: timestamp,
+      },
+    ])
+    expect(query).toContain('sales.csv')
+    expect(retrieveRelevantSkills(query, DEFAULT_SKILLS).map((skill) => skill.id)).toContain('data-analyst')
   })
 })

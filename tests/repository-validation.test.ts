@@ -329,4 +329,33 @@ describe('AppRepository business constraints and relational integrity', () => {
       }),
     ).rejects.toThrow('Invalid attachment type')
   })
+
+  it('persists conversation skill routing and activation evidence', async () => {
+    const saved = await repo.saveConversation({
+      id: 'conv-with-skills',
+      title: 'Skills',
+      modelId: 'openrouter-auto',
+      agentMode: true,
+      skillIds: ['translator-polyglot'],
+      mcpServerIds: ['filesystem'],
+      messages: [{
+        id: 'assistant-with-skill',
+        role: 'assistant',
+        content: 'done',
+        skillActivations: [{
+          id: 'translator-polyglot',
+          name: '专业多语言精翻与本地化',
+          source: 'explicit',
+          turn: 0,
+        }],
+        createdAt: timestamp,
+      }],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+
+    expect(saved.skillIds).toEqual(['translator-polyglot'])
+    expect(saved.mcpServerIds).toEqual(['filesystem'])
+    expect(saved.messages[0]?.skillActivations?.[0]?.source).toBe('explicit')
+  })
 })

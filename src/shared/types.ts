@@ -36,9 +36,29 @@ export interface ProxyConfig {
   url: string
 }
 
+export type IntegratedTerminalShellMode = 'auto' | 'custom'
+
+export interface IntegratedTerminalShellConfig {
+  mode: IntegratedTerminalShellMode
+  /** Executable name or absolute path. Used only in custom mode. */
+  executable: string
+  /** Additional arguments passed before the shell's command flag. */
+  args: string[]
+}
+
+export interface TerminalShellTestResult {
+  ok: boolean
+  platform: string
+  displayName?: string
+  executable?: string
+  latencyMs: number
+  message: string
+}
+
 export type McpTransportType = 'stdio' | 'http' | 'sse'
 export type McpToolRetrievalMode = 'auto' | 'all'
-export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'never'
+export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'full-access'
+export type ToolApprovalTimeoutMode = 'five-minutes' | 'never'
 
 export interface AppSettings {
   theme: ThemeMode
@@ -53,8 +73,11 @@ export interface AppSettings {
   mcpToolRetrievalMode?: McpToolRetrievalMode
   /** Defaults to `sensitive`: only explicitly read-only, closed-world tools run automatically. */
   mcpToolApprovalPolicy?: McpToolApprovalPolicy
+  /** Defaults to `five-minutes`; `never` waits until the user decides or cancels the request. */
+  toolApprovalTimeoutMode?: ToolApprovalTimeoutMode
   systemPrompt: string
   proxy: ProxyConfig
+  integratedTerminalShell: IntegratedTerminalShellConfig
 }
 
 export interface McpServerConfig {
@@ -269,6 +292,15 @@ export interface ToolCallExecution {
   status: 'calling' | 'awaiting-approval' | 'executing' | 'complete' | 'denied' | 'error'
 }
 
+export type SkillActivationSource = 'automatic' | 'explicit' | 'model'
+
+export interface SkillActivation {
+  id: string
+  name: string
+  source: SkillActivationSource
+  turn?: number
+}
+
 export type McpToolResultContent =
   | { type: 'text'; text: string }
   | { type: 'image' | 'audio'; data?: string; mimeType: string }
@@ -311,6 +343,8 @@ export interface Message {
   usage?: TokenUsage
   modelId?: string
   attachments?: MessageAttachment[]
+  /** Skills whose full instructions were loaded for this assistant response. */
+  skillActivations?: SkillActivation[]
   toolExecutions?: ToolCallExecution[]
   /** Ordered protocol-neutral ledger used to replay multi-turn agent interactions. */
   agentTrace?: AgentTraceItem[]
@@ -375,6 +409,7 @@ export interface ChatError {
 
 export type StreamEvent =
   | { type: 'start'; requestId: string }
+  | { type: 'skill-activated'; requestId: string; skill: SkillActivation }
   | { type: 'text-delta'; requestId: string; delta: string; turn?: number }
   | { type: 'reasoning-delta'; requestId: string; delta: string; turn?: number; thinkingBlockIndex?: number; signatureDelta?: string }
   | { type: 'agent-provider-item'; requestId: string; turn: number; format: 'openai-responses'; item: Record<string, unknown> }
@@ -432,6 +467,9 @@ export interface AgentboxAPI {
     toggleServer(id: string, enabled: boolean): Promise<McpServerConfig>
     testServer(input: McpServerInput): Promise<McpServerTestResult>
     listTools(serverId?: string): Promise<McpToolDefinition[]>
+  }
+  terminal: {
+    testShell(config: IntegratedTerminalShellConfig): Promise<TerminalShellTestResult>
   }
   conversations: {
     list(): Promise<Conversation[]>

@@ -39,7 +39,7 @@ export function evaluateToolApproval(
   const reason = explicitlyLowRisk
     ? '服务声明该工具只读、非破坏性且不访问开放外部环境。'
     : '该工具可能写入数据、访问外部系统，或未提供完整的只读安全声明。'
-  if (policy === 'never') return { required: false, riskLevel, reason }
+  if (policy === 'full-access') return { required: false, riskLevel, reason }
   if (policy === 'always') return { required: true, riskLevel, reason }
   return { required: !explicitlyLowRisk, riskLevel, reason }
 }

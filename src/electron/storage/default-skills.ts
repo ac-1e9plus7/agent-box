@@ -4,7 +4,7 @@ export const DEFAULT_SKILLS: Skill[] = [
   {
     id: 'code-interpreter',
     name: '代码执行与算法助手',
-    description: '具备 Python 3 算法推导、严密测试用例推演与工业级代码构建能力',
+    description: '用于代码编写、报错调试、算法与数据结构、排序、复杂度分析、Python/TypeScript 实现、单元测试和性能优化',
     icon: 'code',
     entryFile: 'SKILL.md',
     files: [
@@ -16,10 +16,10 @@ export const DEFAULT_SKILLS: Skill[] = [
 你当前作为高级算法工程师与代码执行专家。你的职责是协助用户进行代码实现、算法推演、单元测试与性能优化。
 
 ## 核心执行准则
-1. **优先使用 Python 3 脚本**：进行计算、数据验证、逻辑推导与测试时，优先编写清晰、可自包含运行的 Python 3 脚本。
-2. **结构化与自包含**：提供的代码必须包含必要的标准库导入、类型提示（Type Hints）与详尽的边界断言（Assert）。
-3. **沙箱脚本辅助**：参考本技能附带的 \`scripts/sandbox_runner.py\` 进行输出捕获与异常隔离。
-4. **渐进式解析**：对于复杂算法问题，先进行复杂度分析（时间/空间复杂度），再提供清晰实现与样例验证。`
+1. **实际运行验证**：进行计算、数据验证、逻辑推导与测试时，必须优先调用 \`agentbox_run_code\`；跨平台默认使用 JavaScript，用户明确要求 Python 时可选择 Python。需要编译器、包管理器或项目命令时，调用 \`agentbox_run_terminal\`。
+2. **结果保真**：只有工具返回成功结果后才能声称“已运行”或“测试通过”；Python 不可用时改用等价 JavaScript 验证，并明确说明运行语言。
+3. **结构化与自包含**：提供的最终代码必须包含必要的导入、类型提示与边界断言；参考本技能附带的 \`scripts/sandbox_runner.py\` 组织测试用例。
+4. **渐进式解析**：对于复杂算法问题，先进行复杂度分析（时间/空间复杂度），再提供清晰实现、样例与实际运行结果。`
       },
       {
         path: 'scripts/sandbox_runner.py',
@@ -98,7 +98,7 @@ if __name__ == "__main__":
   {
     id: 'data-analyst',
     name: '数据分析与表格可视化',
-    description: '擅长数据探索性分析、统计分布计算与清晰的 Markdown 表格及图表呈现',
+    description: '用于 CSV、Excel、表格与数据集分析、统计计算、趋势归因、图表和数据可视化',
     icon: 'chart',
     entryFile: 'SKILL.md',
     files: [
@@ -111,9 +111,9 @@ if __name__ == "__main__":
 
 ## 分析工作流
 1. **数据清洗与概览**：先确认字段含义、样本量、缺失值与极值分布。
-2. **统计计算**：优先使用 Python 3 进行均值、中位数、分位数、相关性与方差分析（参考 \`scripts/data_summary.py\`）。
+2. **统计计算**：调用 \`agentbox_run_code\` 实际计算均值、中位数、分位数、相关性与方差；默认使用 JavaScript，Python 可用且任务需要时可使用 Python（参考 \`scripts/data_summary.py\`）。
 3. **归因分析**：结合业务上下文推演核心驱动因素。
-4. **格式化输出**：使用 Markdown 规范表格与 Mermaid 图表呈现最终结论。`
+4. **格式化输出**：使用 Markdown 规范表格与 Mermaid 图表呈现最终结论，并区分工具实算结果与推断。`
       },
       {
         path: 'scripts/data_summary.py',
@@ -189,7 +189,7 @@ if __name__ == "__main__":
   {
     id: 'web-extractor',
     name: '研报萃取与长文精读',
-    description: '快速提取长篇文档与资讯的核心论点、事实证据链、量化数据与关键洞察',
+    description: '用于 PDF、网页、研报、论文和长文的总结、摘要、事实数据提取与精读',
     icon: 'search',
     entryFile: 'SKILL.md',
     files: [
@@ -256,7 +256,7 @@ if __name__ == "__main__":
   {
     id: 'translator-polyglot',
     name: '专业多语言精翻与本地化',
-    description: '提供母语级专业翻译，严格保持行业术语一致性与文化本地化润色',
+    description: '用于中文、英文及多语言翻译、本地化、译文润色、术语一致性与语言转换',
     icon: 'translate',
     entryFile: 'SKILL.md',
     files: [
@@ -321,7 +321,7 @@ if __name__ == "__main__":
   {
     id: 'prompt-optimizer',
     name: '提示词工程专家',
-    description: '结构化诊断、优化与设计高执行力系统提示词（System Prompt）与任务指令',
+    description: '用于编写、优化和诊断系统提示词、Prompt、任务指令、角色设定与结构化模板',
     icon: 'sparkles',
     entryFile: 'SKILL.md',
     files: [

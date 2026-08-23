@@ -8,7 +8,7 @@ import type {
   SettingsSection,
   WebSearchMode
 } from '../types'
-import type { McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, Skill, SkillFile, SkillInput } from '../../../shared/types'
+import type { IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
 import { exportSkillToZip, parseSkillFromZip } from '../../../shared/skill-zip'
 import { API_FORMAT_LABELS } from '../types'
 import { stepTokenValue } from '../token-step'
@@ -45,6 +45,7 @@ interface SettingsDialogProps {
   onToggleMcpServer?: (id: string, enabled: boolean) => Promise<McpServerConfig>
   onTestMcpServer?: (input: McpServerInput) => Promise<McpServerTestResult>
   onListMcpTools?: (serverId?: string) => Promise<McpToolDefinition[]>
+  onTestTerminalShell?: (config: IntegratedTerminalShellConfig) => Promise<TerminalShellTestResult>
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
@@ -224,7 +225,8 @@ export function SettingsDialog({
   onRemoveMcpServer,
   onToggleMcpServer,
   onTestMcpServer,
-  onListMcpTools
+  onListMcpTools,
+  onTestTerminalShell
 }: SettingsDialogProps): JSX.Element | null {
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection)
   const [modelDrafts, setModelDrafts] = useState<ModelConfig[]>(models)
@@ -245,6 +247,8 @@ export function SettingsDialog({
   const [clearConfirming, setClearConfirming] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState('')
+  const [terminalShellTest, setTerminalShellTest] = useState<TerminalShellTestResult | null>(null)
+  const [testingTerminalShell, setTestingTerminalShell] = useState(false)
 
   // Skills UI state
   const [editingSkill, setEditingSkill] = useState<SkillInput | null>(null)
@@ -273,6 +277,14 @@ export function SettingsDialog({
   const [editingMcpArgsText, setEditingMcpArgsText] = useState('')
   const [modalTestResult, setModalTestResult] = useState<McpServerTestResult | null>(null)
   const [modalTesting, setModalTesting] = useState(false)
+
+  useEffect(() => {
+    setTerminalShellTest(null)
+  }, [
+    preferenceDraft.integratedTerminalShell.mode,
+    preferenceDraft.integratedTerminalShell.executable,
+    preferenceDraft.integratedTerminalShell.args.join('\0'),
+  ])
 
   useEffect(() => {
     setMcpServersList(mcpServers)
@@ -924,6 +936,24 @@ export function SettingsDialog({
     }
   }
 
+  const testTerminalShell = async (): Promise<void> => {
+    if (!onTestTerminalShell) return
+    setTestingTerminalShell(true)
+    setTerminalShellTest(null)
+    try {
+      setTerminalShellTest(await onTestTerminalShell(preferenceDraft.integratedTerminalShell))
+    } catch (error) {
+      setTerminalShellTest({
+        ok: false,
+        platform: 'unknown',
+        latencyMs: 0,
+        message: error instanceof Error ? error.message : 'Shell 测试失败',
+      })
+    } finally {
+      setTestingTerminalShell(false)
+    }
+  }
+
   const testProvider = async (): Promise<void> => {
     if (!selectedProvider || !onTestProvider) return
     setTestState('testing')
@@ -1096,6 +1126,85 @@ export function SettingsDialog({
                         <small>超限时从最早的对话开始，按完整的用户＋助手轮次裁剪；系统提示词与最新问题始终保留。</small>
                       </span>
                     </button>
+                  </div>
+                </section>
+                <section className="settings-card context-policy-card">
+                  <h3>Integrated terminal shell</h3>
+                  <div className="context-policy-options">
+                    <button
+                      className={preferenceDraft.integratedTerminalShell.mode === 'auto' ? 'is-active' : ''}
+                      onClick={() => setPreferenceDraft((current) => ({
+                        ...current,
+                        integratedTerminalShell: { ...current.integratedTerminalShell, mode: 'auto' }
+                      }))}
+                    >
+                      <span className="policy-radio"><i /></span>
+                      <span>
+                        <strong>自动选择 <em>推荐</em></strong>
+                        <small>Windows 依次尝试 PowerShell 7、Windows PowerShell、cmd；macOS/Linux 优先使用 SHELL，再尝试 zsh、bash、fish 或 sh。</small>
+                      </span>
+                    </button>
+                    <button
+                      className={preferenceDraft.integratedTerminalShell.mode === 'custom' ? 'is-active' : ''}
+                      onClick={() => setPreferenceDraft((current) => ({
+                        ...current,
+                        integratedTerminalShell: { ...current.integratedTerminalShell, mode: 'custom' }
+                      }))}
+                    >
+                      <span className="policy-radio"><i /></span>
+                      <span>
+                        <strong>指定 Shell</strong>
+                        <small>使用可执行文件名或绝对路径，并可逐行添加启动参数。</small>
+                      </span>
+                    </button>
+                  </div>
+                  {preferenceDraft.integratedTerminalShell.mode === 'custom' && (
+                    <div className="terminal-shell-fields">
+                      <label className="system-prompt-field">
+                        <FieldLabel hint="例如：pwsh.exe、C:\Program Files\PowerShell\7\pwsh.exe、/bin/zsh、/usr/bin/fish">Shell 可执行文件</FieldLabel>
+                        <input
+                          className="mono-input"
+                          placeholder="Shell 可执行文件名或绝对路径"
+                          value={preferenceDraft.integratedTerminalShell.executable}
+                          onChange={(event) => setPreferenceDraft((current) => ({
+                            ...current,
+                            integratedTerminalShell: { ...current.integratedTerminalShell, executable: event.target.value }
+                          }))}
+                        />
+                      </label>
+                      <label className="system-prompt-field">
+                        <FieldLabel hint="每行一个参数。已知 Shell 会自动添加命令参数；其他 Shell 可使用 {command} 占位符。">启动参数</FieldLabel>
+                        <textarea
+                          className="mono-input terminal-shell-args"
+                          placeholder={'例如：\n-NoLogo\n-NoProfile'}
+                          value={preferenceDraft.integratedTerminalShell.args.join('\n')}
+                          onChange={(event) => setPreferenceDraft((current) => ({
+                            ...current,
+                            integratedTerminalShell: {
+                              ...current.integratedTerminalShell,
+                              args: event.target.value.split(/\r?\n/).filter((argument) => argument.length > 0)
+                            }
+                          }))}
+                        />
+                      </label>
+                    </div>
+                  )}
+                  <p className="settings-card-note">Agent 调用集成终端时使用此 Shell；默认安全策略下，每条命令执行前都需要审批。</p>
+                  <div className="terminal-shell-test-row">
+                    <button
+                      className="secondary-button"
+                      disabled={!onTestTerminalShell || testingTerminalShell}
+                      onClick={() => void testTerminalShell()}
+                      type="button"
+                    >
+                      <Icon name="tool" size={14} /> {testingTerminalShell ? '测试中…' : '测试 Shell'}
+                    </button>
+                    {terminalShellTest && (
+                      <span className={terminalShellTest.ok ? 'is-success' : 'is-error'}>
+                        {terminalShellTest.message}
+                        {terminalShellTest.ok && <small> · {terminalShellTest.platform} · {terminalShellTest.latencyMs}ms</small>}
+                      </span>
+                    )}
                   </div>
                 </section>
                 <section className="settings-card context-policy-card">
@@ -1574,7 +1683,7 @@ export function SettingsDialog({
                   <div className="settings-row">
                     <div>
                       <strong>工具调用审批策略</strong>
-                      <small>默认仅让明确声明为只读、非破坏且不访问开放网络的工具自动执行</small>
+                      <small>Full Access 会跳过代码、终端和 MCP 工具的全部审批</small>
                     </div>
                     <div className="segmented-control">
                       <button
@@ -1590,10 +1699,36 @@ export function SettingsDialog({
                         智能确认
                       </button>
                       <button
-                        className={preferenceDraft.mcpToolApprovalPolicy === 'never' ? 'is-active' : ''}
-                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'never' }))}
+                        className={preferenceDraft.mcpToolApprovalPolicy === 'full-access' ? 'is-active' : ''}
+                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'full-access' }))}
                       >
-                        从不确认
+                        Full Access
+                      </button>
+                    </div>
+                  </div>
+                  {preferenceDraft.mcpToolApprovalPolicy === 'full-access' && (
+                    <div className="full-access-warning" role="alert">
+                      <Icon name="shield" size={15} />
+                      <span><strong>Full Access 已开启</strong><small>模型可直接执行终端命令、代码及有副作用的 MCP 工具。仅在你信任当前模型、服务和任务时使用。</small></span>
+                    </div>
+                  )}
+                  <div className="settings-row">
+                    <div>
+                      <strong>审批等待时限</strong>
+                      <small>永不超时仍可通过拒绝、停止生成、关闭会话或退出应用结束等待</small>
+                    </div>
+                    <div className="segmented-control">
+                      <button
+                        className={(preferenceDraft.toolApprovalTimeoutMode ?? 'five-minutes') === 'five-minutes' ? 'is-active' : ''}
+                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, toolApprovalTimeoutMode: 'five-minutes' }))}
+                      >
+                        5 分钟
+                      </button>
+                      <button
+                        className={preferenceDraft.toolApprovalTimeoutMode === 'never' ? 'is-active' : ''}
+                        onClick={() => setPreferenceDraft((curr) => ({ ...curr, toolApprovalTimeoutMode: 'never' }))}
+                      >
+                        永不超时
                       </button>
                     </div>
                   </div>

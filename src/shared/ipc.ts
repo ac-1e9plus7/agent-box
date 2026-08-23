@@ -20,6 +20,7 @@ export const IPC_CHANNELS = {
   mcpToggleServer: 'mcp:toggle-server',
   mcpTestServer: 'mcp:test-server',
   mcpListTools: 'mcp:list-tools',
+  terminalTestShell: 'terminal:test-shell',
   conversationsList: 'conversations:list',
   conversationsGet: 'conversations:get',
   conversationsSave: 'conversations:save',

@@ -6,7 +6,7 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { getMessageSiblings } from '../../../shared/conversation-tree'
-import type { MessageAttachment, TokenUsage, ToolCallExecution, WebCitation } from '../../../shared/types'
+import type { MessageAttachment, SkillActivation, TokenUsage, ToolCallExecution, WebCitation } from '../../../shared/types'
 import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
 import { formatFileSize } from '../file-helper'
 import { preprocessMarkdown } from '../markdown-helper'
@@ -184,7 +184,7 @@ function ToolExecutionList({ executions, onResolveApproval }: { executions?: Too
     <div className="tool-executions-container">
       <div className="tool-executions-heading">
         <Icon name="tool" size={13} />
-        <span>MCP 工具交互 {executions.length} 项</span>
+        <span>Agent 工具交互 {executions.length} 项</span>
       </div>
       <div className="tool-executions-list">
         {executions.map((exec) => (
@@ -192,6 +192,31 @@ function ToolExecutionList({ executions, onResolveApproval }: { executions?: Too
         ))}
       </div>
     </div>
+  )
+}
+
+function SkillActivationList({ activations }: { activations?: SkillActivation[] }): JSX.Element | null {
+  if (!activations || activations.length === 0) return null
+  const sourceLabel: Record<SkillActivation['source'], string> = {
+    automatic: '自动匹配',
+    explicit: '显式选择',
+    model: '模型按需',
+  }
+  return (
+    <section className="skill-activations" aria-label={`本轮已激活 ${activations.length} 个技能`}>
+      <div className="skill-activations-heading">
+        <Icon name="sparkles" size={13} />
+        <span>本轮已激活 {activations.length} 个技能</span>
+      </div>
+      <div className="skill-activation-list">
+        {activations.map((activation) => (
+          <span className="skill-activation-chip" key={activation.id} title={`技能 ID: ${activation.id}`}>
+            <strong>{activation.name}</strong>
+            <small>{sourceLabel[activation.source]}</small>
+          </span>
+        ))}
+      </div>
+    </section>
   )
 }
 
@@ -493,6 +518,7 @@ function AssistantMessage({
             </span>
           </div>
         )}
+        <SkillActivationList activations={message.skillActivations} />
         <ToolExecutionList executions={message.toolExecutions} onResolveApproval={onResolveToolApproval} />
         {message.content.trim() ? <MessageBody content={message.content} /> : isStreaming ? (
           <div className="typing-indicator" aria-label="正在回复"><i /><i /><i /></div>

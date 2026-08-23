@@ -41,7 +41,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     tempDirectory = mkdtempSync(join(tmpdir(), 'agentbox-gateway-mcp-test-'))
     repo = new AppRepository(tempDirectory)
     await repo.initialize()
-    await repo.updateSettings({ mcpToolApprovalPolicy: 'never' })
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
 
     // Add a model and provider
     const provider = await repo.upsertProvider({
@@ -73,6 +73,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
@@ -202,7 +203,122 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
 
   })
 
+  it('lets the model load a skill on demand without executing MCP', async () => {
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const execute = vi.spyOn(mcpManager, 'executeTool')
+    const requestBodies: Array<Record<string, unknown>> = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-load-skill', function: { name: 'agentbox_load_skill', arguments: '{"skill_id":"translator-polyglot"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Skill loaded.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    await gateway.stream('req-skill-loader', {
+      conversationId: 'conversation-skill-loader',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-skill-loader', role: 'user', content: 'Choose a specialist workflow if needed.', createdAt: new Date().toISOString() }],
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(fetchCount).toBe(2)
+    expect(execute).not.toHaveBeenCalled()
+    expect(events).toContainEqual({
+      type: 'skill-activated',
+      requestId: 'req-skill-loader',
+      skill: { id: 'translator-polyglot', name: '专业多语言精翻与本地化', source: 'model', turn: 1 },
+    })
+    expect(JSON.stringify(requestBodies[1])).toContain('三步翻译法')
+    expect(events.some((event) => event.type === 'tool-result' && event.callId === 'call-load-skill' && !event.isError)).toBe(true)
+  })
+
+  it('executes approved built-in JavaScript and returns the real result to the model', async () => {
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const executeMcp = vi.spyOn(mcpManager, 'executeTool')
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount += 1
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-run-code', function: { name: 'agentbox_run_code', arguments: '{"language":"javascript","code":"console.log(6 * 7)"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'The verified result is 42.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    await gateway.stream('req-run-code', {
+      conversationId: 'conversation-run-code',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-run-code', role: 'user', content: '请运行代码验证 6 * 7', createdAt: new Date().toISOString() }],
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(fetchCount).toBe(2)
+    expect(executeMcp).not.toHaveBeenCalled()
+    expect(events.some((event) => event.type === 'tool-result' && event.callId === 'call-run-code' && event.result === '42' && !event.isError)).toBe(true)
+    expect(events.some((event) => event.type === 'text-delta' && event.delta.includes('42'))).toBe(true)
+  })
+
+  it('executes a command through the configured integrated terminal shell', async () => {
+    await repo.updateSettings({
+      mcpToolApprovalPolicy: 'full-access',
+      integratedTerminalShell: { mode: 'auto', executable: '', args: [] },
+    })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const executeMcp = vi.spyOn(mcpManager, 'executeTool')
+    const command = process.platform === 'win32' ? 'echo terminal-42' : 'printf terminal-42'
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      fetchCount += 1
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-run-terminal', function: { name: 'agentbox_run_terminal', arguments: JSON.stringify({ command }) } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Terminal command completed.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    await gateway.stream('req-run-terminal', {
+      conversationId: 'conversation-run-terminal',
+      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+      messages: [{ id: 'user-run-terminal', role: 'user', content: '请通过终端输出 terminal-42', createdAt: new Date().toISOString() }],
+      agentMode: true,
+      reasoningEnabled: false,
+    }, (event) => events.push(event))
+
+    expect(fetchCount).toBe(2)
+    expect(executeMcp).not.toHaveBeenCalled()
+    expect(events.some((event) => event.type === 'tool-result'
+      && event.callId === 'call-run-terminal'
+      && event.result.includes('terminal-42')
+      && !event.isError)).toBe(true)
+  })
+
   it('waits for explicit approval before executing a sensitive tool', async () => {
+    vi.useFakeTimers()
     await repo.updateSettings({ mcpToolApprovalPolicy: 'always' })
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
       name: 'send_email',
@@ -255,15 +371,42 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     const approvalEvent = await approval
     expect(execute).not.toHaveBeenCalled()
     expect(approvalEvent.args).toEqual({ to: 'a@example.com' })
+    await vi.advanceTimersByTimeAsync(121_000)
+    expect(execute).not.toHaveBeenCalled()
+    expect(events.some((event) => event.type === 'done' || event.type === 'error')).toBe(false)
     gateway.resolveToolApproval('req-approval', 'call-mail', true)
     await stream
     expect(execute).toHaveBeenCalledTimes(1)
     expect(events.some((event) => event.type === 'done')).toBe(true)
-    await repo.updateSettings({ mcpToolApprovalPolicy: 'never' })
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
+  })
+
+  it('can wait for tool approval indefinitely until the user decides', async () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const waitForToolApproval = (gateway as unknown as {
+      waitForToolApproval: (
+        requestId: string,
+        callId: string,
+        signal: AbortSignal,
+        timeoutMode: 'five-minutes' | 'never',
+      ) => Promise<boolean>
+    }).waitForToolApproval.bind(gateway)
+    let settled = false
+    const waiting = waitForToolApproval('req-no-timeout', 'call-no-timeout', controller.signal, 'never')
+      .then((approved) => {
+        settled = true
+        return approved
+      })
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1_000)
+    expect(settled).toBe(false)
+    gateway.resolveToolApproval('req-no-timeout', 'call-no-timeout', true)
+    await expect(waiting).resolves.toBe(true)
   })
 
   it('executes at most six tool turns and always emits a terminal event', async () => {
-    await repo.updateSettings({ mcpToolApprovalPolicy: 'never' })
+    await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
       name: 'loop_tool',
       modelName: 'mcp_loop_tool',

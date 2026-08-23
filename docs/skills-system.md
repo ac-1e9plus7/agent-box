@@ -20,7 +20,9 @@ skill-package/
 ```
 
 ### Python 3 参考脚本规范
-- `scripts/*.py` 和 Shell 文件是被选中技能的参考实现。只有在用户启用了明确的受限执行工具并通过权限策略后，Agent 才能请求执行；否则模型必须把它们视为不可执行的参考代码。
+- `scripts/*.py` 和 Shell 文件仍是被选中技能的参考实现，不会被自动执行。
+- 启用 Agent 模式后，模型可通过内置 `agentbox_run_code` 对短小、无外部依赖的算法或统计代码进行实际验证：JavaScript 使用隔离 Worker；Python 仅在本机存在 Python 3 时使用受限解释器。
+- 代码运行器带有超时、内存/输出限制，并遵循工具审批策略；默认 `sensitive` 策略下必须由用户确认后才会执行。
 
 ---
 
@@ -46,6 +48,10 @@ skill-package/
 ## ⚡ Gateway 动态提示词注入（Prompt Augmentation）
 
 当开启会话的 **Agent 模式** 时：
-1. `ChatGateway` 扫描处于启用状态（`enabled: true`）的技能，并仅注入名称、描述构成的轻量目录。
-2. 显式选择技能时直接加载；否则根据当前用户问题检索最多 2 个相关技能。
+1. `ChatGateway` 扫描处于启用状态（`enabled: true`）的技能，并注入由名称、ID 和描述构成的轻量目录。
+2. 会话固定的技能以及 `$skill-id` / 完整技能名会直接加载；否则根据最近 3 条用户消息、附件名称、MIME 类型和有限文本摘要检索最多 2 个相关技能。
 3. 仅把命中技能的 `SKILL.md`、参考文档和参考脚本注入 System Instructions，避免所有技能同时占用上下文或产生角色冲突。
+4. 若初始路由不足，模型可调用只读内部工具 `agentbox_load_skill` 按 ID 加载目录中的其他技能；加载后 Gateway 会重建下一轮 System Instructions。
+5. 每次自动、显式或模型按需激活都会发送 `skill-activated` 事件，并在回答中展示激活来源。技能脚本仍不会被隐式执行。
+6. 代码或数据技能需要实算时可调用 `agentbox_run_code`；只有成功工具结果才能作为“已执行”的证据。
+7. 需要包管理器、编译器或系统命令时可调用 `agentbox_run_terminal`。该工具使用“设置 → 通用 → Integrated terminal shell”中的跨平台 Shell 配置，并遵循敏感工具审批策略。
