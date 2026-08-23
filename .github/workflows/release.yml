@@ -10,7 +10,22 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            arch: x64
+            build_args: --x64
+          - os: windows-latest
+            arch: arm64
+            build_args: --arm64
+          - os: macos-latest
+            arch: native
+            build_args: ''
+          - os: ubuntu-latest
+            arch: x64
+            build_args: --x64
+          - os: ubuntu-latest
+            arch: arm64
+            build_args: --arm64
     
     runs-on: ${{ matrix.os }}
     
@@ -36,14 +51,14 @@ jobs:
         run: pnpm build
 
       - name: Package Application
-        run: pnpm exec electron-builder --publish never
+        run: pnpm exec electron-builder --publish never ${{ matrix.build_args }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: agentbox-${{ runner.os }}
+          name: agentbox-${{ runner.os }}-${{ matrix.arch }}
           path: |
             release/*.exe
             release/*.dmg
