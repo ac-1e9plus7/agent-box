@@ -84,16 +84,16 @@ const manualEn = {
   'about.version': 'Version {version}',
 }
 const reviewedEn = {
-  '安全': 'Secure', '保存服务': 'Save service', '保存技能': 'Save skill', '备份模式': 'Backup mode',
-  '本次裁剪并发送': 'Trim and send this time', '本地': 'Local', '本机兼容代理': 'Local compatible proxy',
+  '安全': 'Secure', '保存技能': 'Save skill', '备份模式': 'Backup mode',
+  '本地': 'Local', '本机兼容代理': 'Local compatible proxy',
   '编辑': 'Edit', '编辑技能': 'Edit skill', '编写代码': 'Write code', '次': ' times',
   '代理地址': 'Proxy address', '当前会话目录': 'Current conversation directory', '当前模型': 'Current model',
   '导入技能': 'Import skill', '服务商': 'Provider', '复制': 'Copy', '高': 'High',
   '个服务商': ' providers', '个工具': ' tools', '个会话': ' conversations', '个技能': ' skills',
-  '个模型': ' models', '个文件)': ' files)', '个人资料': 'Profile', '关闭': 'Off',
+  '个模型': ' models', '个文件)': ' files)', '关闭': 'Off',
   '关闭头像裁剪': 'Close avatar cropper', '关于': 'About', '会话历史': 'Conversation history',
   '会话数据库': 'Conversation database', '获取': 'Fetch', '极简': 'Minimal', '继续': 'Continue',
-  '接着来': 'Continue', '接着做': 'Continue', '价格优先': 'Prefer lower price', '禁止': 'Deny',
+  '接着来': 'Continue', '接着做': 'Continue', '禁止': 'Deny',
   '拒绝': 'Deny', '开发运行时': 'Developer runtimes', '连接异常': 'Connection error', '轮': ' turns',
   '每次确认': 'Always ask', '名称': 'Name', '命令:': 'Command:', '默认': 'Default', '浅': 'shallow ',
   '浅色': 'Light', '深': 'deep ', '输入': 'Input', '搜索': 'Search', '添加': 'Add',
@@ -101,15 +101,15 @@ const reviewedEn = {
   '未知模型': 'Unknown model', '系统': 'System', '系统提示词': 'System prompt', '下一个回答': 'Next answer',
   '显示': 'Show', '限流': 'Rate limited', '项': ' items', '新对话': 'New conversation', '新建技能': 'New skill',
   '新建自定义技能': 'New custom skill', '新模型': 'New model', '一起构思': 'Brainstorm',
-  '已保护': 'Protected', '已保留中断现场': 'Interrupted state preserved', '已配置': 'Configured',
-  '已思考': 'Reasoned', '已推理': 'Reasoned for ', '知道了': 'Got it', '中': 'Medium', '主题': 'Theme',
-  '自定义': 'Custom', '自动': 'Auto', '自动裁剪': 'Automatic trimming', '自动搜索': 'Auto search', '作者': 'Author',
+  '已保护': 'Protected', '已配置': 'Configured',
+  '已推理': 'Reasoned for ', '知道了': 'Got it', '中': 'Medium', '主题': 'Theme',
+  '自定义': 'Custom', '自动': 'Auto', '自动裁剪': 'Automatic trimming', '作者': 'Author',
   '个人资料': 'Profile', '设置': 'Settings', '思考不可用': 'Reasoning unavailable', '思考关闭': 'Reasoning off',
   '思考模式': 'Reasoning', '新会话默认思考': 'Default reasoning for new conversations',
   '新模型思考强度': 'Default reasoning effort for new models', '支持思考模式': 'Supports reasoning',
-  '联网不可用': 'Web search unavailable', '联网关闭': 'Web search off', '原生优先': 'Prefer native',
-  '允许回退': 'Allow fallback', '允许供应商回退': 'Allow provider fallback', '智能确认': 'Smart approval',
-  '自动匹配': 'Auto match', '自动选择': 'Auto-select', '系统内置': 'Built-in', '浅备份': 'Shallow backup',
+  '联网不可用': 'Web search unavailable', '联网关闭': 'Web search off',
+  '智能确认': 'Smart approval',
+  '自动选择': 'Auto-select', '系统内置': 'Built-in', '浅备份': 'Shallow backup',
   '深备份': 'Deep backup', '收起': 'Collapse',
   '你是一个标题生成助手。根据用户的消息，生成一个简短的对话标题（不超过 12 个汉字）。':
     'You generate concise conversation titles from user messages. Keep each title under 12 words.',
@@ -141,7 +141,6 @@ Object.assign(reviewedEn, {
   '未选择服务商': 'No provider selected',
   '远程供应商地址必须使用 HTTPS；HTTP 仅允许本机回环地址。': 'Remote provider URLs must use HTTPS; HTTP is allowed only for local loopback addresses.',
   '直连所有供应商，不经过代理。': 'Connect directly to all providers without a proxy.',
-  '指定供应商 slug': 'Specify provider slugs',
   '自定义服务商': 'Custom provider',
   'OpenRouter 上游供应商': 'OpenRouter providers',
   'OpenRouter 自动': 'OpenRouter default',
@@ -171,6 +170,7 @@ Object.assign(reviewedEn, {
 
   // Reasoning and Anthropic thinking terminology.
   '当前模型不支持思考模式': 'The current model does not support reasoning',
+  '当前模型不可用。': 'The current model is unavailable.',
   '模型默认思考强度': 'Default model reasoning effort',
   '默认思考强度': 'Default reasoning effort',
   '切换思考模式': 'Toggle reasoning',
@@ -194,14 +194,11 @@ Object.assign(reviewedEn, {
   '低延迟优先': 'Lowest latency',
   '吞吐优先': 'Highest throughput',
   '数据收集策略': 'Data collection policy',
-  '仅使用零数据保留端点': 'Zero Data Retention (ZDR) only',
-  '要求上游声明 ZDR 支持': 'Require providers to declare Zero Data Retention support',
   '仅使用 ZDR 端点': 'Use ZDR endpoints only',
   '当前仅 OpenRouter 连接支持联网搜索。': 'Web search is currently available only with OpenRouter connections.',
   '当前模型或 API 格式不支持联网搜索，已切换为关闭。': 'The current model or API format does not support web search, so web search was turned off.',
   '会话联网搜索模式': 'Conversation web search mode',
   '联网搜索仅支持 OpenRouter 连接。': 'Web search is available only with OpenRouter connections.',
-  '联网搜索可能额外计费，并会将查询发送给搜索服务。“原生优先”不受支持时会自动回退。': 'Web search may incur additional charges and sends queries to the selected search provider. “Prefer native web search” falls back automatically when native search is unavailable.',
   '网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。': 'Web search is available only with OpenRouter connections. Turn it off or switch providers.',
   '原生优先': 'Prefer native web search',
   '原生优先（不支持时回退）': 'Prefer native web search (fallback when unavailable)',
@@ -251,12 +248,10 @@ Object.assign(reviewedEn, {
   'AgentBox 会话备份': 'AgentBox conversation backup',
 
   // Prompt, token, context-trimming, and interrupted-state terminology.
-  '提示词工程专家': 'Prompt Engineering Specialist',
   '昵称与头像仅用于本地界面展示，不会加入任何提示词或发送给模型。': 'Your nickname and avatar are shown only in the local interface. They are never added to prompts or sent to a model.',
   '请缩短系统提示词或最后一条消息，或降低最大输出 Token。': 'Shorten the system prompt or final message, or reduce the maximum output tokens.',
   '系统提示词与最后一条用户消息已超过模型可用上下文。': 'The system prompt and final user message exceed the model’s available context.',
   '系统提示词与最新问题已超过可用上下文。请缩短内容，或提高模型上下文窗口。': 'The system prompt and latest question exceed the available context. Shorten them or increase the model’s context window.',
-  '用于编写、优化和诊断系统提示词、Prompt、任务指令、角色设定与结构化模板': 'For writing, improving, and diagnosing system prompts, task prompts, role instructions, and structured templates',
   '最大输出 Token': 'Maximum output tokens',
   '上下文窗口不足以为模型输出预留空间。请降低最大输出 Token 或增大模型上下文窗口。': 'The context window cannot reserve enough room for model output. Reduce the maximum output tokens or increase the model context window.',
   '本次裁剪并发送': 'Trim context and send',
@@ -273,7 +268,6 @@ Object.assign(reviewedEn, {
 
   // Security and archive language.
   '- JSON、Markdown 和工作目录文件在 ZIP 内都是原始明文；是否加密由导出时是否设置密码决定。': '- JSON, Markdown, and workspace files are stored as plaintext inside the ZIP. They are encrypted only when an export password is set.',
-  '本备份未设置密码，包内所有文件均为明文。': 'This backup has no password; every file in the archive is plaintext.',
   '操作系统安全存储当前不可用；为避免明文保存，应用不会加载用户数据。': 'Operating-system secure storage is unavailable. To prevent plaintext storage, AgentBox will not load user data.',
   '当前将导出未加密的明文 ZIP': 'An unencrypted plaintext ZIP will be exported',
   '.zip 技能压缩包': '.zip skill archive',
@@ -286,7 +280,6 @@ Object.assign(reviewedEn, {
   '全部挂载 (all)': 'Load all tools (all)',
   '智能检索 (auto)': 'Automatic tool retrieval (auto)',
   '智能检索 (auto) 动态匹配最相关的工具；全部挂载 (all) 加载全部可用工具': 'Automatic tool retrieval (auto) selects the most relevant tools dynamically; Load all tools (all) exposes every available tool.',
-  '# 常用提示词模式库 (Prompt Patterns)\n\n- **CoT 思维链**："请分步骤思考并推导每一步原因..."\n- **结构化输出**："严格输出为合法 JSON，不要包含外层 Markdown 代码块..."': '# Common Prompt Patterns\n\n- **Chain-of-thought (CoT)**: “Reason through the problem step by step and explain each step...”\n- **Structured output**: “Return valid JSON only, without an outer Markdown code fence...”',
   '=== 内置代码运行器 ===\n- `{value0}`: 用于实际运行和验证短代码。优先使用 JavaScript；Python 依赖本机 Python 3。只有收到成功工具结果后，才能声称代码已经执行。': '=== Built-in code runner ===\n- `{value0}`: Runs and verifies short code snippets. Prefer JavaScript; Python requires a local Python 3 installation. Claim that code ran only after the tool reports success.',
   '代码执行与算法助手': 'Code Execution & Algorithm Assistant',
   '用于代码编写、报错调试、算法与数据结构、排序、复杂度分析、Python/TypeScript 实现、单元测试和性能优化': 'Write and debug code, solve algorithm and data-structure problems, analyze complexity, implement solutions in Python or TypeScript, write unit tests, and optimize performance.',
@@ -358,9 +351,7 @@ Object.assign(reviewedEn, {
   '密钥不会进入 renderer 持久状态': 'The key is never stored in persistent renderer state',
   '密钥与数据仅存于本机': 'Keys and data stay on this device',
   '更改将安全地保存在本机': 'Changes are stored securely on this device',
-  '数据已在本机加密': 'Data is encrypted on this device',
   '由操作系统凭据保护机制加密': 'Encrypted using OS credential protection',
-  '本机回环连接可无密钥使用': 'A key is optional for local loopback connections',
   '无密钥时必须限制服务端监听地址': 'Restrict the server listen address when no key is configured',
   '可能允许局域网访问，且默认未启用 TLS。': 'This may allow access from the local network, and TLS is disabled by default.',
 })
@@ -460,8 +451,6 @@ Object.assign(reviewedEn, {
   '测试异常': 'Connection test failed',
   '保存技能失败': 'Failed to save the skill',
   '保存失败，请检查配置后重试。': 'Saving failed. Check the configuration and try again.',
-  '导出 Zip 技能包失败': 'Failed to export the ZIP skill archive',
-  '导出为 Zip 技能压缩包 (.zip)': 'Export as a ZIP skill archive (.zip)',
   '导入外部技能 (Import Skill)': 'Import external skill',
   '代码 (code)': 'Code (code)',
   '翻译 (translate)': 'Translate (translate)',
@@ -703,8 +692,8 @@ You are a senior prompt engineer and LLM systems architect. Turn vague or incomp
 - Preserve product names, proper nouns, identifiers, and function names unless an official localized form exists.`],
   ['# 常用提示词模式库', `# Common Prompt Patterns
 
-- **Chain-of-thought (CoT):** “Reason through the task step by step and explain the basis for each step...”
-- **Structured output:** “Return valid JSON only. Do not wrap it in a Markdown code fence...”`],
+- **Chain-of-thought (CoT)**: “Reason through the problem step by step and explain each step...”
+- **Structured output**: “Return valid JSON only, without an outer Markdown code fence...”`],
   ['# 新技能', `# New Skill
 
 Write the skill’s instructions and usage guidance here.`],

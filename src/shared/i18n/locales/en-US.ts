@@ -231,6 +231,7 @@ export const enUS: Record<string, string> = {
   "当前将导出未加密的明文 ZIP": "An unencrypted plaintext ZIP will be exported",
   "当前仅 OpenRouter 连接支持联网搜索。": "Web search is currently available only with OpenRouter connections.",
   "当前模型": "Current model",
+  "当前模型不可用。": "The current model is unavailable.",
   "当前模型不支持思考模式": "The current model does not support reasoning",
   "当前模型或 API 格式不支持联网搜索，已切换为关闭。": "The current model or API format does not support web search, so web search was turned off.",
   "当前配置（未在环境列表中）— {value0}": "Current configuration (not in environment list) — {value0}",
