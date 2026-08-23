@@ -9,6 +9,7 @@ import type {
   Conversation,
   DeveloperRuntimeKind,
   DeveloperRuntimeSettings,
+  ExportBackupInput,
   IntegratedTerminalShellConfig,
   McpServerInput,
   ModelInput,
@@ -21,6 +22,11 @@ import { AppRepository } from '../storage/app-repository'
 import { testIntegratedTerminalShell } from '../api/terminal-shell'
 import { listCondaEnvironments, testDeveloperRuntime } from '../api/runtime-environments'
 import { normalizeDeveloperRuntimes, normalizeIntegratedTerminalShell } from '../storage/settings-schema'
+import {
+  createBackupArchive,
+  createBackupFileName,
+  normalizeExportBackupInput,
+} from '../backup/backup-export'
 
 export function registerIpcHandlers(
   window: BrowserWindow,
@@ -28,6 +34,7 @@ export function registerIpcHandlers(
   gateway: ChatGateway,
   mcpManager: McpManager,
 ): () => void {
+  let backupExportInProgress = false
   const register = <Arguments extends unknown[], Result>(
     channel: string,
     handler: (event: IpcMainInvokeEvent, ...args: Arguments) => Result,
@@ -166,6 +173,49 @@ export function registerIpcHandlers(
   register(IPC_CHANNELS.conversationsRemove, (_event, id: string) => {
     assertId(id)
     return repository.removeConversation(id)
+  })
+
+  register(IPC_CHANNELS.dataExportBackup, async (_event, input: ExportBackupInput) => {
+    assertRecord(input, '备份选项')
+    const normalizedInput = normalizeExportBackupInput(input)
+    if (backupExportInProgress) throw new Error('已有备份正在导出，请等待完成。')
+
+    backupExportInProgress = true
+    try {
+      const conversations = repository.listConversations()
+      const result = await dialog.showSaveDialog(window, {
+        title: normalizedInput.mode === 'deep' ? '导出 AgentBox 深备份' : '导出 AgentBox 浅备份',
+        buttonLabel: '导出备份',
+        defaultPath: join(
+          app.getPath('documents'),
+          createBackupFileName(normalizedInput.mode),
+        ),
+        filters: [{ name: 'ZIP 备份', extensions: ['zip'] }],
+        properties: ['showOverwriteConfirmation', 'createDirectory'],
+      })
+      if (result.canceled || !result.filePath) {
+        return {
+          canceled: true,
+          mode: normalizedInput.mode,
+          encrypted: Boolean(normalizedInput.password),
+          conversationCount: conversations.length,
+          workspaceCount: 0,
+        }
+      }
+
+      return await createBackupArchive({
+        outputPath: resolve(result.filePath),
+        input: normalizedInput,
+        conversations,
+        appInfo: {
+          name: app.getName(),
+          version: app.getVersion(),
+          platform: process.platform,
+        },
+      })
+    } finally {
+      backupExportInProgress = false
+    }
   })
 
   register(IPC_CHANNELS.dataClearConversations, () => {

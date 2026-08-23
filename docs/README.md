@@ -9,7 +9,7 @@
 | 文档模块 | 主要内容 | 关键源码文件 |
 | --- | --- | --- |
 | [1. 系统架构概览](./architecture.md) | 进程模型、沙箱隔离、IPC 契约、安全性不变量与生命周期 | `src/electron/main.ts`, `src/electron/preload.ts`, `src/shared/ipc.ts` |
-| [2. 加密存储与 Vault 安全](./storage-and-vault.md) | 双层密钥模型、AES-256-GCM、原子落盘、资源配额限制、Schema 迁移 | `src/electron/storage/` |
+| [2. 加密存储与 Vault 安全](./storage-and-vault.md) | 双层密钥模型、AES-256-GCM、浅/深 ZIP 备份、原子落盘、资源配额限制 | `src/electron/storage/`, `src/electron/backup/` |
 | [3. API 协议与请求网关](./gateway-and-protocols.md) | 3 种 API 格式适配、流式解析、思考模式、联网搜索、代理转发 | `src/electron/api/` |
 | [4. Agent 技能（Skills）系统](./skills-system.md) | 多文件技能规范、Python 3 优先、Zip 导入导出生态、动态提示词注入 | `src/electron/storage/default-skills.ts`, `src/shared/skill-zip.ts` |
 | [5. MCP 外部工具协议与检索](./mcp-integration.md) | Stdio/SSE 传输、连接池管理器、BM25 智能工具检索、Agent 多轮循环调用 | `src/electron/mcp/`, `src/electron/api/gateway.ts` |

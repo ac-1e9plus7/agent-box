@@ -5,6 +5,8 @@ import type {
   AgentTraceItem,
   AppSettings,
   Conversation as StoredConversation,
+  ExportBackupInput,
+  ExportBackupResult,
   McpServerConfig,
   McpServerInput,
   McpServerTestResult,
@@ -1828,6 +1830,14 @@ export default function App(): JSX.Element {
     showToast('已清除全部会话数据。')
   }
 
+  const handleExportBackup = async (input: ExportBackupInput): Promise<ExportBackupResult> => {
+    const result = await window.agentbox.data.exportBackup(input)
+    if (!result.canceled) {
+      showToast(`已导出 ${result.conversationCount} 个会话的${result.mode === 'deep' ? '深' : '浅'}备份。`)
+    }
+    return result
+  }
+
   const discoverModels = async (providerId: string) => {
     try {
       const discovered = await window.agentbox.models.discover(providerId)
@@ -1982,6 +1992,7 @@ export default function App(): JSX.Element {
         onListCondaEnvironments={handleListCondaEnvironments}
         onClose={() => setSettingsOpen(false)}
         onClearData={handleClearAllData}
+        onExportBackup={handleExportBackup}
         onDiscoverModels={discoverModels}
         onSave={saveSettings}
         onTestProvider={testProvider}

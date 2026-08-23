@@ -8,7 +8,7 @@ import type {
   SettingsSection,
   WebSearchMode
 } from '../types'
-import type { CondaEnvironmentListResult, DeveloperRuntimeKind, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, RuntimeTestResult, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
+import type { BackupMode, CondaEnvironmentListResult, DeveloperRuntimeKind, DeveloperRuntimeSettings, ExportBackupInput, ExportBackupResult, IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, ProviderRouting, RemoteModel, RuntimeTestResult, Skill, SkillFile, SkillInput, TerminalShellTestResult } from '../../../shared/types'
 import { exportSkillToZip, parseSkillFromZip } from '../../../shared/skill-zip'
 import {
   DEFAULT_AGENT_TOOL_TURN_LIMIT,
@@ -24,6 +24,7 @@ import {
 } from '../api-format-options'
 import { stepTokenValue } from '../token-step'
 import { isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../web-search'
+import { formatFileSize } from '../file-helper'
 import { Icon } from './Icon'
 
 export interface SettingsSavePayload {
@@ -44,6 +45,7 @@ interface SettingsDialogProps {
   mcpServers?: McpServerConfig[]
   onClose: () => void
   onClearData?: () => Promise<void>
+  onExportBackup?: (input: ExportBackupInput) => Promise<ExportBackupResult>
   onDiscoverModels?: (providerId: string) => Promise<RemoteModel[]>
   onSave: (payload: SettingsSavePayload) => void | Promise<void>
   onTestProvider?: (provider: ProviderConfig, apiKeyInput: string, clearApiKey: boolean) => Promise<boolean>
@@ -285,6 +287,7 @@ export function SettingsDialog({
   mcpServers = [],
   onClose,
   onClearData,
+  onExportBackup,
   onDiscoverModels,
   onSave,
   onTestProvider,
@@ -321,6 +324,13 @@ export function SettingsDialog({
   const [clearConfirming, setClearConfirming] = useState(false)
   const [clearing, setClearing] = useState(false)
   const [clearError, setClearError] = useState('')
+  const [backupConfiguring, setBackupConfiguring] = useState(false)
+  const [backupMode, setBackupMode] = useState<BackupMode>('shallow')
+  const [backupPassword, setBackupPassword] = useState('')
+  const [backupPasswordConfirmation, setBackupPasswordConfirmation] = useState('')
+  const [backupExporting, setBackupExporting] = useState(false)
+  const [backupError, setBackupError] = useState('')
+  const [backupResult, setBackupResult] = useState<ExportBackupResult | null>(null)
   const [terminalShellTest, setTerminalShellTest] = useState<TerminalShellTestResult | null>(null)
   const [testingTerminalShell, setTestingTerminalShell] = useState(false)
   const [runtimeTestResults, setRuntimeTestResults] = useState<Partial<Record<DeveloperRuntimeKind, RuntimeTestResult>>>({})
@@ -674,7 +684,35 @@ export function SettingsDialog({
     }
   }
 
+  const exportBackup = async (): Promise<void> => {
+    if (!onExportBackup || backupExporting) return
+    if (backupPassword !== backupPasswordConfirmation) {
+      setBackupError('两次输入的备份密码不一致。')
+      return
+    }
+
+    setBackupExporting(true)
+    setBackupError('')
+    setBackupResult(null)
+    try {
+      const result = await onExportBackup({
+        mode: backupMode,
+        ...(backupPassword ? { password: backupPassword } : {}),
+      })
+      setBackupPassword('')
+      setBackupPasswordConfirmation('')
+      if (!result.canceled) {
+        setBackupResult(result)
+      }
+    } catch (error) {
+      setBackupError(error instanceof Error ? error.message : '导出备份失败，请重试。')
+    } finally {
+      setBackupExporting(false)
+    }
+  }
+
   const closeDialog = useCallback((): void => {
+    if (backupExporting) return
     setApiKeyInputs({})
     setClearApiKeyIds([])
     setShowApiKey(false)
@@ -684,8 +722,13 @@ export function SettingsDialog({
     setSkillImportText('')
     setSkillImportError('')
     setSkillActionError('')
+    setBackupConfiguring(false)
+    setBackupPassword('')
+    setBackupPasswordConfirmation('')
+    setBackupError('')
+    setBackupResult(null)
     onClose()
-  }, [onClose])
+  }, [backupExporting, onClose])
 
   useEffect(() => {
     if (!open) return
@@ -709,6 +752,13 @@ export function SettingsDialog({
     setSkillImportText('')
     setSkillImportError('')
     setSkillActionError('')
+    setBackupConfiguring(false)
+    setBackupMode('shallow')
+    setBackupPassword('')
+    setBackupPasswordConfirmation('')
+    setBackupExporting(false)
+    setBackupError('')
+    setBackupResult(null)
   }, [initialSection, models, open, preferences, providers, skills])
 
   const handleToggleSkill = async (id: string, enabled: boolean): Promise<void> => {
@@ -1147,6 +1197,8 @@ export function SettingsDialog({
       setTestState('failed')
     }
   }
+
+  const backupProtectionEnabled = backupResult?.encrypted ?? Boolean(backupPassword)
 
   return (
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
@@ -2976,9 +3028,129 @@ export function SettingsDialog({
                     <span className="security-state"><Icon name="check" size={14} /> 本地</span>
                   </div>
                 </section>
-                <section className="settings-card export-card">
-                  <div><Icon name="archive" size={20} /><span><strong>导出加密备份</strong><small>创建包含设置和会话的便携备份</small></span></div>
-                  <button disabled>即将支持</button>
+                <section className={`settings-card export-card ${backupConfiguring ? 'is-configuring' : ''}`}>
+                  <div className="export-card-head">
+                    <div>
+                      <Icon name="archive" size={20} />
+                      <span>
+                        <strong>导出加密备份</strong>
+                        <small>以明文 JSON 与 Markdown 导出全部会话，可选包含工作目录</small>
+                      </span>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      disabled={!onExportBackup || backupExporting}
+                      onClick={() => {
+                        setBackupConfiguring((current) => !current)
+                        setBackupError('')
+                        setBackupResult(null)
+                      }}
+                    >
+                      {backupConfiguring ? '收起' : '配置并导出'}
+                    </button>
+                  </div>
+                  {backupConfiguring && (
+                    <div className="backup-export-panel">
+                      <fieldset className="backup-mode-options" disabled={backupExporting}>
+                        <legend>备份模式</legend>
+                        <label className={backupMode === 'shallow' ? 'is-selected' : ''}>
+                          <input
+                            checked={backupMode === 'shallow'}
+                            name="backup-mode"
+                            onChange={() => setBackupMode('shallow')}
+                            type="radio"
+                          />
+                          <span><strong>浅备份</strong><small>全部会话、分支、附件与 Agent 记录，不复制工作目录</small></span>
+                        </label>
+                        <label className={backupMode === 'deep' ? 'is-selected' : ''}>
+                          <input
+                            checked={backupMode === 'deep'}
+                            name="backup-mode"
+                            onChange={() => setBackupMode('deep')}
+                            type="radio"
+                          />
+                          <span><strong>深备份</strong><small>在浅备份基础上，递归包含所有去重后的会话工作目录</small></span>
+                        </label>
+                      </fieldset>
+
+                      <div className="backup-password-fields">
+                        <label>
+                          <span>ZIP 密码（可选，建议设置）</span>
+                          <input
+                            autoComplete="new-password"
+                            disabled={backupExporting}
+                            maxLength={256}
+                            onChange={(event) => {
+                              const nextPassword = event.target.value
+                              setBackupPassword(nextPassword)
+                              if (!nextPassword) setBackupPasswordConfirmation('')
+                              setBackupError('')
+                              setBackupResult(null)
+                            }}
+                            placeholder="建议使用至少 12 位独立密码"
+                            type="password"
+                            value={backupPassword}
+                          />
+                        </label>
+                        <label>
+                          <span>确认密码</span>
+                          <input
+                            autoComplete="new-password"
+                            disabled={backupExporting || !backupPassword}
+                            maxLength={256}
+                            onChange={(event) => {
+                              setBackupPasswordConfirmation(event.target.value)
+                              setBackupError('')
+                            }}
+                            placeholder={backupPassword ? '再次输入密码' : '未设置密码'}
+                            type="password"
+                            value={backupPasswordConfirmation}
+                          />
+                        </label>
+                      </div>
+
+                      <div className={`backup-security-note ${backupProtectionEnabled ? 'is-protected' : 'is-warning'}`}>
+                        <Icon name={backupProtectionEnabled ? 'lock' : 'info'} size={16} />
+                        <span>
+                          <strong>{backupResult
+                            ? backupProtectionEnabled ? '本次备份已使用 ZIP AES-256 加密' : '本次备份未设置密码'
+                            : backupProtectionEnabled ? '将使用 ZIP AES-256 加密文件内容' : '当前将导出未加密的明文 ZIP'}</strong>
+                          <small>
+                            {backupProtectionEnabled
+                              ? 'AgentBox 不保存密码；ZIP 条目名称仍可能被查看，深备份会暴露工作目录文件名。'
+                              : '会话、附件与深备份文件可被直接读取。建议设置密码后再导出。'}
+                          </small>
+                        </span>
+                      </div>
+
+                      {backupError && <p className="backup-export-error" role="alert">{backupError}</p>}
+                      {backupResult && (
+                        <div className="backup-export-success" role="status">
+                          <Icon name="check" size={15} />
+                          <span>
+                            <strong>备份已导出</strong>
+                            <small>
+                              {backupResult.conversationCount} 个会话
+                              {backupResult.mode === 'deep' ? `，${backupResult.workspaceCount} 个工作目录` : ''}
+                              {backupResult.bytesWritten !== undefined ? `，${formatFileSize(backupResult.bytesWritten)}` : ''}
+                              {backupResult.filePath ? ` · ${backupResult.filePath}` : ''}
+                            </small>
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="backup-export-actions">
+                        <small>API 密钥、Vault 密钥、服务商及应用设置不会进入导出包。</small>
+                        <button
+                          className="primary-button"
+                          disabled={!onExportBackup || backupExporting || backupPassword !== backupPasswordConfirmation}
+                          onClick={() => void exportBackup()}
+                        >
+                          {backupExporting ? <><span className="button-spinner" /> 正在创建 ZIP…</> : <><Icon name="archive" size={14} /> 选择位置并导出</>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
                 <section className="settings-card danger-card">
                   <div className="danger-card-head">

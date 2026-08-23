@@ -32,6 +32,8 @@ skill-package/
 - **一键导出（Export）**：将技能的所有 Markdown 文档与脚本打包为标准的 `.zip` 压缩包。
 - **一键导入（Import）**：选择外部 `.zip` 文件时，自动解压并解析 `SKILL.md` 的 Frontmatter 元数据（`name`, `description`, `version`, `author`, `icon`），自动建立多文件索引。
 
+会话备份是另一条独立的主进程链路：[`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts) 使用支持流式文件与 WinZip AES-256 的 `@zip.js/zip.js`，避免深备份把整个工作目录加载进内存。技能 Zip 不包含密码与外部工作目录，二者的格式和安全边界不可混用。
+
 ---
 
 ## 🏛️ 5 大系统内置技能

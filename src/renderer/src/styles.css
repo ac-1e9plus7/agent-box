@@ -4087,19 +4087,27 @@ select:disabled {
 .export-card {
   display: flex;
   min-height: 62px;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   padding: 10px 13px;
 }
 
-.export-card > div {
+.export-card-head {
   display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.export-card-head > div {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: 10px;
   color: var(--text-secondary);
 }
 
-.export-card > div span {
+.export-card-head > div > span {
   display: grid;
   gap: 2px;
 }
@@ -4114,12 +4122,159 @@ select:disabled {
   font-size: 9px;
 }
 
-.export-card button {
+.export-card-head > button {
+  flex: 0 0 auto;
   padding: 6px 8px;
   border-radius: 6px;
-  color: var(--text-tertiary);
-  background: var(--surface-soft);
   font-size: 9px;
+}
+
+.backup-export-panel {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+  margin-top: 11px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.backup-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.backup-mode-options legend {
+  grid-column: 1 / -1;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.backup-mode-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  cursor: pointer;
+}
+
+.backup-mode-options label.is-selected {
+  border-color: color-mix(in srgb, var(--accent), transparent 35%);
+  background: var(--accent-soft);
+}
+
+.backup-mode-options input {
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.backup-mode-options span,
+.backup-password-fields label,
+.backup-security-note span,
+.backup-export-success span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.backup-mode-options small {
+  line-height: 1.45;
+}
+
+.backup-password-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.backup-password-fields label > span {
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.backup-password-fields input {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface-soft);
+  font: inherit;
+  font-size: 10px;
+}
+
+.backup-password-fields input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.backup-security-note,
+.backup-export-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 8px;
+}
+
+.backup-security-note.is-warning {
+  color: var(--warning, #9b6500);
+  background: color-mix(in srgb, var(--warning, #d79100), transparent 88%);
+}
+
+.backup-security-note.is-protected,
+.backup-export-success {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+}
+
+.backup-security-note small,
+.backup-export-success small {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.backup-export-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.backup-export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.backup-export-actions > small {
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.backup-export-actions > button {
+  display: inline-flex;
+  min-width: 126px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 10px;
 }
 
 .danger-card {
@@ -5362,6 +5517,20 @@ select:disabled {
 
   .editor-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .backup-mode-options,
+  .backup-password-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .backup-export-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .backup-export-actions > button {
+    width: 100%;
   }
 
   .settings-footer > span {

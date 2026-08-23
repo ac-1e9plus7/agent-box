@@ -60,6 +60,7 @@ CommonJS 包入口。因此调整 Electron/Vite 配置、入口文件或运行�
 | `tests/encrypted-store-safety.test.ts` | AES-256-GCM 加密、认证标签与 safeStorage 封装 |
 | `tests/skills-management.test.ts` | 多文件技能解析、Zip 导入导出与 Frontmatter 提取 |
 | `tests/conversation-tree.test.ts` | 树状会话分支切换与版本分页 |
+| `tests/backup-export.test.ts` | 浅/深会话 ZIP、清单、AES-256 密码、工作目录去重与失败清理 |
 
 ### 提交前验证规范
 在提交任何代码改动前，必须确保以下两步 100% 通过：

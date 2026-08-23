@@ -13,6 +13,7 @@
 ## ✨ 核心特性
 
 - 🔒 **本地加密与强沙箱隔离**：渲染进程完全沙箱化，API Key 绝不暴露给前端；数据通过操作系统凭据封装主密钥，采用 **AES-256-GCM** 全程本地加密落盘。
+- 📦 **可携带会话备份**：全部会话可同时导出为无损 JSON 与可读 Markdown；浅备份仅包含会话，深备份还会递归封装去重后的会话工作目录。ZIP 密码可选并默认建议设置，启用后使用 WinZip AES-256（AE-2）保护文件内容。
 - 🌐 **多协议与多服务商支持**：将“模型”、“供应商连接”与“协议格式”彻底解耦。统一支持 **OpenAI Chat Completions**、**OpenAI Responses** 与 **Anthropic Messages**，预设 [OpenRouter](https://openrouter.ai/) 与 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 本地高速连接。
 - 🛠️ **MCP (Model Context Protocol) 外部工具集成**：
   - 基于官方 MCP TypeScript SDK，支持 **Stdio** 与 **Streamable HTTP**，并兼容旧式 HTTP+SSE 服务。

@@ -6,6 +6,9 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
 
+minimumReleaseAgeExclude:
+  - '@zip.js/zip.js@2.8.57'
+
 onlyBuiltDependencies:
   - electron
   - electron-winstaller

@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
   conversationsGet: 'conversations:get',
   conversationsSave: 'conversations:save',
   conversationsRemove: 'conversations:remove',
+  dataExportBackup: 'data:export-backup',
   dataClearConversations: 'data:clear-conversations',
   chatStart: 'chat:start',
   chatCancel: 'chat:cancel',

@@ -19,6 +19,7 @@
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@zip.js/zip.js": "^2.8.57",
     "ajv": "^8.20.0",
     "fflate": "^0.8.3",
     "katex": "^0.18.4",

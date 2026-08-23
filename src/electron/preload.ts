@@ -5,6 +5,7 @@ import type {
   AppSettings,
   ChatRequest,
   Conversation,
+  ExportBackupInput,
   ModelInput,
   ProviderInput,
   SkillInput,
@@ -82,6 +83,8 @@ const agentboxApi: AgentboxAPI = {
     remove: (id: string) => ipcRenderer.invoke(IPC_CHANNELS.conversationsRemove, id),
   },
   data: {
+    exportBackup: (input: ExportBackupInput) =>
+      ipcRenderer.invoke(IPC_CHANNELS.dataExportBackup, input),
     clearConversations: () => ipcRenderer.invoke(IPC_CHANNELS.dataClearConversations),
   },
   chat: {

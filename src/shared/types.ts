@@ -506,6 +506,24 @@ export interface AppInfo {
   platform: string
 }
 
+export type BackupMode = 'shallow' | 'deep'
+
+export interface ExportBackupInput {
+  mode: BackupMode
+  /** Optional one-time password. It is never persisted by AgentBox. */
+  password?: string
+}
+
+export interface ExportBackupResult {
+  canceled: boolean
+  filePath?: string
+  mode: BackupMode
+  encrypted: boolean
+  conversationCount: number
+  workspaceCount: number
+  bytesWritten?: number
+}
+
 export interface AgentboxAPI {
   settings: {
     get(): Promise<AppSettings>
@@ -556,6 +574,11 @@ export interface AgentboxAPI {
     remove(id: string): Promise<void>
   }
   data: {
+    /**
+     * Exports every conversation as plaintext JSON and Markdown inside a ZIP.
+     * Deep mode additionally includes all distinct conversation workspaces.
+     */
+    exportBackup(input: ExportBackupInput): Promise<ExportBackupResult>
     /**
      * Erases all conversations (chat history) while keeping provider, model and
      * settings configuration. Cancels any in-flight streams first.

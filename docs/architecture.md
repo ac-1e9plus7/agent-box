@@ -78,5 +78,6 @@ IPC 通道常量集中定义于 [`src/shared/ipc.ts`](../src/shared/ipc.ts)：
 | `vault:bootstrap` | 初始化并加载 Vault 状态 | 返回全部脱敏配置、模型、供应商、技能与 MCP 服务 |
 | `vault:saveSettings` | 保存用户偏好与供应商密钥 | `SettingsSavePayload` |
 | `vault:clearConversations` | 清除全部历史会话并重新加密 | - |
+| `data:export-backup` | 选择目标路径并导出浅/深会话 ZIP 备份 | `ExportBackupInput` -> `ExportBackupResult` |
 | `skills:*` | 技能 CRUD、开关与重置 | 技能输入定义、ID、开关状态 |
 | `mcp:*` | MCP 服务 CRUD、连通性测试与工具查询 | 服务定义、测试输入、工具列表 |
