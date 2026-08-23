@@ -16,6 +16,11 @@ import {
   MIN_AGENT_TOOL_TURN_LIMIT,
 } from '../../../shared/agent-limits'
 import { API_FORMAT_LABELS } from '../types'
+import {
+  DEFAULT_NEW_PROVIDER_API_FORMAT,
+  LEGACY_CHAT_COMPLETIONS_HINT,
+  providerApiFormatOptionLabel,
+} from '../api-format-options'
 import { stepTokenValue } from '../token-step'
 import { isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../web-search'
 import { Icon } from './Icon'
@@ -988,7 +993,7 @@ export function SettingsDialog({
         name: '自定义服务商',
         kind: 'custom',
         baseUrl: 'https://api.example.com/v1',
-        apiFormat: 'openai-chat-completions',
+        apiFormat: DEFAULT_NEW_PROVIDER_API_FORMAT,
         hasApiKey: false,
         apiKeyOptional: false,
         defaultHeaders: {},
@@ -2804,12 +2809,37 @@ export function SettingsDialog({
                         </select>
                       </label>
                       <label>
-                        <FieldLabel>默认 API 格式</FieldLabel>
-                        <select value={selectedProvider.apiFormat} onChange={(event) => updateProvider({ apiFormat: event.target.value as ApiFormat })}>
-                          {(Object.keys(API_FORMAT_LABELS) as ApiFormat[]).map((format) => (
-                            <option key={format} value={format}>{API_FORMAT_LABELS[format]}</option>
-                          ))}
-                        </select>
+                        <FieldLabel hint="新接入推荐 Responses">默认 API 格式</FieldLabel>
+                        <div className="provider-api-format-control">
+                          <select
+                            aria-describedby="legacy-chat-completions-hint"
+                            title={selectedProvider.apiFormat === 'openai-chat-completions'
+                              ? LEGACY_CHAT_COMPLETIONS_HINT
+                              : 'Responses 是新接入的推荐格式。'}
+                            value={selectedProvider.apiFormat}
+                            onChange={(event) => updateProvider({ apiFormat: event.target.value as ApiFormat })}
+                          >
+                            {(Object.keys(API_FORMAT_LABELS) as ApiFormat[]).map((format) => (
+                              <option
+                                key={format}
+                                title={format === 'openai-chat-completions' ? LEGACY_CHAT_COMPLETIONS_HINT : undefined}
+                                value={format}
+                              >
+                                {providerApiFormatOptionLabel(format)}
+                              </option>
+                            ))}
+                          </select>
+                          <span
+                            aria-label={LEGACY_CHAT_COMPLETIONS_HINT}
+                            className="provider-api-format-hint"
+                            id="legacy-chat-completions-hint"
+                            tabIndex={0}
+                            title={LEGACY_CHAT_COMPLETIONS_HINT}
+                          >
+                            <Icon name="info" size={13} />
+                            <span>旧版格式说明</span>
+                          </span>
+                        </div>
                       </label>
                       <label>
                         <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? 'CLIProxyAPI 默认本机监听地址' : '请求将发送到此地址'}>Base URL</FieldLabel>

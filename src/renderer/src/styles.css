@@ -2971,6 +2971,31 @@ select:disabled {
   width: 100%;
 }
 
+.provider-api-format-control {
+  display: grid;
+  gap: 6px;
+}
+
+.provider-api-format-control select {
+  width: 100%;
+}
+
+.provider-api-format-hint {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  line-height: 1.4;
+  cursor: help;
+}
+
+.provider-api-format-hint:hover,
+.provider-api-format-hint:focus-visible {
+  color: var(--text-secondary);
+}
+
 .runtime-test-row {
   min-height: 44px;
   padding: 0 15px 13px;
