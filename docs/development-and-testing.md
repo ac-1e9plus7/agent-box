@@ -34,7 +34,7 @@ Then launch the unpacked application for the current platform. On Windows, verif
 
 ## Vitest test system
 
-[`vitest.config.ts`](../vitest.config.ts) uses the Node environment and matches `tests/**/*.test.ts`. The suite does not rely on full Electron UI automation. Renderer behavior that needs unit coverage should therefore be isolated in pure functions. When a test imports a new renderer utility directly, add that module to `tsconfig.node.json` as well.
+[`vitest.config.ts`](../vitest.config.ts) uses the Node environment by default and matches both `tests/**/*.test.ts` and `tests/**/*.test.tsx`. Pure renderer behavior remains isolated in testable functions where practical. Renderer integration tests opt into jsdom at the file level, render the real React components with Testing Library, and replace `window.agentbox` with an in-memory preload-bridge mock; they are not full Electron UI automation. `tsconfig.node.json` includes the complete renderer source tree because these tests import real component graphs, and both `.ts` and `.tsx` tests participate in TypeScript checking.
 
 | Area | Representative tests |
 | --- | --- |
@@ -43,6 +43,7 @@ Then launch the unpacked application for the current platform. On Windows, verif
 | Vault, schemas, migrations, quotas, and backups | `settings-schema`, `vault-legacy-migration`, `vault-resource-limits`, `clear-conversations`, `backup-export` |
 | Agent, MCP, Skills, and code execution | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor` |
 | Pure renderer logic | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
+| Renderer integration | `app.integration`, `settings-dialog.integration`: application shortcuts, streaming updates, and staged Settings save/cancel behavior against a mocked preload bridge |
 | Localization | `i18n`: bundle shape, placeholders, locale selection, terminology rules, and localized built-in Skills |
 
 Tests around external input should cover the normal path, disabled behavior, missing legacy fields, malformed or oversized values, and cancellation/failure paths. A protocol change must cover every affected API format rather than only one provider.

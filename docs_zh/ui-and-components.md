@@ -8,10 +8,15 @@ AgentBox 的渲染层基于 React 19 与 TypeScript，负责界面展示、临�
 
 | 模块 | 职责 |
 | --- | --- |
-| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | 启动数据装载、会话和流式状态编排、设置保存，以及主界面组件组合 |
-| [`src/renderer/src/components/`](../src/renderer/src/components/) | 侧栏、顶部栏、消息区、输入框、新对话和设置对话框等 React 组件 |
+| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | 启动数据装载、设置保存、功能协调与主界面组件组合 |
+| [`src/renderer/src/hooks/useConversation.ts`](../src/renderer/src/hooks/useConversation.ts) | 会话 state/ref 同步、创建、持久化、活动分支更新与新对话快捷键 |
+| [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts) | 活动流注册、标准化事件归并、取消、工具审批、完成处理与错误 checkpoint |
+| [`src/renderer/src/components/`](../src/renderer/src/components/) | 侧栏、顶部栏、消息区、输入框、新对话和 Settings 外壳等 React 组件 |
+| [`src/renderer/src/components/settings/`](../src/renderer/src/components/settings/) | 通用、运行时、Skills、MCP、模型、供应商、安全与关于 section，以及设置共用控件 |
 | [`src/renderer/src/*.ts`](../src/renderer/src/) | 会话上下文投影、标题清洗、附件处理、Markdown 预处理、快捷键和工作目录分组等可测试纯逻辑 |
 | [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) | renderer 与测试共用的消息树遍历、分支切换和节点删除逻辑 |
+
+Settings 外壳统一持有 `preferences`、模型、供应商和 API Key 的暂存改动，并由“保存更改”一次提交；各 section 按需维护自己的选择项、搜索、测试和弹窗等局部状态。Skills 与 MCP server 的变更仍通过各自的即时持久化 API 完成。
 
 主题通过 `document.documentElement.dataset.theme` 在 `system`、`light` 和 `dark` 之间切换；系统主题使用 `prefers-color-scheme`。宽度不超过 860px 时侧栏改为抽屉，680px 以下进一步压缩顶部栏与输入区；`prefers-reduced-motion` 会关闭非必要动画。
 

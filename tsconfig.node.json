@@ -5,25 +5,15 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "types": ["node", "electron"]
+    "types": ["node", "electron", "vite/client"]
   },
   "include": [
     "electron.vite.config.ts",
     "src/electron/**/*.ts",
-    "src/renderer/src/token-step.ts",
-    "src/renderer/src/context-projection.ts",
-    "src/renderer/src/title.ts",
-    "src/renderer/src/web-search.ts",
-    "src/renderer/src/types.ts",
-    "src/renderer/src/stream-helper.ts",
-    "src/renderer/src/file-helper.ts",
-    "src/renderer/src/avatar-helper.ts",
-    "src/renderer/src/markdown-helper.ts",
-    "src/renderer/src/composer-helper.ts",
-    "src/renderer/src/agent-continuation.ts",
-    "src/renderer/src/api-format-options.ts",
-    "src/renderer/src/workspace-groups.ts",
+    "src/renderer/src/**/*.ts",
+    "src/renderer/src/**/*.tsx",
     "src/shared/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "tests/**/*.tsx"
   ]
 }

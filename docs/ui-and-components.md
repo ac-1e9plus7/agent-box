@@ -8,10 +8,15 @@ AgentBox's renderer is built with React 19 and TypeScript. It owns presentation 
 
 | Module | Responsibility |
 | --- | --- |
-| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | Initial data loading, conversation and streaming orchestration, settings persistence, and top-level composition |
-| [`src/renderer/src/components/`](../src/renderer/src/components/) | React components for the sidebar, top bar, messages, composer, New conversation dialog, and Settings dialog |
+| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | Initial data loading, settings persistence, feature coordination, and top-level composition |
+| [`src/renderer/src/hooks/useConversation.ts`](../src/renderer/src/hooks/useConversation.ts) | Conversation state/ref synchronization, creation, persistence, active-branch updates, and the New conversation shortcut |
+| [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts) | Active-stream registration, normalized event reduction, cancellation, tool approval, completion, and error checkpointing |
+| [`src/renderer/src/components/`](../src/renderer/src/components/) | React components for the sidebar, top bar, messages, composer, New conversation dialog, and Settings shell |
+| [`src/renderer/src/components/settings/`](../src/renderer/src/components/settings/) | General, runtimes, Skills, MCP, models, providers, security, and About Settings sections plus shared controls |
 | [`src/renderer/src/*.ts`](../src/renderer/src/) | Testable logic for context projection, title cleanup, attachments, Markdown preprocessing, keyboard behavior, and workspace grouping |
 | [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) | Message-tree traversal, branch selection, and node deletion shared by the renderer and tests |
+
+The Settings shell owns the staged `preferences`, model, provider, and API-key changes that are committed together by **Save changes**. Each Settings section owns its local selection, search, test, and modal state where applicable. Skills and MCP server mutations continue to use their dedicated immediate-persistence APIs.
 
 The renderer sets `document.documentElement.dataset.theme` to `system`, `light`, or `dark`; system mode follows `prefers-color-scheme`. At widths up to 860px, the sidebar becomes a drawer, and below 680px the top bar and composer are further condensed. The stylesheet also honors `prefers-reduced-motion`.
 

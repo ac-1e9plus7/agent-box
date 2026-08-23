@@ -34,7 +34,7 @@ pnpm package
 
 ## Vitest 测试体系
 
-[`vitest.config.ts`](../vitest.config.ts) 使用 Node 环境并匹配 `tests/**/*.test.ts`。测试不依赖完整 Electron UI 自动化，renderer 中需要单测的行为应尽量拆成纯函数；新增被 Node 测试直接导入的 renderer 模块时，还要将其纳入 `tsconfig.node.json`。
+[`vitest.config.ts`](../vitest.config.ts) 默认使用 Node 环境，同时匹配 `tests/**/*.test.ts` 与 `tests/**/*.test.tsx`。适合单测的 renderer 行为仍应尽量拆成纯函数。Renderer 集成测试通过文件级配置启用 jsdom，使用 Testing Library 渲染真实 React 组件，并以进程内 mock 替换 `window.agentbox` preload bridge；它们不属于完整 Electron UI 自动化。由于这些测试会导入真实组件图，`tsconfig.node.json` 纳入完整 renderer 源码树；`.ts` 与 `.tsx` 测试都会参加 TypeScript 检查。
 
 | 范围 | 代表性测试 |
 | --- | --- |
@@ -43,6 +43,7 @@ pnpm package
 | Vault、Schema、迁移、配额与备份 | `settings-schema`, `vault-legacy-migration`, `vault-resource-limits`, `clear-conversations`, `backup-export` |
 | Agent、MCP、Skills 与代码执行 | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor` |
 | renderer 纯逻辑 | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
+| renderer 集成 | `app.integration`, `settings-dialog.integration`：通过 mock preload bridge 验证应用快捷键、流式更新及 Settings 暂存保存/取消语义 |
 | 国际化 | `i18n`：资源结构、占位符、locale 决策、术语规则和内置 Skill 本地化 |
 
 涉及外部数据的测试至少应覆盖正常路径、功能关闭状态、旧字段缺失、非法或超大输入，以及取消/失败路径。协议改动需覆盖所有受影响的 API 格式，不能只验证单一 provider。

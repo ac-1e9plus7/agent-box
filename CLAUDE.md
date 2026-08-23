@@ -125,8 +125,10 @@ src/electron/api/workspace-files.ts Workspace-scoped file operations
 src/electron/mcp/                   MCP clients, transports, manager, approval policy, BM25 retrieval
 src/electron/storage/               Encrypted Vault, schemas, repository CRUD, quotas, built-in Skills
 src/electron/backup/                Conversation and workspace ZIP backup export
-src/renderer/src/App.tsx            Renderer state and application orchestration
-src/renderer/src/components/        React components and dialogs
+src/renderer/src/App.tsx            Renderer bootstrap, settings persistence, coordination, top-level composition
+src/renderer/src/hooks/              Conversation state and normalized chat-stream orchestration
+src/renderer/src/components/        React components, dialogs, and the Settings shell
+src/renderer/src/components/settings/ Settings sections and shared Settings controls
 src/renderer/src/                   Testable renderer helpers for context, titles, files, Markdown, and input
 scripts/                            Icon generation and localization extraction/review pipeline
 build/                              Source/generated application icons used by packaging
@@ -300,7 +302,7 @@ Do not add claims that a model has native web search without explicit capability
 - Prefer small pure functions, explicit types, and narrow type guards at trust boundaries.
 - Keep the existing no-semicolon and trailing-comma style. Do not introduce unrelated formatting changes or claim that an unconfigured formatter/linter exists.
 - Use `apply_patch` for focused edits. Mechanical generation may use the repository scripts.
-- If a Node test imports a new renderer helper, add that file to `tsconfig.node.json` so composite type checking does not fail with TS6307.
+- `tsconfig.node.json` includes the complete renderer source tree because jsdom integration tests import real component graphs. Keep both `tests/**/*.ts` and `tests/**/*.tsx` in its include set.
 
 Use the test map in [`docs/development-and-testing.md`](./docs/development-and-testing.md) rather than maintaining an incomplete duplicate list here. At minimum, cover:
 
