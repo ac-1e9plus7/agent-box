@@ -68,6 +68,11 @@
         "portable"
       ]
     },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "mac": {
       "target": "dmg",
       "category": "public.app-category.productivity"

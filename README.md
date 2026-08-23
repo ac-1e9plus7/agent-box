@@ -76,6 +76,9 @@ pnpm test
 pnpm build
 ```
 
+Windows `pnpm dist` 会同时生成引导式 `Setup` 安装包和 portable 免安装版本；
+`Setup` 启动后需经安装向导确认，并支持选择安装目录。
+
 ---
 
 ## 🔒 安全不变量

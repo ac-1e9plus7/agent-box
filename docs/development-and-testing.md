@@ -31,6 +31,10 @@ pnpm package
 pnpm dist
 ```
 
+Windows 的 `Setup` 产物使用 NSIS 引导式安装：双击启动后需要在向导中确认
+安装范围和安装选项，随后可自行选择安装目录，再进入实际安装阶段。构建同时
+保留免安装的 portable `.exe`，其启动行为不经过安装向导。
+
 Electron main 与 sandboxed preload 都显式输出 CommonJS：入口分别为
 `out/main/index.cjs` 和 `out/preload/index.cjs`。`package.json#main` 必须与 main
 产物同步。这里不能只依赖 `pnpm build` 验证；外置依赖在开发目录中可被正常
