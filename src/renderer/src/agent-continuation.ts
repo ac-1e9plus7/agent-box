@@ -83,10 +83,10 @@ export function interruptionFromStreamEvent(
 function classifyChatError(error: ChatError): AgentInterruption['reason'] {
   const code = (error.code || '').toLocaleLowerCase()
   const message = error.message.toLocaleLowerCase()
-  if (error.status === 429 || code.includes('rate') || message.includes(t("限流")) || message.includes('rate limit')) {
+  if (error.status === 429 || code.includes('rate') || message.includes(t("限流").toLocaleLowerCase()) || message.includes('rate limit')) {
     return 'rate_limit'
   }
-  if (code.includes('timeout') || message.includes(t("超时")) || message.includes('timed out')) return 'timeout'
+  if (code.includes('timeout') || message.includes(t("超时").toLocaleLowerCase()) || message.includes('timed out')) return 'timeout'
   if (
     code.includes('network')
     || code.includes('fetch')

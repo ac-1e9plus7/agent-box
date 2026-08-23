@@ -17,6 +17,6 @@ describe('provider API format options', () => {
   })
 
   it('keeps the recommended Responses label concise', () => {
-    expect(providerApiFormatOptionLabel('openai-responses')).toBe('OpenAI Responses')
+    expect(providerApiFormatOptionLabel('openai-responses')).toBe('OpenAI Responses API')
   })
 })

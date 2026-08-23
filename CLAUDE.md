@@ -1,244 +1,338 @@
 # CLAUDE.md
 
-本文件为在本仓库中工作的 Claude Code 提供项目级约束。开始修改前先阅读本文件与 `README.md`；用户的当前要求始终优先。
+This file defines repository-level instructions for coding agents working on AgentBox. Read it before making changes. The user's current request always takes precedence over this file.
 
-## 项目概览
+## Start here
 
-AgentBox 是一个 React 19 + TypeScript + Electron 35 + electron-vite 桌面客户端与 AI 智能体应用，主要面向 OpenRouter，同时支持 CLIProxyAPI、OpenAI、Anthropic 和自定义兼容服务。
+Before editing:
 
-核心目标：
+1. Read this file and the default English [`README.md`](./README.md).
+2. Read the English document under [`docs/`](./docs/README.md) for every module you will touch. Use the matching file under [`docs_zh/`](./docs_zh/README.md) when maintaining the Chinese version.
+3. Inspect the current implementation and tests. Documentation is guidance, not a substitute for source code.
+4. Check `git status`. Existing edits belong to the user unless you know otherwise; preserve unrelated changes and avoid broad formatting churn.
 
-- renderer 不接触 API Key 明文，不直接访问模型 API。
-- 主进程统一处理网络请求、协议适配、加密存储和资源限制。
-- 同时支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages。
-- 会话、模型、供应商和密钥只在本机加密保存。
-- 旧 vault 必须保持可读，不能因新增限制或默认值被静默覆盖。
+When requirements conflict, follow this order: the current user request, platform or safety constraints, this file, then module documentation.
 
-## 常用命令
+## Project snapshot
 
-只使用 pnpm；不要用 npm、npx 或 Yarn 改写锁文件。
+AgentBox is a local-first desktop AI client and Agent application built with React 19, TypeScript 5.7, Electron 35, Vite 5.4, and electron-vite 3.
+
+The application separates:
+
+- providers and credentials;
+- model configuration;
+- wire formats: OpenAI Chat Completions API, OpenAI Responses API, and Anthropic Messages API;
+- conversations, Agent Skills, MCP servers, and working directories.
+
+Core invariants:
+
+- The renderer owns presentation and transient interaction state. Provider requests, encrypted persistence, secret access, and system-process operations belong in the Electron main process.
+- Persisted API keys are write-only from the renderer's perspective. The renderer may submit a newly entered key, but no IPC response may return a stored key.
+- Vault data is encrypted locally. There is no plaintext fallback when OS secure storage is unavailable.
+- Older valid Vaults must remain readable. New validation must not silently replace user settings or make deletion/recovery paths unavailable.
+
+## Tooling and commands
+
+The CI baseline is Node.js 20 and pnpm 9. The repository does not currently enforce these through `engines` or `packageManager`, so match CI when diagnosing environment-specific issues.
+
+Use pnpm for repository dependency and script operations. Do not use npm or Yarn to rewrite `pnpm-lock.yaml`; prefer `pnpm exec` over `npx` for project-local binaries.
 
 ```powershell
 pnpm install
 pnpm dev
+pnpm preview
 pnpm typecheck
 pnpm test
+pnpm test:watch
 pnpm build
 pnpm package
 pnpm dist
 ```
 
-- `pnpm dev`：启动 Vite renderer 和 Electron。
-- `pnpm typecheck`：检查 main、preload、shared 和 renderer。
-- `pnpm test`：运行 Vitest Node 测试。
-- `pnpm build`：先执行类型检查，再生成生产构建。
-- `pnpm package`：生成未封装应用目录。
-- `pnpm dist`：生成平台安装包。
+- `pnpm typecheck` checks main, preload, shared, renderer, and tests without emitting files.
+- `pnpm test` runs the Vitest suite once.
+- `pnpm build` runs type checking and creates production bundles; it does not run tests.
+- `pnpm package` creates an unpacked application directory.
+- `pnpm dist` creates distributable artifacts for the current platform.
 
-提交改动前至少运行 `pnpm test` 和 `pnpm build`。协议、安全、存储相关改动必须补测试。
+For ordinary code changes, run focused tests while iterating and finish with `pnpm test` and `pnpm build`. Packaging, preload, entry-point, dependency-externalization, or Electron lifecycle changes also require `pnpm package` and an actual unpacked-application smoke test.
 
-## 📚 技术文档阅读与维护指南
+The GitHub release workflow currently installs Node.js 20 and pnpm 9, builds and packages a platform matrix, and uploads artifacts. It does not run `pnpm test` and does not publish a GitHub Release; do not describe artifact upload as a release publication.
 
-项目采用模块化技术文档结构，集中存放于 `docs/` 目录中。**所有在此仓库工作的编码智能体必须遵守以下文档指引**：
+## Documentation contract
 
-1. **修改前阅读对应模块文档**：
-   - 涉及进程模型、IPC 桥接或外链生命周期时，先阅读 [`docs/architecture.md`](./docs/architecture.md)。
-   - 涉及存储 Schema、Vault 加密、主密钥封装或配额限制时，先阅读 [`docs/storage-and-vault.md`](./docs/storage-and-vault.md)。
-   - 涉及 OpenAI/Responses/Anthropic 协议构造、流式解析、思考模式或联网搜索时，先阅读 [`docs/gateway-and-protocols.md`](./docs/gateway-and-protocols.md)。
-   - 涉及 Agent 技能体系、Python 3 脚本规范或 Zip 导入导出时，先阅读 [`docs/skills-system.md`](./docs/skills-system.md)。
-   - 涉及 MCP 传输通道（Stdio/SSE）、BM25 工具检索或 Agent 多轮执行循环时，先阅读 [`docs/mcp-integration.md`](./docs/mcp-integration.md)。
-   - 涉及树状会话、LaTeX / Markdown 公式渲染或多模态附件时，先阅读 [`docs/ui-and-components.md`](./docs/ui-and-components.md)。
-   - 编写测试用例或调整构建流程时，先阅读 [`docs/development-and-testing.md`](./docs/development-and-testing.md)。
-2. **代码变更与文档同步更新**：
-   - 当重构、新增接口、变更字段或调整系统行为时，**必须同步更新 `docs/` 下对应的模块技术文档**。
-   - `README.md` 保持精简高阶概览，技术细节与深度设计维护在 `docs/` 中。
-   - 文档中的接口代码、Mermaid 流程图、配额数值必须与源码严格保持一致。
+English is the default repository language for project documentation:
 
-## 目录与职责
+- [`README.md`](./README.md) is the default English overview.
+- [`README_zh.md`](./README_zh.md) is the matching Simplified Chinese overview.
+- [`docs/`](./docs/README.md) contains the English technical index and nine English module documents.
+- [`docs_zh/`](./docs_zh/README.md) contains matching Chinese files with identical filenames.
+- `CLAUDE.md` must remain entirely in English.
+
+Documentation rules:
+
+1. Read the relevant module document before changing behavior:
+   - process model, preload, IPC, windows, or external links: `architecture.md`;
+   - Vault, settings, schemas, quotas, clearing, or backups: `storage-and-vault.md`;
+   - provider requests, response parsing, reasoning, web search, or proxies: `gateway-and-protocols.md`;
+   - Agent Skills, retrieval, built-ins, or ZIP import/export: `skills-system.md`;
+   - MCP transports, retrieval, approvals, or the Agent tool loop: `mcp-integration.md`;
+   - renderer state, conversation trees, Markdown/KaTeX, profiles, or attachments: `ui-and-components.md`;
+   - working directories, integrated terminal, or developer runtimes: `workspaces-and-runtimes.md`;
+   - localization, resource generation, or terminology: `i18n.md`;
+   - scripts, tests, packaging, or CI: `development-and-testing.md`.
+2. Behavioral, schema, interface, limit, security, build, or product-copy changes require synchronized updates to both `docs/<name>.md` and `docs_zh/<name>.md`.
+3. Keep `README.md` and `README_zh.md` synchronized at a high level. Put implementation detail in the matching technical documents.
+4. Preserve reciprocal language links in both root READMEs, both documentation indexes, and every paired document. English README links should lead to `docs/`; Chinese README links should lead to `docs_zh/`.
+5. Code examples, Mermaid diagrams, file paths, limits, version requirements, and CI claims must match the current source and configuration.
+6. Validate local Markdown links, paired filenames, balanced code fences, and trailing whitespace after documentation changes.
+
+Do not update only one language and leave the counterpart stale. If a term has no useful direct translation, retain the product's official English name in both documents.
+
+## Localization and product terminology
+
+All user-visible copy in the renderer or main process must go through the shared localization layer under `src/shared/i18n/`.
+
+- `AppLanguage` currently supports `zh-CN` and `en-US`.
+- The Chinese and English bundles must have identical keys and placeholder sets.
+- Use semantic keys when identical Chinese text needs different English in different contexts, for example `common.close` versus `common.off`.
+- Dates and numbers shown to users must use `getLanguage()` with `Intl` or `toLocaleString`; do not hard-code `zh-CN`.
+- English product terminology must be reviewed manually and added to `reviewedEn` in `scripts/localize-renderer.mjs`. Do not rely on raw machine translation for API names, security copy, or long Skill instructions.
+- Do not hand-edit a generated locale bundle as the only source change. Update message usage, `manualZh` / `manualEn`, contextual normalization, or `reviewedEn`, then run `node scripts/localize-renderer.mjs generate`.
+- Executable Skill assets (`python`, `shell`, and other code files) must never enter language bundles or machine translation. Localize Skill names, descriptions, System Instructions, and `kind === 'markdown'` files only.
+- Preserve these official terms: Responses API, Chat Completions API, reasoning effort, adaptive thinking, manual extended thinking, MCP server, MCP tool, Streamable HTTP, legacy HTTP+SSE, provider, provider fallback, Zero Data Retention (ZDR), and native web search.
+
+First-launch language selection and migration are compatibility behavior: locales beginning with `zh` select Simplified Chinese; all other locales select English. The selected language is encrypted in `AppSettings.language`. The main process must set a language before repository initialization, and the renderer must set the stored language before dynamically importing the application.
+
+Run `tests/i18n.test.ts` after localization changes. It checks bundle parity, placeholders, terminology rules, built-in Skill localization, and exclusion of executable assets.
+
+## Responsibility map
 
 ```text
-src/shared/                         跨进程类型、IPC channel 与共享纯函数
-src/shared/token-estimate.ts        token 估算常量与函数（main 与 renderer 共用，禁止再各自实现）
-src/electron/main.ts                Electron 生命周期、窗口与外链策略
-src/electron/preload.ts             最小化、冻结的 window.agentbox API
-src/electron/ipc/register-ipc.ts    IPC 注册与 sender 校验
-src/electron/api/gateway.ts         网络、超时、流式请求、取消、Agent 提示词装配、代理 dispatcher
-src/electron/api/request-adapters.ts 三种请求格式的请求体构造
-src/electron/api/protocol-adapters.ts 三种 SSE/响应格式的统一解析
-src/electron/api/provider-policy.ts URL、鉴权和 provider 安全策略
-src/electron/api/context-window.ts  完整轮次裁剪（token 估算来自 shared/token-estimate）
-src/electron/mcp/                   MCP 协议层（stdio/sse 传输、client 连接池、tool-retriever 检索）
-src/electron/storage/default-skills.ts 5 个系统内置技能定义
-src/electron/storage/               加密 vault、skills CRUD、schema、配额和仓库操作
-src/renderer/src/App.tsx            renderer 状态与业务编排
-src/renderer/src/components/        React UI
-src/renderer/src/                   纯函数模块：context-projection、title、token-step、web-search、file-helper、markdown-helper、composer-helper、defaults
-scripts/                            零依赖图标再生命令（generate-icons.mjs、make-ico.mjs）
-build/                              应用图标资产（icon.svg/icon.png/icon.ico），package.json 已引用，必须随仓库提交
-tests/                              协议、schema、配额、Skills 和纯函数测试
+src/shared/                         Cross-process types, IPC names, i18n, limits, and pure helpers
+src/shared/i18n/                    Active language, resource lookup, and generated locale bundles
+src/shared/token-estimate.ts        Shared token estimation; do not duplicate in main and renderer
+src/electron/main.ts                Electron lifecycle, window security, locale bootstrap, external links
+src/electron/preload.ts             Minimal, frozen window.agentbox API
+src/electron/ipc/register-ipc.ts    IPC registration, sender validation, native dialogs
+src/electron/api/gateway.ts         Provider network orchestration, streaming, Agent loop, proxy dispatcher
+src/electron/api/request-adapters.ts Request bodies for all three API formats and OpenRouter web search
+src/electron/api/protocol-adapters.ts Provider stream/response normalization
+src/electron/api/context-window.ts  Complete-turn context trimming using shared token estimates
+src/electron/api/code-executor.ts   Restricted JavaScript/Python code execution
+src/electron/api/terminal-shell.ts  Integrated terminal resolution and execution
+src/electron/api/workspace-files.ts Workspace-scoped file operations
+src/electron/mcp/                   MCP clients, transports, manager, approval policy, BM25 retrieval
+src/electron/storage/               Encrypted Vault, schemas, repository CRUD, quotas, built-in Skills
+src/electron/backup/                Conversation and workspace ZIP backup export
+src/renderer/src/App.tsx            Renderer state and application orchestration
+src/renderer/src/components/        React components and dialogs
+src/renderer/src/                   Testable renderer helpers for context, titles, files, Markdown, and input
+scripts/                            Icon generation and localization extraction/review pipeline
+build/                              Source/generated application icons used by packaging
+tests/                              Unit and integration tests for boundaries and pure behavior
+docs/                               Default English technical documentation
+docs_zh/                            Matching Simplified Chinese technical documentation
 ```
 
-保持职责边界：renderer 只处理展示和用户交互；所有密钥、网络和持久化操作必须留在主进程。
+Do not move provider protocol logic, credentials, or persistence into React components. Do not duplicate protocol rules between renderer and main.
 
-## 不可破坏的安全约束
+## Security invariants
 
-### 密钥与本地存储
+### Secrets and encrypted storage
 
-- API Key 对 renderer 必须保持“可写不可读”。`ProviderView` 只能暴露 `hasApiKey`，不能加入读取密钥的 IPC。
-- 不得把 API Key、vault 主密钥、鉴权头、解密后的 vault 或完整敏感请求写入日志、错误消息、测试快照或 renderer state。
-- vault 使用随机 256-bit 主密钥；主密钥由 Electron `safeStorage` 封装，数据使用 AES-256-GCM。
-- 不得在 `safeStorage` 不可用或 Linux `basic_text` 后端时降级到明文。
-- 保持随机 IV、认证标签、原子文件替换和单实例锁；不要以关闭这些机制解决开发问题。
-- 修改存储字段时，同时更新 shared 类型、读取校验、写入校验、资源计数和兼容测试。
+- Stored API keys may never be returned by IPC. `ProviderView` exposes `hasApiKey`, not the stored value. Mask proxy or MCP secrets before returning configurations to the renderer.
+- Never log or snapshot API keys, authentication headers, proxy credentials, the Vault key, complete decrypted Vault state, or unredacted secret-bearing records.
+- The Vault uses a random 32-byte key, AES-256-GCM, random 12-byte IVs, authentication tags, and atomic file replacement. The key is wrapped with Electron `safeStorage`.
+- Refuse plaintext fallback when `safeStorage` is unavailable or Linux reports the `basic_text` backend. Do not disable this behavior to make development easier.
+- Preserve the single-instance lock and secure key lifecycle. Fill sensitive in-memory key buffers on destruction.
+- Storage-field changes require synchronized shared types, normalization, repository mutation handling, resource accounting, legacy migration behavior, and tests.
 
-### Electron 与 IPC
+### Electron and IPC
 
-- 保持 `sandbox: true`、`contextIsolation: true`、`nodeIntegration: false` 和 `webSecurity: true`。
-- sandboxed preload 必须输出 CommonJS `out/preload/index.cjs`；不要改回含顶层 import 的 ESM preload，也不要通过关闭 sandbox 规避加载问题。
-- preload 只暴露 `window.agentbox` 白名单，并保持 deep freeze。
-- IPC 必须同时校验目标 `WebContents`、`senderFrame === mainFrame` 和精确页面 URL。
-- 生产 renderer 使用 `file://`，CSP 必须保留在 `src/renderer/index.html` 的 meta 中；HTTP response header 不能为 `file://` 提供 CSP。
-- 新窗口始终由 Electron 拒绝。只有经过主进程二次校验的 `http:`/`https:` URL 可交给 `shell.openExternal`。
+- Keep `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, and `webSecurity: true`.
+- Sandboxed preload output must remain CommonJS at `out/preload/index.cjs`. Do not switch it to a top-level-import ESM preload or disable the sandbox to hide preload failures.
+- Preload exposes only the deep-frozen `window.agentbox` allowlist.
+- IPC must validate the target `WebContents`, require the top-level main frame, and accept only the trusted production file path or configured development origin and pathname.
+- Production CSP belongs in `src/renderer/index.html`; a response header cannot protect a `file://` renderer.
+- Deny renderer-created windows. Only credential-free `http:` and `https:` URLs revalidated by the main process may be passed to `shell.openExternal`.
 
-### 网络
+### Provider network and proxy behavior
 
-- 远程 Base URL 必须使用 HTTPS；HTTP 只允许 loopback。
-- CLIProxyAPI 只有 loopback 地址可以不填 API Key；远程 CLIProxyAPI 必须 HTTPS + Key。
-- 缺少 Key 时不得发送空 `Authorization` 或 `x-api-key` 头。
-- 保持 `redirect: 'error'`、请求超时、响应体/SSE 大小限制和取消能力。
-- 错误回显必须脱敏；不要把上游任意大响应完整读入内存。
+- Remote provider and proxy URLs require HTTPS. Plain HTTP is allowed only for loopback addresses.
+- CLIProxyAPI may omit an API key only on loopback. A remote CLIProxyAPI connection requires HTTPS and a key.
+- Never send empty `Authorization`, `x-api-key`, or proxy-authorization headers.
+- Preserve redirect rejection, request timeouts, cancellation, response/SSE size limits, and bounded error-body reads.
+- Redact API keys and proxy userinfo from UI-facing errors. Never expose proxy credentials; do not rely on logs or tests that include full credential-bearing URLs.
+- Main-process provider generation, model discovery, and remote MCP HTTP/SSE traffic must apply the configured undici `ProxyAgent`. Do not replace this with `session.setProxy` or Chromium command-line flags; those do not cover main-process fetch calls.
+- Proxy configuration remains encrypted in `AppSettings.proxy`; legacy settings without it normalize to disabled.
 
-### 网络代理
+### Tool and workspace boundaries
 
-- 代理由主进程经 undici `ProxyAgent` 的 `dispatcher` 作用于 gateway 的两处 `fetch`（流式请求与模型发现）；不要改用 `session.setProxy` 或命令行开关，它们不影响主进程 fetch。
-- 代理协议策略与 Base URL 一致：`http:` 仅限 loopback，远程代理必须 `https:`；凭据只能经代理 URL userinfo 传入，不得走自定义请求头（`proxy-authorization` 在禁用头之列）。
-- 代理配置存于 `AppSettings.proxy`，随 vault 加密保存；默认关闭，旧 vault 缺字段时按关闭处理。
-- 代理 URL 不得写入日志、错误消息或测试快照。
+- Built-in workspace file tools require a conversation working directory, accept relative paths only, reject traversal and absolute paths, and reject symbolic-link escapes.
+- The integrated terminal uses the conversation directory only as its initial `cwd`. It is not an OS sandbox: an approved command can use absolute paths, access other files, start processes, or use the network. Never describe `cwd` as containment.
+- The JavaScript/Python code runner is restricted and resource-bounded, but it is not a complete OS security boundary. Code and terminal tools require approval unless Full Access is enabled.
+- MCP `ToolAnnotations` are untrusted hints. Treat a tool as explicitly low risk only when it declares read-only, non-destructive, closed-world behavior; otherwise classify it as sensitive.
+- Validate every tool argument against JSON and the advertised input JSON Schema. Never execute unknown, unexposed, malformed, or unauthorized tools.
+- Skill instructions affect System Instructions and therefore cross a trust boundary. Import and enable only trusted Skills. Reference scripts do not execute automatically.
 
-## 数据兼容规则
+## Vault compatibility and destructive operations
 
-- 当前 vault 为 schema v1，旧数据中的新增字段通常是 optional，并在读取时应用安全默认值。
-- 默认值调整只影响新建 vault，除非存在明确、可证明安全的迁移标记。不要根据模型 ID 或旧数值猜测并覆盖用户配置。
-- 新建模型与内置 OpenRouter Auto 默认安全路由 `data_collection: 'deny'` + `zdr: true`；已有模型的存储配置不得被覆盖。
-- 不要在 vault 加载路径新增会拒绝历史合法数据的全局硬限制。
-- aggregate 会话配额只在保存 mutation 时检查：旧数据若已超限，允许持平、缩小或删除，但不得继续增长。
-- 删除操作必须保持可用，以便用户从超限或异常状态恢复。
-- 对话保存失败时不得继续发起付费模型请求；应恢复输入和 UI 状态并提示用户。
+- The current Vault schema version is 1. Newer fields are generally optional on read and receive conservative defaults through normalization.
+- Defaults for new Vaults must not overwrite stored user choices. Do not infer migrations from model IDs or familiar numeric values.
+- A normalization that performs a defined legacy migration may be persisted, as with the one-time language migration. Add explicit tests for it.
+- Do not add a global load-time quota that rejects previously valid historical data. Aggregate conversation quotas are enforced on save mutations: an already-over-limit Vault must still be able to remain unchanged, shrink, or delete data.
+- Deletion and recovery paths must remain available even when other mutations fail validation.
+- A failed conversation save must stop the paid model request and restore draft/UI state.
 
-### 清除全部会话数据
+`clearConversations` clears only conversations. It must cancel active streams first and preserve providers, models, settings, credentials, Skills, MCP servers, and the Vault key. It re-encrypts the retained state; it is not forensic media erasure. Document this boundary in both `storage-and-vault.md` language versions.
 
-- 「清除全部会话数据」只清空 `conversations`，必须保留 providers、models、settings（含 API Key）。
-- 执行前必须先 `gateway.cancelAll()` 取消进行中的流式请求，再清空并重新加密落盘。
-- 主密钥必须保留（否则保留的配置无法解密）；旧密文扇区不在用户态物理擦除，彻底销毁由用户手动删除 `vault` 目录。README 已如实说明这一边界，改动删除逻辑时同步更新。
+Conversation backup rules:
 
-## API 与协议约束
+- shallow backups contain all conversation branches, messages, attachments, Agent traces, JSON, and readable Markdown;
+- deep backups additionally stream unique conversation working directories;
+- symbolic links are stored as link entries and are not followed outside a workspace;
+- backup content is plaintext inside the ZIP unless a password enables WinZip AES-256 (AE-2);
+- API keys, the Vault key, providers, models, MCP servers, Skills, and application settings are excluded.
 
-### 三种格式
+## Provider protocols and gateway behavior
 
-- Chat Completions：`/chat/completions`，正文来自 `choices[].delta.content`。
-- Responses：`/responses`，OpenRouter 端点是无状态的，必须携带完整历史；assistant 历史使用 Responses message/output_text 形状。
-- Anthropic Messages：`/messages`，系统提示位于顶层 `system`，消息为 Anthropic 角色与内容块语义。
-- 所有上游事件统一转换为 `StreamEvent`；renderer 不应解析供应商原始 SSE。
-- 解析不可信响应时使用字段白名单。不要递归显示未知对象，也不要把 `web_search_result`、tool result 或网页片段误当模型最终回答。
+- OpenAI Chat Completions API uses `/chat/completions` and `choices[].delta` output shapes.
+- OpenAI Responses API uses `/responses`, `input`/`instructions`, output items, and Responses events. OpenRouter requests replay the necessary history; preserve provider items and reasoning items required for stateless continuation.
+- Anthropic Messages API uses `/messages`, a top-level `system`, and Anthropic content blocks.
+- Convert all provider events into shared `StreamEvent` values. The renderer must not parse provider SSE directly.
+- Parse untrusted responses with field allowlists and bounded traversal. Never display tool results, web-search result payloads, or unknown provider objects as final assistant text.
 
-### 思考模式
+### Reasoning
 
-- 思考开关是会话级状态；模型默认仅影响新会话，不得覆盖已有会话的显式 `false`。
-- OpenRouter Chat/Responses 开启时使用统一 `reasoning` 配置，关闭时使用 `effort: 'none'`。
-- CLIProxyAPI 需要兼容其 Chat/Responses 推理字段转换。
-- Anthropic Messages 必须按模型配置使用 adaptive/manual thinking；关闭发送协议合法的 disabled 形状。
-- 同时解析 `reasoning`、`reasoning_content`、reasoning details、Responses reasoning 事件和 Anthropic thinking delta。
-- reasoning details 覆盖 Anthropic/OpenAI/Gemini（`google-gemini-v1` format）的 `reasoning.text`/`reasoning.summary` 条目；Responses reasoning 事件按 `response.reasoning*` 前缀匹配且只在有 text delta 时输出，不要改回精确类型匹配（会让 Gemini 思考链静默消失）。
-- 没有可见思考文本不代表没有推理；保留并展示 `reasoningTokens`。不得伪造或推断隐藏思维链。
+- Reasoning enablement is conversation state. Model defaults affect only new conversations and must not overwrite an explicit stored `false`.
+- Build reasoning fields in `request-adapters.ts` according to provider and API format. Keep `reasoning.effort` / equivalent values within the shared supported set.
+- Anthropic models use configured adaptive thinking or manual extended thinking; disabled requests must use a protocol-valid disabled shape.
+- Normalize supported reasoning deltas and usage without inventing hidden reasoning. A nonzero `reasoningTokens` value may exist without visible reasoning text.
+- Preserve provider reasoning details needed to replay Agent turns. Changes require protocol tests for every affected API format.
 
-### OpenRouter 联网搜索
+### OpenRouter web search
 
-- 只对 `provider.kind === 'openrouter'` 启用 `openrouter:web_search` server tool。
-- 支持 `off`、`auto`、`native`；`native` 不可用时 OpenRouter 会回退，不得把它描述为模型厂商保证的原生能力。
-- 请求必须同时保留 `max_uses: 2` 和顶层 `max_tool_calls: 2`，以限制费用和工具循环。
-- 当前每次搜索最多 5 个结果、整次请求最多 8 个结果。调整这些值时同步更新 UI、README 和测试。
-- 解析 Chat annotations、Responses annotations 和 Anthropic citation delta；URL 只接受无凭据的 HTTP/HTTPS。
-- 完全重复的 citation 应抑制，同 URL 后续补充 title/content/range 时应允许富化。
-- DeepSeek 的公开模型 API 不提供通用原生网页搜索工具。DeepSeek 经 OpenRouter 搜索可能使用 Exa 等回退服务，不得标为“DeepSeek 原生搜索”。
-- 搜索执行但模型未返回正文时，保留来源并显示明确提示，不要编造答案。
+- Web search is enabled only when `provider.kind === 'openrouter'`.
+- Use the `openrouter:web_search` server tool. Supported application modes are `off`, `auto`, and `native`; native mode may fall back and must not be described as a provider guarantee.
+- Current request limits are `max_results: 5`, `max_uses: 2`, `max_total_results: 8`, and top-level `max_tool_calls: 2`.
+- Parse Chat Completions annotations, Responses annotations, and Anthropic citation deltas. Accept only credential-free HTTP/HTTPS citation URLs.
+- Deduplicate identical citations while allowing later events for the same URL to enrich title, content, or ranges.
+- If search returns sources but no answer text, preserve the sources and display an explicit empty-response state. Never synthesize an answer in the client.
+- When quotas or modes change, update request adapters, both gateway documents, and protocol tests; update README/UI copy only when those values are presented there.
 
-## 会话标题
+Do not add claims that a model has native web search without explicit capability evidence encoded by the current provider path.
 
-- 自动命名在首条 user+assistant 往返成功完成后触发，复用 `chat.stream` + `onEvent`（按 `requestId` 路由），**不得为此新增 IPC channel**。
-- 使用 `src/renderer/src/stream-helper.ts` 的 `runStreamWithReplay` 在发起流式请求前先订阅 IPC 事件并缓冲早期 delta，消除 Promise 解析与事件分发之间的竞态。
-- 标题生成请求是低成本配置：强制 `reasoningEnabled: false`、`webSearchMode: 'off'`、`maxOutputTokens: 32`。优先使用 `AppSettings.titleGenerationModelId` 中指定的全局命名模型，未配置时回退沿用当前会话模型；超长输入在发送前自动截断至前 2,000 字符；请求本身不落库。
-- 标题清洗逻辑集中在 `src/renderer/src/title.ts`（去引号/换行/末尾标点、裁剪长度）。
-- 手动改名后（记入 `manualRenamedRef`）不再被自动命名覆盖；自动命名失败必须静默回退到截断标题，不得阻塞 UI 或丢对话。
+## Agent, MCP, Skills, and runtimes
 
-## 上下文管理
+### Agent and MCP loop
 
-- `contextManagementMode` 默认 `manual`。
-- 手动模式超限时阻止普通发送；`allowContextTrimming` 只允许该次请求裁剪，不修改全局设置，也不删除本地历史。
-- 自动模式只按完整 user + assistant 轮次裁剪，保持角色序列合法。
-- 系统提示和最新用户问题不可裁剪；两者本身超限时必须阻止请求。
-- 上下文窗口是客户端预算，不代表能改变供应商的真实模型上限。
-- token 数字按钮以 64,000 为基础步长，并在 `64K × 2^n`、1M、2M 等锚点停靠；直接输入的 schema 下限与按钮步长不是同一概念。
+- MCP supports `stdio`, Streamable HTTP, and legacy HTTP+SSE. A remote `http` configuration tries Streamable HTTP first and falls back to legacy HTTP+SSE; `sse` explicitly selects the legacy transport.
+- The global MCP setting and per-conversation MCP server allowlist determine which servers may expose tools. An explicit empty conversation list exposes none.
+- Automatic BM25 retrieval scores the last user message and injects at most 8 tools with a default minimum score of 0.75. `all` mode exposes all allowed tools. Keep retrieval constants, UI copy, documentation, and tests synchronized.
+- Provider-safe aliases must remain stable and collision-safe. Never expose a model tool name that cannot be mapped back to the original server/tool pair.
+- Approval policies are `always`, `sensitive`, and `full-access`; legacy `never` migrates to Full Access. Approval timeout is five minutes or no timeout.
+- The Agent tool-call loop defaults to 30 rounds and accepts 1 through 100. Reaching the limit must produce a checkpoint rather than silently continuing.
+- Preserve `toolExecutions` and `agentTrace` in protocol-neutral form. Only the last interrupted Assistant message on the active branch may be resumed.
+- Natural commands such as `continue`, `resume`, or supported Chinese equivalents are resume signals only when that checkpoint exists and no attachment or substantive new requirement replaces the task.
 
-## React 与状态处理
+### Skills
 
-- 共享持久化类型来自 `src/shared/types.ts`；renderer 扩展类型放在 `src/renderer/src/types.ts`。
-- 消息在发起时记录当前使用的 `modelId`；助手回复完成后在气泡下方展示模型名称及消耗的 `outputTokens`。
-- 旧会话缺少可选字段时使用兼容默认值，不要在 bootstrap 时无条件写回整个 vault。
-- 开始流式请求前必须先成功保存用户消息；失败时停止请求并恢复草稿。
-- 流式 usage 事件可能分多次到达，按字段合并而不是整体覆盖。
-- citations 按规范化 URL 合并；完成消息必须保存 reasoning、usage 和 citations。
-- 外部 Markdown 链接使用 `target="_blank"` 和 `rel="noopener noreferrer"`，实际打开由主进程安全策略处理。
-- 对空白正文使用 `trim()` 判断；有来源但没有正文时显示上游未生成正文的状态，不显示无意义的复制按钮。
+- A Skill may contain Markdown instructions, reference documents, and Python/shell reference scripts. Entry Markdown, additional Markdown, and Python/shell source are included in System Instructions as reference material.
+- `other` files are preserved for import/export but are not injected. Python and shell files may be shown to the model as reference code, but they are never run automatically.
+- Pinning, `$skill-id` mention, automatic retrieval, and model-requested `agentbox_load_skill` are distinct activation paths. Preserve activation-source records shown in the UI.
+- `agentbox_load_skill` is read-only, does not run scripts, and does not require approval.
+- The code runner may run model-generated code only through its explicit approved tool path. A Skill containing a script is not evidence that the script ran.
+- Built-in Skill names, descriptions, and Markdown follow the application language. Preserve user enablement and customized content when refreshing localized built-ins.
+- ZIP Skill archives and conversation backups are different formats and security boundaries. Do not mix their parsers or password behavior.
 
-## 代码风格
+### Working directories, terminal, and developer runtimes
 
-- TypeScript strict、`noUncheckedIndexedAccess` 已开启；不要用 `any` 绕过边界校验。
-- 优先使用小型纯函数和显式类型守卫处理外部数据。
-- 对用户/网络/vault 输入先校验、规范化，再存储或转发。
-- 避免在 renderer 与 main 重复实现协议规则；协议逻辑集中在 Electron API adapter。
-- 保持现有无分号风格和尾随逗号风格，不进行与任务无关的大规模格式化。
-- 修改用户可见行为或限制时同步更新 `README.md`。
+- New conversations require an absolute working directory; legacy directory-less conversations may load but must choose a directory before sending.
+- The Vault stores only the path reference. Workspace content is not automatically copied into or encrypted by the Vault.
+- Shell auto-detection follows platform-specific candidates. Custom shells support line-separated launch arguments and a `{command}` placeholder.
+- Preserve terminal command length, timeout, output, environment-name, and cancellation limits. Do not add broad process environment forwarding that can leak secrets.
+- Runtime resolution may inject `PATH`, `JAVA_HOME`, `GOROOT`, `VIRTUAL_ENV`, and `CONDA_PREFIX` into terminal/code environments. Keep validation and tests aligned with the exact current behavior.
+- Conda environments are resolved to their interpreter prefix; do not require interactive `conda activate` or wrap every invocation in `conda run`.
+- Do not claim that every discovered `python` executable is Python 3 unless the relevant resolver explicitly validates the version.
 
-## 测试要求
+## Conversation, context, and renderer state
 
-按改动范围补测试：
+### Conversation tree and persistence
 
-- 请求参数或 reasoning/web search：`tests/protocol-adapters.test.ts`
-- SSE、citations、usage：`tests/protocol-adapters.test.ts` 与 `tests/web-metadata-schema.test.ts`
-- URL、鉴权、CLIProxy：`tests/provider-policy.test.ts`
-- 模型发现：`tests/model-catalog.test.ts`
-- 上下文裁剪：`tests/context-window.test.ts`
-- 渲染端上下文投影：`tests/context-projection.test.ts`
-- token 估算：`tests/token-estimate.test.ts`
-- 设置 schema（含代理校验）：`tests/settings-schema.test.ts`
-- vault 配额和旧数据兼容：`tests/vault-resource-limits.test.ts`
-- 清除会话数据：`tests/clear-conversations.test.ts`
-- 标题清洗：`tests/title-generation.test.ts`
-- 流式助手与事件重放：`tests/stream-helper.test.ts`
-- 默认模型：`tests/default-models.test.ts`
-- token 步进：`tests/token-step.test.ts`
-- 文件与多模态：`tests/file-helper.test.ts`
-- Markdown 与 LaTeX：`tests/markdown-helper.test.ts`
-- 输入框快捷键：`tests/composer-helper.test.ts`
+- Persistent types live in `src/shared/types.ts`; renderer-only extensions live in `src/renderer/src/types.ts`.
+- Conversation branches use `parentMessageId` and `currentLeafId`. Editing with regeneration or regenerating a response adds a sibling branch; do not silently delete previous branches.
+- Save the user message successfully before starting a paid provider request. On failure, stop and restore the draft and attachments.
+- Capture the model used by each Assistant response. Persist reasoning, usage, citations, tool executions, Agent trace, and interruptions.
+- Usage events may arrive in multiple parts; merge fields rather than replacing the entire usage object.
+- Merge citations by normalized URL, preserve later enrichment, and never treat citations as trusted executable content.
 
-测试至少覆盖：正常路径、关闭状态、旧字段缺失、非法/超大外部输入、取消或失败路径，以及三种 API 格式中受影响的每一种。
+### Context management
 
-## 开发排障提示
+- `contextManagementMode` defaults to `manual`.
+- Manual mode blocks ordinary sends when over budget. `allowContextTrimming` applies only to that request and does not delete local history or change global settings.
+- Automatic trimming removes complete user/assistant turns only. Preserve system messages and the latest user turn; if those alone exceed the budget, block the request.
+- The configured context window is a client budget and cannot increase a provider's real limit.
+- Shared token estimates belong in `src/shared/token-estimate.ts`. Do not create diverging renderer/main estimators.
+- Token step controls use 64,000-token increments with power-of-two anchors plus 1M and 2M. Input schema minima and UI step size are separate concepts.
 
-- `pnpm dev` 编译成功但新窗口立即退出时，先检查是否已有 AgentBox/Electron 实例持有 single-instance lock。
-- Electron 主进程必须以 CommonJS 输出到 `out/main/index.cjs`，并与 `package.json#main` 保持一致。不要把主进程改回 `index.js` ESM：开发构建和类型检查可能仍通过，但 Windows 打包进 `app.asar` 后，Electron 的 ESM loader 可能无法解析 `ajv` 等传统 CommonJS 包入口，启动时会在主进程抛出 `ERR_MODULE_NOT_FOUND`。调整构建配置或运行时依赖后，必须执行 `pnpm package` 并实际启动 `release/win-unpacked/AgentBox.exe`，确认出现 AgentBox 主窗口和 renderer 进程；不能只以 `pnpm build` 成功作为打包可用的依据。
-- 窗口空白且 `window.agentbox` 不存在时，检查 preload 是否仍输出并加载 `index.cjs`，不要关闭 sandbox。
-- 首次启动失败时检查 `safeStorage`/系统凭据后端，不要创建明文 fallback。
-- 修改应用图标后运行 `node scripts/generate-icons.mjs && node scripts/make-ico.mjs` 重新生成全套 PNG 与 ICO；`build/` 下的图标资产必须随仓库提交，否则打包缺图标。
-- 新增被测试引用的 renderer 纯函数模块时，必须同时加入 `tsconfig.node.json` 的 `include`（与 `token-step.ts`、`context-projection.ts`、`title.ts` 同模式），否则 typecheck 报 TS6307。
-- 使用真实 API 调试时，通过现有 IPC/主进程链路发请求；不要读取、打印或复制用户 Key。诊断会话应使用临时 ID、避免保存，并限制输出、工具调用和费用。
+### Conversation titles
 
-## 完成检查清单
+- Generate a title only after the first successful user/Assistant turn and never overwrite a manual rename.
+- Reuse the existing chat stream path and `runStreamWithReplay`; do not add a title-only IPC channel.
+- Title requests force reasoning off, web search off, and `maxOutputTokens: 32`; truncate the first user input to 2,000 characters and stop waiting after 20 seconds.
+- Prefer `AppSettings.titleGenerationModelId`; otherwise use the conversation model. Title requests are not persisted as conversation messages.
+- Keep cleanup in `src/renderer/src/title.ts`. Failure must silently retain the deterministic fallback title.
 
-1. 安全边界、旧 vault 和三协议是否仍兼容。
-2. 类型、schema、IPC、renderer 状态是否同步更新。
-3. 是否补充了相应 Vitest 用例。
-4. 是否更新了用户可见文档。
-5. `pnpm test` 通过。
-6. `pnpm build` 通过。
-7. 没有日志、fixture、截图或错误信息包含密钥或敏感 vault 内容。
+### Renderer and content behavior
+
+- Subscribe to stream events before or atomically with request startup so early events cannot be lost.
+- External Markdown links use `target="_blank"` and `rel="noopener noreferrer"`; the main process remains the final URL gate.
+- Use trimmed content to decide whether a response is empty. If citations exist without body text, show the explicit provider-empty state and no meaningless copy action.
+- User nickname and avatar are local display fields only and must never enter model prompts.
+- Attachment handling differs by protocol. Preserve image/document/text conversion rules and size limits rather than assuming all formats support identical document blocks.
+- Composer keyboard behavior, paste/drag attachment behavior, and IME handling belong in testable helpers when possible.
+
+## Code style and validation
+
+- TypeScript strict mode and `noUncheckedIndexedAccess` are enabled. Do not use `any` to bypass external-data validation.
+- Validate and normalize user, network, IPC, Vault, MCP, and archive input before storing or forwarding it.
+- Prefer small pure functions, explicit types, and narrow type guards at trust boundaries.
+- Keep the existing no-semicolon and trailing-comma style. Do not introduce unrelated formatting changes or claim that an unconfigured formatter/linter exists.
+- Use `apply_patch` for focused edits. Mechanical generation may use the repository scripts.
+- If a Node test imports a new renderer helper, add that file to `tsconfig.node.json` so composite type checking does not fail with TS6307.
+
+Use the test map in [`docs/development-and-testing.md`](./docs/development-and-testing.md) rather than maintaining an incomplete duplicate list here. At minimum, cover:
+
+- the normal path and disabled/off state;
+- missing fields from legacy Vaults;
+- malformed, oversized, or adversarial external input;
+- cancellation, timeout, denial, and failure paths;
+- every affected API format;
+- both application languages for user-visible product terminology;
+- migration and recovery behavior for storage changes.
+
+Security, protocol, storage, proxy, MCP, workspace, backup, and localization changes require focused tests in addition to the full suite.
+
+## Troubleshooting constraints
+
+- If `pnpm dev` compiles but the window exits immediately, check for another AgentBox/Electron process holding the single-instance lock.
+- Main must remain CommonJS at `out/main/index.cjs`, matching `package.json#main`. A development build can pass while a packaged ESM main fails to resolve legacy CommonJS dependencies from `app.asar`.
+- If `window.agentbox` is missing, verify the CommonJS preload output and path before changing sandbox settings.
+- On first-launch storage failures, inspect `safeStorage` and the OS credential backend; never create a plaintext fallback.
+- After icon changes, run `node scripts/generate-icons.mjs` and `node scripts/make-ico.mjs`, and commit the required PNG/ICO assets under `build/`. `icon.svg` is a source asset; packaging consumes the generated files referenced by `package.json`.
+- When testing real provider APIs, use the existing IPC/main-process path. Never read, print, or copy a stored user key. Use temporary conversations, bounded output, bounded tool calls, and minimal cost.
+
+## Completion checklist
+
+Before handing off a completed change:
+
+1. Confirm security boundaries, protocol behavior, and legacy Vault compatibility still hold.
+2. Keep shared types, normalization, IPC, repository behavior, renderer state, and tests synchronized.
+3. Add focused tests for new behavior and failure paths.
+4. Update both English and Chinese READMEs/documents when behavior or user-facing copy changed; preserve all reciprocal language links.
+5. Regenerate and validate i18n resources when visible copy changed; confirm executable assets did not enter locale bundles.
+6. Run `pnpm test` and `pnpm build` for code changes.
+7. Run `pnpm package` and launch the unpacked app for packaging, preload, entry-point, or runtime-dependency changes.
+8. Validate Markdown links, paired filenames, code fences, and trailing whitespace for documentation changes.
+9. Confirm no log, fixture, screenshot, error, or generated file contains credentials or sensitive Vault data.

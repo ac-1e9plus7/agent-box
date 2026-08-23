@@ -1846,7 +1846,10 @@ export default function App(): JSX.Element {
   const handleExportBackup = async (input: ExportBackupInput): Promise<ExportBackupResult> => {
     const result = await window.agentbox.data.exportBackup(input)
     if (!result.canceled) {
-      showToast(t("已导出 {value0} 个会话的{value1}备份。", { value0: result.conversationCount, value1: result.mode === 'deep' ? t("深") : t("浅") }))
+      showToast(t(
+        result.mode === 'deep' ? 'backup.exported.deep' : 'backup.exported.shallow',
+        { count: result.conversationCount },
+      ))
     }
     return result
   }

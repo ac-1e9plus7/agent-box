@@ -134,11 +134,9 @@ function migrateLegacyUserDataDirectory(): void {
 
 async function handleStartupFailure(error: unknown): Promise<void> {
   const errorMessage = error instanceof Error ? error.message : t("未知错误")
-  const isDecryptionError =
-    errorMessage.includes(t("解密")) ||
-    errorMessage.includes('decrypt') ||
-    errorMessage.includes('safeStorage') ||
-    errorMessage.includes(t("系统密钥"))
+  const normalizedErrorMessage = errorMessage.toLowerCase()
+  const isDecryptionError = [t("解密"), 'decrypt', 'safeStorage', t("系统密钥")]
+    .some((marker) => normalizedErrorMessage.includes(marker.toLowerCase()))
 
   const choice = dialog.showMessageBoxSync({
     type: 'warning',

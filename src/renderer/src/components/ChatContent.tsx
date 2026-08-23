@@ -11,7 +11,7 @@ import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
 import { formatFileSize } from '../file-helper'
 import { preprocessMarkdown } from '../markdown-helper'
 import { Icon } from './Icon'
-import { t } from "../../../shared/i18n"
+import { getLanguage, t } from '../../../shared/i18n'
 
 interface ChatContentProps {
   messages: ChatMessage[]
@@ -31,7 +31,7 @@ interface ChatContentProps {
 }
 
 function formatTime(timestamp: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat(getLanguage(), {
     hour: '2-digit',
     minute: '2-digit'
   }).format(new Date(timestamp))
@@ -40,7 +40,7 @@ function formatTime(timestamp: string): string {
 function compactTokenCount(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 ? 1 : 0)}M`
   if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 ? 1 : 0)}K`
-  return value.toLocaleString('zh-CN')
+  return value.toLocaleString(getLanguage())
 }
 
 function reasoningUsageLabel(usage?: TokenUsage): string {

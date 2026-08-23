@@ -1,99 +1,89 @@
 # AgentBox
 
-> **私密、强大的多模型 AI 智能体与桌面客户端**  
-> 基于 React 19、TypeScript 与 Electron 35 构建，支持 OpenAI / Anthropic / Responses 原生多协议、多文件 Agent 技能生态与 Model Context Protocol (MCP) 外部工具集成。
+**English** | [简体中文](./README_zh.md)
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.5-blue.svg)](https://www.typescriptlang.org/)
+> **A private, powerful desktop client for multi-model AI agents**
+>
+> Built with React 19, TypeScript 5.7, and Electron 35, with native adapters for the OpenAI Chat Completions API, OpenAI Responses API, and Anthropic Messages API, plus Agent Skills and Model Context Protocol (MCP) servers.
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Electron](https://img.shields.io/badge/Electron-35-47848F.svg)](https://www.electronjs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
----
+## Highlights
 
-## ✨ 核心特性
+- **Local-first encrypted storage:** the renderer is sandboxed, and stored API keys are never returned to it in plaintext. A random data key is protected by OS secure storage, and the local vault is encrypted with AES-256-GCM.
+- **Portable conversation backups:** export lossless JSON and human-readable Markdown. Shallow backups contain conversations; deep backups also include unique conversation working directories. Optional password protection uses WinZip AES-256 (AE-2).
+- **Providers and API formats are independent:** configure providers, models, and wire protocols separately. AgentBox supports the OpenAI Chat Completions API, OpenAI Responses API, and Anthropic Messages API, with presets for [OpenRouter](https://openrouter.ai/) and local [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) connections.
+- **MCP server integration:** connect local `stdio` servers or remote Streamable HTTP servers, with fallback support for legacy HTTP+SSE. BM25 tool retrieval, per-conversation server selection, approval policies, and Tool Explorer keep large tool catalogs manageable.
+- **Resumable Agent execution:** Agent mode can run up to 30 tool-call turns by default, configurable from 1 to 100. Rate limits, network failures, output limits, and manual cancellation preserve a resumable checkpoint.
+- **Integrated terminal and workspace tools:** use an automatically detected cross-platform shell or configure a custom executable and arguments. Native workspace tools read UTF-8 files in chunks and create, overwrite, or append files without shell escaping.
+- **Conversation-scoped development environments:** every conversation has a working directory. Configure JDK, Go, PHP, and Python runtimes; Python supports project `.venv`/`venv`, system interpreters, virtual environments, Conda environments, and custom interpreters.
+- **Multi-file Agent Skills:** Skills can include Markdown instructions, reference documents, and non-automatic Python or shell reference scripts. Pin Skills to a conversation, invoke `$skill-id`, use automatic retrieval, or let the model load a relevant Skill on demand. ZIP skill archives can be imported and exported.
+- **Rich chat interface:** Markdown, GFM, syntax-highlighted code, KaTeX math, multimodal attachments, image optimization and preview, editable conversation trees, regenerated branches, and version navigation.
+- **Reasoning and web search:** normalize reasoning output and usage across supported providers. OpenRouter web search uses the `openrouter:web_search` server tool with automatic or provider-native search modes and structured citations.
+- **English and Simplified Chinese UI:** language resources are shared by the renderer and Electron main process. On first launch, Chinese system locales default to Simplified Chinese; all other locales default to English. The selection is persisted in encrypted settings.
 
-- 🔒 **本地加密与强沙箱隔离**：渲染进程完全沙箱化，API Key 绝不暴露给前端；数据通过操作系统凭据封装主密钥，采用 **AES-256-GCM** 全程本地加密落盘。
-- 📦 **可携带会话备份**：全部会话可同时导出为无损 JSON 与可读 Markdown；浅备份仅包含会话，深备份还会递归封装去重后的会话工作目录。ZIP 密码可选并默认建议设置，启用后使用 WinZip AES-256（AE-2）保护文件内容。
-- 🌐 **多协议与多服务商支持**：将“模型”、“供应商连接”与“协议格式”彻底解耦。统一支持 **OpenAI Chat Completions**、**OpenAI Responses** 与 **Anthropic Messages**，预设 [OpenRouter](https://openrouter.ai/) 与 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 本地高速连接。
-- 🛠️ **MCP (Model Context Protocol) 外部工具集成**：
-  - 基于官方 MCP TypeScript SDK，支持 **Stdio** 与 **Streamable HTTP**，并兼容旧式 HTTP+SSE 服务。
-  - 内置 **BM25 智能工具检索**，根据问题意图动态筛选 Top-K 工具注入上下文，防止 Token 膨胀。
-  - 设置中的 **Tool Explorer** 统一展示 MCP 外部工具与文件读写、集成终端等系统内置工具，并以专属标记区分来源。
-  - **Agent 自主多轮执行循环**默认最多 30 轮，并可在设置中调整为 1–100 轮；支持会话级服务白名单、敏感操作审批与交互式调用卡片。
-  - API 限流、网络错误、输出上限或手动停止时自动保存 Agent 工具现场；可点击“从中断处继续”，也可输入 `go`、`继续`、`再次尝试` 等自然语言指令恢复原任务。
-- 💻 **跨平台 Integrated terminal shell**：
-  - 自动适配 Windows PowerShell/cmd、macOS zsh/bash 与 Linux SHELL/bash/zsh/fish/sh，也可指定 Shell 可执行文件及逐行启动参数。
-  - Agent 可通过受审批保护的 `agentbox_run_terminal` 执行命令；自定义 Shell 可用 `{command}` 参数模板适配不同命令行接口。
-- 📁 **会话工作目录与开发环境**：
-  - 新建会话必须绑定工作目录；可复用当前、默认或最近目录，也可从侧边栏目录分组中快捷新建。终端与项目相对路径以该目录为边界。
-  - 内置工作区原生文件工具，可分段读取 UTF-8 文本，并直接创建、覆盖或追加文件；代码内容不再经过 Shell 转义，所有路径严格限制在会话工作目录内。
-  - 可配置默认 JDK、Go、PHP 与 Python；Python 支持项目 `.venv`/`venv` 自动发现、系统解释器、普通 venv、Conda 环境名称/prefix 和自定义解释器。
-- 🧩 **Agent 多文件技能（Skills）系统**：
-  - 采用 Markdown 规范 + **Python 3 / Shell 参考脚本** 标准，支持会话固定、`$skill-id` 显式调用、上下文自动检索和模型按需加载；回答会显示本轮实际激活的技能。
-  - 内置受审批保护的 `agentbox_run_code`：JavaScript 在隔离 Worker 中运行，Python 在本机解释器可用时以受限模式运行；技能包脚本本身不会被隐式执行。
-  - 支持以 **.zip 压缩包** 形式一键导出与导入外部技能，内置 5 大专业领域预置技能。
-- 📐 **Markdown 与 LaTeX 数学公式渲染**：聊天气泡支持自然换行；全面支持行内公式、独立块级公式、矩阵/方程组对齐环境与代码块高亮，具备横向滚动防溢出。
-- 👤 **本地个性资料**：可设置仅用于界面展示的昵称与头像；头像支持拖动裁剪并压缩至最多 1000×1000，资料不会加入提示词或发送给模型。
-- 🖼️ **多模态与智能附件**：支持文件拖拽、剪贴板粘贴与图片智能尺寸优化（最大 2048px），原生适配各协议图片/文档块并提供高清灯箱预览。
-- 🌲 **树状会话与分支版本管理**：支持历史消息就地编辑、重新生成，并在多个回答版本间自由分页切换。
-- 🧠 **思考模式与联网搜索**：支持 OpenRouter / Gemini / Claude 深度思考内容与用量归一化；支持 OpenRouter 结构化联网搜索与来源引用。
+## Technical documentation
 
----
+The English documentation is in [`docs/`](./docs/README.md). The corresponding Chinese documentation is in [`docs_zh/`](./docs_zh/README.md).
 
-## 📚 详细技术文档中心
+- [System architecture and process isolation](./docs/architecture.md)
+- [Encrypted storage and vault security](./docs/storage-and-vault.md)
+- [API protocols and request gateway](./docs/gateway-and-protocols.md)
+- [Agent Skills system](./docs/skills-system.md)
+- [MCP servers and tool retrieval](./docs/mcp-integration.md)
+- [UI and interaction model](./docs/ui-and-components.md)
+- [Development, testing, and releases](./docs/development-and-testing.md)
+- [Working directories and developer runtimes](./docs/workspaces-and-runtimes.md)
+- [Internationalization](./docs/i18n.md)
 
-项目按模块整理了详尽的技术设计与开发文档，请查阅 [`docs/`](./docs/README.md) 目录：
+## Quick start
 
-- 🏛️ [系统架构与进程隔离](./docs/architecture.md)
-- 🔐 [加密存储与 Vault 安全设计](./docs/storage-and-vault.md)
-- 🌐 [API 协议适配与网关流式处理](./docs/gateway-and-protocols.md)
-- 🧩 [Agent 技能（Skills）系统与 Zip 生态](./docs/skills-system.md)
-- 🔌 [MCP 外部工具协议与智能检索](./docs/mcp-integration.md)
-- 🖥️ [前端 UI、公式渲染与树状会话](./docs/ui-and-components.md)
-- 🧪 [开发指南、测试规范与打包发布](./docs/development-and-testing.md)
+### Requirements
 
----
+- Node.js 20 or later
+- pnpm 9 or later
+- An OS credential backend: Windows credential protection, macOS Keychain, or Linux Secret Service
 
-## 🚀 快速开始
-
-### 环境准备
-
-- **Node.js**: 22.0.0 或更高版本
-- **pnpm**: 10.0.0 或更高版本（强制使用 pnpm 管理依赖）
-- **系统凭据后端**：Windows Credential Protection、macOS Keychain 或 Linux Secret Service
-
-### 安装与运行
+### Install and run
 
 ```powershell
-# 1. 克隆仓库并安装依赖
-git clone https://github.com/your-username/agent-box.git
+git clone https://github.com/ac-1e9plus7/agent-box.git
 cd agent-box
 pnpm install
 
-# 2. 启动本地开发环境 (Vite + Electron)
+# Start Electron with the Vite development server
 pnpm dev
 
-# 3. 运行类型检查与自动化测试
+# Validate the project
 pnpm typecheck
 pnpm test
 
-# 4. 构建生产应用产物
+# Build production bundles
 pnpm build
 ```
 
-Windows `pnpm dist` 会同时生成引导式 `Setup` 安装包和 portable 免安装版本；
-`Setup` 启动后需经安装向导确认，并支持选择安装目录。
+Additional packaging commands:
 
----
+```powershell
+# Build an unpacked application directory
+pnpm package
 
-## 🔒 安全不变量
+# Build distributable artifacts for the current platform
+pnpm dist
+```
 
-1. **Renderer 永远无法读取 API Key 明文**：前端只能获知 `hasApiKey: boolean`，所有网络通信与签名均由 Electron 主进程完成。
-2. **拒绝无凭据明文降级**：若系统无法提供安全的凭据存储，应用将拒绝保存敏感数据，防止数据意外以明文泄露。
-3. **安全默认路由**：OpenRouter 连接默认开启 `deny`（拒绝数据留存）与 `zdr: true`（零数据保留）上游路由偏好。
+Electron Builder produces an NSIS installer and portable executable on Windows, a DMG on macOS, and an AppImage on Linux. The release workflow builds Windows x64/arm64, macOS native, and Linux x64/arm64 artifacts.
 
----
+## Security invariants
 
-## 📄 开源许可证
+1. **The renderer cannot read stored API keys.** It may submit a newly entered key, but persisted keys are write-only and are represented only by `hasApiKey` or masked fields; network requests and authentication stay in the main process.
+2. **There is no plaintext credential fallback.** If OS secure storage is unavailable, AgentBox refuses to load or persist protected local data.
+3. **OpenRouter routing is privacy-oriented by default.** New model configurations default to `data_collection: "deny"` and `zdr: true`.
+4. **Workspace operations are scoped.** File and terminal tools operate relative to the conversation working directory, reject traversal, and protect sensitive actions with approval policies.
 
-本项目采用 [MIT License](./LICENSE) 授权许可。
+## License
+
+AgentBox is available under the [MIT License](./LICENSE).

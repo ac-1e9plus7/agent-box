@@ -1,83 +1,126 @@
-# 1. 系统架构概览
+# 1. System Architecture Overview
 
-AgentBox 是一个基于 **React 19 + TypeScript + Electron 35 + electron-vite** 构建的本地 AI 智能体与多模型桌面客户端。
+> 中文：[系统架构概览](../docs_zh/architecture.md)
+
+AgentBox is a local-first desktop agent and multi-model AI client. The current project is built with **React 19, TypeScript 5.7, Electron 35, Vite 5.4, and electron-vite 3**. See [`package.json`](../package.json) for the authoritative version ranges.
 
 ---
 
-## 🏗️ 总体架构图
+## 🏗️ High-level architecture
 
 ```mermaid
 graph TB
-    subgraph Renderer_Process ["Renderer Process (Sandboxed React UI)"]
-        UI["React 19 UI / Components"]
-        State["State Management & Context Projection"]
-        PreloadAPI["window.agentbox API"]
-        UI --> State
-        State --> PreloadAPI
+    subgraph Renderer["Renderer Process · sandboxed React UI"]
+        UI["React components and local UI state"]
+        Projection["Conversation tree / context projection"]
+        PublicAPI["window.agentbox · frozen API"]
+        UI --> Projection --> PublicAPI
     end
 
-    subgraph Preload ["Preload Boundary (Sandboxed CJS)"]
-        PreloadAPI -.->|"IPC Invoke / Send"| IPC_Bridge["IPC Handlers with Sender Validation"]
+    subgraph Preload["Preload Boundary · sandboxed CommonJS"]
+        Bridge["contextBridge + ipcRenderer"]
+        PublicAPI --> Bridge
     end
 
-    subgraph Main_Process ["Electron Main Process (Node.js Environment)"]
-        IPC_Bridge --> Gateway["ChatGateway & Multi-turn Loop"]
-        IPC_Bridge --> Repo["AppRepository & Encrypted Vault"]
-        IPC_Bridge --> McpMgr["McpManager & Tool Retriever"]
+    subgraph Main["Electron Main Process · Node.js"]
+        IPC["Validated IPC handlers"]
+        Gateway["ChatGateway · streaming and Agent loop"]
+        Repository["AppRepository"]
+        MCP["McpManager / McpClient"]
+        Backup["Backup export / runtime and workspace services"]
+        Adapters["Request + protocol adapters / SSE parser"]
+        Network["undici fetch / ProxyAgent"]
 
-        Gateway --> ReqAdapters["Request Adapters (OpenAI / Responses / Anthropic)"]
-        Gateway --> ProtAdapters["Protocol Adapters & SSE Stream Parsers"]
-        Gateway --> ProxyDispatcher["undici ProxyAgent / fetch"]
-
-        McpMgr --> StdioTrans["Stdio Transport (child_process)"]
-        McpMgr --> SseTrans["Streamable HTTP / Legacy SSE"]
-
-        Repo --> EncStore["EncryptedStore & safeStorage"]
+        Bridge -->|"invoke / event"| IPC
+        IPC --> Gateway
+        IPC --> Repository
+        IPC --> MCP
+        IPC --> Backup
+        Gateway --> Adapters --> Network
+        Gateway --> MCP
     end
 
-    subgraph OS_Layer ["Operating System Layer"]
-        EncStore --> CredentialStore["OS Keyring / Credential Protection"]
-        EncStore --> DiskStorage["Local Encrypted Vault File"]
-        StdioTrans --> LocalMCP["Local CLI Tools (Python, Node, Binary)"]
-        ProxyDispatcher --> CloudAPI["OpenRouter / OpenAI / Anthropic APIs"]
-        SseTrans --> RemoteMCP["Remote MCP Servers"]
+    subgraph Storage["Local security boundary"]
+        Store["EncryptedStore · AES-256-GCM"]
+        SafeStorage["Electron safeStorage"]
+        VaultFiles["master-key.bin + user-data.v1.enc"]
+        Repository --> Store
+        Store --> SafeStorage
+        Store --> VaultFiles
+    end
+
+    subgraph External["Operating system and external services"]
+        KeyStore["OS-backed credential protection"]
+        Providers["OpenRouter / OpenAI / Anthropic / custom APIs"]
+        LocalTools["Local MCP processes and developer runtimes"]
+        RemoteMCP["Remote MCP servers"]
+        Workspace["User-selected workspace"]
+
+        SafeStorage --> KeyStore
+        Network --> Providers
+        MCP --> LocalTools
+        MCP --> RemoteMCP
+        Backup --> Workspace
     end
 ```
 
----
-
-## 🔒 进程隔离与安全模型
-
-AgentBox 严格遵循 Electron 安全最佳实践，将系统划分为相互隔离的执行环境：
-
-### 1. 渲染进程（Renderer Process）
-- **完全沙箱化**：配置 `sandbox: true`、`contextIsolation: true`、`nodeIntegration: false` 和 `webSecurity: true`。
-- **无敏感数据访问权**：渲染进程永远无法获取 API Key 明文或 Vault 主密钥。所有供应商配置在传递给前端时，API Key 均被脱敏（仅暴露布尔值 `hasApiKey`）。
-- **CSP 策略**：生产环境下以 `file://` 协议加载，严格的内容安全策略（Content Security Policy）嵌入在 `index.html` meta 标签中。
-
-### 2. Preload 边界（Preload Bridge）
-- **最小化白名单暴露**：仅通过 `contextBridge.exposeInMainWorld('agentbox', api)` 暴露经过 `deepFreeze` 冻结的 API 对象。
-- **构建输出规范**：由于开启了沙箱模式，preload 脚本必须打包输出为标准的 CommonJS 单文件（`out/preload/index.cjs`），避免任何顶层 ESM 导入或动态模块加载故障。
-
-### 3. 主进程（Main Process）
-- **IPC 严格验证**：所有 IPC 处理函数（`ipcMain.handle`）均严格校验调用方的 `event.senderFrame === mainWindow.webContents.mainFrame` 与页面 URL。
-- **统一发起网络与系统调用**：所有 API 请求、代理转发、加解密存储和子进程创建（Stdio MCP）均在主进程执行。
-- **窗口与外链生命周期**：阻止任何未授权的新建窗口行为（`setWindowOpenHandler`），所有外部 HTTP/HTTPS 链接必须通过主进程的二次协议与主机名校验后才交由 `shell.openExternal` 唤起系统浏览器。
+The renderer is responsible only for presentation and interaction. Persistence, provider requests, MCP connections, terminal and runtime detection, workspace file access, and backup export all run in the privileged main process. Preload is the application's only public bridge between the two processes.
 
 ---
 
-## 📡 IPC 接口通道一览
+## 🔒 Process isolation and security boundaries
 
-IPC 通道常量集中定义于 [`src/shared/ipc.ts`](../src/shared/ipc.ts)：
+### 1. Renderer process
 
-| 通道名称 | 用途 | 传输数据 |
+- **Electron sandbox:** The window enables `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`, `webSecurity: true`, and `allowRunningInsecureContent: false`.
+- **No Node.js or direct network access:** The production CSP uses `connect-src 'none'` and disables objects, frames, workers, media, manifests, and form submission. While the development server is running, a build plugin additionally permits same-origin connections and WebSockets.
+- **Minimal exposure of secrets:** Provider lists use `ProviderView` and return `hasApiKey`, never the API key itself. MCP environment variables and headers, and proxy URLs containing credentials, are masked before they are returned to the renderer. The Vault key never crosses IPC.
+
+The relevant controls live in [`src/electron/main.ts`](../src/electron/main.ts), [`src/renderer/index.html`](../src/renderer/index.html), and [`electron.vite.config.ts`](../electron.vite.config.ts).
+
+### 2. Preload boundary
+
+- [`src/electron/preload.ts`](../src/electron/preload.ts) exposes only a domain-specific API through `contextBridge.exposeInMainWorld('agentbox', ...)` and recursively freezes the public object.
+- The renderer can invoke only the predefined `ipcRenderer.invoke` channels and listens for stream events through a single `chat:event` subscription. It does not receive generic IPC, filesystem, or process APIs.
+- The sandboxed preload is emitted as the single CommonJS file `out/preload/index.cjs`. The main process is also emitted as `out/main/index.cjs` so CommonJS dependencies continue to resolve correctly from a packaged ASAR.
+
+### 3. Main process
+
+- **Uniform IPC validation:** The registration helper in [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts) checks the `webContents.id`, top-level `senderFrame`, and the exact production `file:` page or development-server origin and path for every invoke. Child frames and unknown pages are rejected.
+- **Permissions denied by default:** Both permission requests and permission checks on the default session are denied.
+- **Renderer navigation is blocked:** `will-navigate` prevents navigation away from the current page, and `setWindowOpenHandler` always denies new windows. Only syntactically valid `http:` or `https:` URLs without embedded usernames or passwords are passed to `shell.openExternal`. There is no hostname allowlist.
+- **Single instance and cleanup:** The application holds a single-instance lock. Closing a window cancels active generation and closes MCP clients; quitting also destroys the in-memory Vault state and key.
+
+---
+
+## 📡 IPC contract
+
+Channel constants are centralized in [`src/shared/ipc.ts`](../src/shared/ipc.ts). The public methods and their types are defined in [`src/electron/preload.ts`](../src/electron/preload.ts) and [`src/shared/types.ts`](../src/shared/types.ts). The legacy `vault:*` and `chat:stream` channels no longer exist.
+
+| Domain | Channels | Purpose |
 | --- | --- | --- |
-| `chat:stream` | 发起会话流式请求 | `ChatRequest` -> 返回 `{ requestId }` |
-| `chat:stop` | 终止进行中的会话生成 | `conversationId` |
-| `chat:event` (Event) | 主进程向渲染进程推送流事件 | `StreamEvent` (增量文本, 思考, 工具调用, 结果等) |
-| `vault:bootstrap` | 初始化并加载 Vault 状态 | 返回全部脱敏配置、模型、供应商、技能与 MCP 服务 |
-| `vault:saveSettings` | 保存用户偏好与供应商密钥 | `SettingsSavePayload` |
-| `vault:clearConversations` | 清除全部历史会话并重新加密 | - |
-| `data:export-backup` | 选择目标路径并导出浅/深会话 ZIP 备份 | `ExportBackupInput` -> `ExportBackupResult` |
-| `skills:*` | 技能 CRUD、开关与重置 | 技能输入定义、ID、开关状态 |
-| `mcp:*` | MCP 服务 CRUD、连通性测试与工具查询 | 服务定义、测试输入、工具列表 |
+| Settings | `settings:get`, `settings:update` | Read or update application settings; mask proxy credentials on output |
+| Providers | `providers:list`, `providers:upsert`, `providers:remove`, `providers:test` | Manage connections, write API keys, and test the models endpoint |
+| Models | `models:list`, `models:upsert`, `models:remove`, `models:discover` | Manage local model configurations and discover remote models |
+| Skills | `skills:list`, `skills:upsert`, `skills:remove`, `skills:toggle`, `skills:reset-defaults` | Manage skill packages, enablement, and built-in skill reset |
+| MCP | `mcp:list-servers`, `mcp:upsert-server`, `mcp:remove-server`, `mcp:toggle-server`, `mcp:test-server`, `mcp:list-tools` | Manage MCP servers, test connections, and query tools |
+| Terminal and runtimes | `terminal:test-shell`, `runtime:test`, `runtime:list-conda-environments` | Test the integrated shell and developer runtimes, and list Conda environments |
+| Workspace | `workspace:select-directory` | Open the system directory picker in the main process and return a normalized absolute path |
+| Conversations | `conversations:list`, `conversations:get`, `conversations:save`, `conversations:remove` | Read and persist conversation trees |
+| Data | `data:export-backup`, `data:clear-conversations` | Export a shallow or deep ZIP backup, or clear all conversations |
+| Chat | `chat:start`, `chat:cancel`, `chat:resolve-tool-approval` | Start a request, cancel it by `requestId`, and resolve tool approval |
+| Stream events | `chat:event` | Push `StreamEvent` values to the renderer: text, reasoning, citations, tools, usage, completion, or errors |
+| Application | `app:get-info` | Return the application name, version, and platform |
+
+`chat:start` returns a newly generated `{ requestId }`. Cancellation, tool approval, and stream events are all associated with this request ID; a conversation ID does not directly control an in-flight generation.
+
+---
+
+## 🔗 Key implementation files
+
+- [`src/electron/main.ts`](../src/electron/main.ts): window security, application lifecycle, and service composition
+- [`src/electron/preload.ts`](../src/electron/preload.ts): renderer-facing API
+- [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts): IPC registration, input boundaries, and trusted-sender checks
+- [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts): request orchestration, stream handling, and the Agent tool loop
+- [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts): Vault domain repository and schema validation
+- [`src/electron/mcp/mcp-manager.ts`](../src/electron/mcp/mcp-manager.ts): MCP client lifecycle and proxy dispatch

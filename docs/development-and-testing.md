@@ -1,78 +1,71 @@
-# 7. 开发、测试与持续集成
+# 7. Development, Testing, and Continuous Integration
 
-本文档汇总了 AgentBox 的工程化配置、测试规范与跨平台构建流水线。
+> [简体中文版本](../docs_zh/development-and-testing.md) · [Back to the English documentation index](./README.md)
 
----
+This document reflects the current `package.json`, Vitest, electron-vite, electron-builder, and GitHub Actions configuration. The repository uses pnpm; do not rewrite `pnpm-lock.yaml` with npm or Yarn.
 
-## 🛠️ 常用开发命令
+## Development commands
 
-本项目强制使用 **pnpm** 作为包管理器（禁止使用 npm 或 Yarn 改写锁文件）：
+CI currently uses Node.js 20 and pnpm 9 as its baseline. The repository does not yet enforce local versions through `engines` or `packageManager`, so matching the CI versions is the first step when investigating environment-specific behavior.
 
-```powershell
-# 依赖安装
-pnpm install
-
-# 启动本地开发环境 (Vite Dev Server + Electron Main)
-pnpm dev
-
-# TypeScript 全局类型检查 (Main, Preload, Shared, Renderer)
-pnpm typecheck
-
-# 运行自动化单元与集成测试 (Vitest)
-pnpm test
-
-# 生产环境完整构建验证
-pnpm build
-
-# 打包未封装应用目录 (用于本地冒烟测试)
-pnpm package
-
-# 生成当前平台的可分发安装包 (NSIS, DMG, AppImage)
-pnpm dist
-```
-
-Windows 的 `Setup` 产物使用 NSIS 引导式安装：双击启动后需要在向导中确认
-安装范围和安装选项，随后可自行选择安装目录，再进入实际安装阶段。构建同时
-保留免安装的 portable `.exe`，其启动行为不经过安装向导。
-
-Electron main 与 sandboxed preload 都显式输出 CommonJS：入口分别为
-`out/main/index.cjs` 和 `out/preload/index.cjs`。`package.json#main` 必须与 main
-产物同步。这里不能只依赖 `pnpm build` 验证；外置依赖在开发目录中可被正常
-解析，但 Windows 的 ESM main 打入 `app.asar` 后可能无法解析 `ajv` 等传统
-CommonJS 包入口。因此调整 Electron/Vite 配置、入口文件或运行时依赖后，还要
-执行 `pnpm package` 并实际启动 `release/win-unpacked/AgentBox.exe`，确认主窗口
-出现且 renderer 进程成功创建。
-
----
-
-## 🧪 自动化测试体系（Vitest）
-
-测试套件位于 `tests/` 目录下，采用 Vitest 进行高速测试，覆盖核心安全性与协议逻辑：
-
-| 测试文件 | 覆盖模块 |
+| Command | Current behavior |
 | --- | --- |
-| `tests/mcp-schema.test.ts` | MCP 服务配置校验与 Vault CRUD 隔离 |
-| `tests/mcp-manager.test.ts` | Stdio 真实子进程通信、JSON-RPC 协议与连接池 |
-| `tests/tool-retriever.test.ts` | BM25 关键词评分算法与 Top-K 检索排序 |
-| `tests/builtin-agent-tools.test.ts` | 内置 Agent 工具目录、工作区文件工具与技能条件挂载 |
-| `tests/gateway-mcp-loop.test.ts` | Agent 模式多轮 Tool Call 自主执行循环与事件流 |
-| `tests/protocol-adapters.test.ts` | OpenAI / Responses / Anthropic 三协议 SSE 流式解析 |
-| `tests/encrypted-store-safety.test.ts` | AES-256-GCM 加密、认证标签与 safeStorage 封装 |
-| `tests/skills-management.test.ts` | 多文件技能解析、Zip 导入导出与 Frontmatter 提取 |
-| `tests/conversation-tree.test.ts` | 树状会话分支切换与版本分页 |
-| `tests/backup-export.test.ts` | 浅/深会话 ZIP、清单、AES-256 密码、工作目录去重与失败清理 |
+| `pnpm install` | Install dependencies; CI uses `pnpm install --frozen-lockfile` |
+| `pnpm dev` | Start Electron and the renderer development server through `electron-vite dev` |
+| `pnpm preview` | Preview an existing electron-vite build |
+| `pnpm typecheck` | Check main/preload/shared with `tsconfig.node.json` and the renderer with `tsconfig.web.json`, without emitting files |
+| `pnpm test` | Run the complete test suite once through `vitest run` |
+| `pnpm test:watch` | Run Vitest in watch mode |
+| `pnpm build` | Run `pnpm typecheck`, then `electron-vite build` |
+| `pnpm package` | Build, then produce an unpacked application with `electron-builder --dir` |
+| `pnpm dist` | Build, then produce electron-builder distributables for the current platform |
 
-### 提交前验证规范
-在提交任何代码改动前，必须确保以下两步 100% 通过：
+## Build output and packaged smoke tests
+
+Both the Electron main process and sandboxed preload are emitted explicitly as CommonJS. Their entry points are `out/main/index.cjs` and `out/preload/index.cjs`; `package.json#main` must remain aligned at `./out/main/index.cjs`. The main build bundles `undici`, while electron-vite normally externalizes other runtime dependencies.
+
+A successful `pnpm build` is not sufficient evidence that the packaged application starts. A dependency that resolves from the development directory can still expose CommonJS/ESM resolution differences from inside `app.asar`. After changing electron-vite settings, entry points, or runtime dependencies, run:
+
+```powershell
+pnpm package
+```
+
+Then launch the unpacked application for the current platform. On Windows, verify that `release/win-unpacked/AgentBox.exe` creates both the main window and renderer process. Windows distribution targets include a guided NSIS installer and a portable `.exe`; macOS targets `.dmg`, and Linux targets `.AppImage`.
+
+## Vitest test system
+
+[`vitest.config.ts`](../vitest.config.ts) uses the Node environment and matches `tests/**/*.test.ts`. The suite does not rely on full Electron UI automation. Renderer behavior that needs unit coverage should therefore be isolated in pure functions. When a test imports a new renderer utility directly, add that module to `tsconfig.node.json` as well.
+
+| Area | Representative tests |
+| --- | --- |
+| Process, security, and untrusted-input boundaries | `gateway-safety`, `encrypted-store-safety`, `repository-validation`, `provider-policy`, `proxy-masking` |
+| Three APIs, SSE, and web metadata | `protocol-adapters`, `sse`, `stream-helper`, `web-metadata-schema`, `web-search-helper` |
+| Vault, schemas, migrations, quotas, and backups | `settings-schema`, `vault-legacy-migration`, `vault-resource-limits`, `clear-conversations`, `backup-export` |
+| Agent, MCP, Skills, and code execution | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor` |
+| Pure renderer logic | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
+| Localization | `i18n`: bundle shape, placeholders, locale selection, terminology rules, and localized built-in Skills |
+
+Tests around external input should cover the normal path, disabled behavior, missing legacy fields, malformed or oversized values, and cancellation/failure paths. A protocol change must cover every affected API format rather than only one provider.
+
+## Pre-commit verification
+
+For ordinary code changes, run at least:
+
 ```powershell
 pnpm test
 pnpm build
 ```
 
----
+`pnpm build` includes type checking but does not include tests. Changes to packaging entry points, dependency externalization, preload, or the Electron startup lifecycle also require `pnpm package` and an unpacked-application smoke test.
 
-## 🚀 跨平台 CI/CD 打包流水线
+## GitHub Actions
 
-项目已配置 GitHub Actions 工作流（`.github/workflows/release.yml`）：
-- 当推送发布标签（如 `v*`）时，自动在 **Windows**、**macOS** 与 **Linux** 原生运行器上并行执行构建。
-- 自动生成 Windows 安装包（`.exe`）、macOS 镜像（`.dmg`）与 Linux 软件包（`.AppImage`），并自动发布至 GitHub Releases。
+The current [`.github/workflows/release.yml`](../.github/workflows/release.yml) runs for tags matching `v*.*.*` and for manual `workflow_dispatch` events. Its build matrix is:
+
+- Windows x64 and arm64;
+- macOS on the runner's native architecture;
+- Ubuntu x64 and arm64.
+
+Each job installs pnpm 9 and Node.js 20, installs dependencies with the frozen lockfile, runs `pnpm build`, invokes `electron-builder --publish never`, and uploads `release/*.exe`, `release/*.dmg`, and `release/*.AppImage` as GitHub Actions artifacts.
+
+The workflow currently **does not run `pnpm test` and does not create or publish a GitHub Release**. Tests therefore remain a required local/review gate. If the product workflow is expected to publish releases automatically, test and release-publishing steps must be added explicitly; artifact upload alone is not a release.

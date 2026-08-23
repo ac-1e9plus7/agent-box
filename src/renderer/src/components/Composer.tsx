@@ -312,7 +312,7 @@ export function Composer({
                   title={t("固定本会话技能；不选择时由 Agent 自动路由")}
                 >
                   <Icon name="sparkles" size={14} />
-                  <span>Skills · {fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : t("自动")}</span>
+                  <span>{t('skills.selectorLabel', { selection: fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : t("自动") })}</span>
                   <Icon name="chevron-down" size={12} />
                 </summary>
                 <div className="mcp-conversation-menu skill-conversation-menu">
@@ -397,7 +397,7 @@ export function Composer({
                 value={webSearchAvailable ? webSearchMode : 'off'}
                 onChange={(event) => onWebSearchModeChange(event.target.value as WebSearchMode)}
               >
-                <option value="off">{t("关闭")}</option>
+                <option value="off">{t('common.off')}</option>
                 <option value="auto">{t("自动搜索")}</option>
                 <option value="native">{t("原生优先（不支持时回退）")}</option>
               </select>

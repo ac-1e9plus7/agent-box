@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { basename } from 'node:path'
 import type { DeveloperRuntimeSettings, IntegratedTerminalShellConfig, TerminalShellTestResult } from '../../shared/types'
 import { buildDeveloperEnvironment } from './runtime-environments'
-import { t } from "../../shared/i18n"
+import { getLanguage, t } from '../../shared/i18n'
 
 export type TerminalShellKind = 'powershell' | 'cmd' | 'posix' | 'fish' | 'custom'
 
@@ -109,7 +109,7 @@ export async function executeTerminalCommand(
   }
   if (!command.trim()) return { result: t("终端命令不能为空。"), isError: true, shell }
   if (command.length > MAX_COMMAND_CHARACTERS) {
-    return { result: t("终端命令超过 {value0} 字符限制。", { value0: MAX_COMMAND_CHARACTERS.toLocaleString() }), isError: true, shell }
+    return { result: t("终端命令超过 {value0} 字符限制。", { value0: MAX_COMMAND_CHARACTERS.toLocaleString(getLanguage()) }), isError: true, shell }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, options.timeoutMs ?? 20_000))
   const runtimeSettings = options.developerRuntimes

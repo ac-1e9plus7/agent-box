@@ -4,7 +4,7 @@ import {
   RESERVED_SAFETY_TOKENS,
   estimateMessageTokens,
 } from '../../shared/token-estimate'
-import { t } from "../../shared/i18n"
+import { getLanguage, t } from '../../shared/i18n'
 
 /**
  * Accepts the structural subset of a message that the projection needs. The
@@ -129,7 +129,7 @@ export function projectContext(
       canTrimOnce: true,
       trimTurnCount: trimCount,
       tone: 'error',
-      message: t("已超出可用上下文约 {value0} tokens。手动模式不会自动删除历史；你可仅为本次请求按完整轮次裁剪。", { value0: overflow.toLocaleString('zh-CN') }),
+      message: t("已超出可用上下文约 {value0} tokens。手动模式不会自动删除历史；你可仅为本次请求按完整轮次裁剪。", { value0: overflow.toLocaleString(getLanguage()) }),
     }
   }
 

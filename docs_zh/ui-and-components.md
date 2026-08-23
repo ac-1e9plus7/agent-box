@@ -1,0 +1,67 @@
+# 6. 前端 UI 与交互系统
+
+> [English version](../docs/ui-and-components.md) · [返回中文文档索引](./README.md)
+
+AgentBox 的渲染层基于 React 19 与 TypeScript，负责界面展示、临时交互状态和经 preload 白名单调用主进程；它不读取 API Key，也不直接请求模型服务。
+
+## 渲染层组织
+
+| 模块 | 职责 |
+| --- | --- |
+| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | 启动数据装载、会话和流式状态编排、设置保存，以及主界面组件组合 |
+| [`src/renderer/src/components/`](../src/renderer/src/components/) | 侧栏、顶部栏、消息区、输入框、新对话和设置对话框等 React 组件 |
+| [`src/renderer/src/*.ts`](../src/renderer/src/) | 会话上下文投影、标题清洗、附件处理、Markdown 预处理、快捷键和工作目录分组等可测试纯逻辑 |
+| [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) | renderer 与测试共用的消息树遍历、分支切换和节点删除逻辑 |
+
+主题通过 `document.documentElement.dataset.theme` 在 `system`、`light` 和 `dark` 之间切换；系统主题使用 `prefers-color-scheme`。宽度不超过 860px 时侧栏改为抽屉，680px 以下进一步压缩顶部栏与输入区；`prefers-reduced-motion` 会关闭非必要动画。
+
+## 本地用户资料
+
+- 「设置 → 通用 → 个人资料」支持昵称与头像编辑，昵称最多 50 个字符且不能包含换行。
+- [`avatar-helper.ts`](../src/renderer/src/avatar-helper.ts) 在 340px 方形视口内提供拖动、方向键移动和 1–3 倍缩放。源文件上限为 30 MB；拒绝 SVG、边长超过 20,000px 或总像素超过 1 亿的图片。
+- 裁剪结果优先编码为 WebP，不会放大原始裁剪区域，输出边长不超过 1,000px；必要时逐步降低质量和尺寸，以满足头像 Data URL 的存储上限。
+- 当前资料统一显示在侧栏设置入口和所有用户消息旁。历史消息不复制昵称或头像，因此修改资料后会同步改变历史消息的展示。
+- `userNickname` 与 `userAvatar` 仅用于本地展示。上下文估算只读取 `systemPrompt`，网关也只接收显式系统提示词、会话消息和附件，资料不会进入模型请求。
+
+## 树状会话与版本管理
+
+每条消息通过 `id` 和 `parentMessageId` 组成树，`Conversation.currentLeafId` 指向当前分支。旧的线性消息缺少 `parentMessageId` 时，[`ensureMessageTree`](../src/shared/conversation-tree.ts) 会按原存储顺序补齐父链。
+
+- **活动分支**：[`getActiveMessageChain`](../src/shared/conversation-tree.ts) 从 `currentLeafId` 回溯到根；没有有效叶节点时，按每个分叉点最后写入的子节点选择默认分支。
+- **版本分页**：同一父节点下、角色相同的消息视为兄弟版本。消息气泡显示 `2 / 3` 等分页器；切换版本时会选择该版本下最深的最新后代。
+- **重新生成回答**：在同一用户消息下追加新的 assistant 兄弟节点，原回答及其后代仍保留为其他分支。
+- **编辑用户消息**：选择“仅保存”会原位修改当前节点并保留后代；选择“保存并重新生成”会追加新的 user 兄弟节点和 assistant 子节点，原分支不会被删除。
+- **删除消息**：删除目标节点及其全部后代；若存在兄弟版本则切换到相邻版本，否则回退到父节点下可用的最深叶节点。
+
+Agent 回复因取消、限流、网络/API 错误、输出上限或工具轮次上限而中断时，会保存 `interruption`、已完成的工具结果和 `agentTrace`。只有当前分支最后一条中断回复可“从中断处继续”；系统会创建新的 user/assistant 分支并把前一条回复作为 checkpoint。选择“重新生成”则从原父级用户消息创建全新回答版本。
+
+## Markdown、代码与数学公式
+
+[`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) 使用 `react-markdown`，并组合以下插件：
+
+- `remark-gfm`：表格、任务列表、删除线和自动链接等 GitHub Flavored Markdown。
+- `remark-breaks`：单次回车渲染为换行，适合聊天文本。
+- `remark-math` 与 `rehype-katex`：解析并渲染 KaTeX，错误公式不会使整条消息崩溃。
+
+[`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts) 会在渲染前把 `\(...\)`、`\[...\]`、`math` / `latex-math` 代码块和独立的 `matrix`、`aligned`、`cases` 等环境归一为 Markdown 数学语法，同时保护行内代码、围栏代码和常见美元金额。代码块提供语言标签与复制按钮；超长代码和公式使用独立横向滚动。消息链接仅在新窗口打开，并带有 `noopener noreferrer`。
+
+## 多模态附件
+
+[`file-helper.ts`](../src/renderer/src/file-helper.ts) 支持文件选择、拖放和从剪贴板粘贴文件：
+
+- 单个源文件最大 25 MB；主进程网关还会校验附件数量和字段大小。
+- 图片保存为 Data URL。最大边超过 2,048px 时在 renderer 中等比缩小；PNG 保持 PNG，其他图片重编码为质量 0.9 的 JPEG。若浏览器无法解码或创建画布，则保留原始数据。
+- 已知文本/代码格式以 UTF-8 文本读取；PDF 以 Data URL 读取。无法识别的文件先尝试按文本读取，再回退为 document Data URL。
+- 图片附件可在消息中打开灯箱预览；文本和文档附件显示名称、类型图标与原始文件大小。
+- 协议能力并不完全相同：图片和文本会转换为三种 API 格式各自的内容块；Anthropic Messages API 可发送 PDF document block，而当前 OpenAI Chat Completions API / OpenAI Responses API 适配器仅为 document 附件加入文件名占位文本。
+
+## 输入框与快捷键
+
+[`composer-helper.ts`](../src/renderer/src/composer-helper.ts) 将按键判定保持为纯函数，并忽略输入法组合过程中的 Enter：
+
+| 设置 | 发送 | 换行 |
+| --- | --- | --- |
+| “按 Enter 发送”开启 | `Enter` | `Shift + Enter`，或 `Ctrl/Cmd + Enter`（显式插入换行） |
+| “按 Enter 发送”关闭 | `Ctrl/Cmd + Enter` | `Enter` 或 `Shift + Enter` |
+
+输入框工具栏还承载 Agent 模式、Skills 路由、可用 MCP server、reasoning、web search 与上下文预算状态。上下文超限时，发送会被阻止，或在允许的情况下提供“本次裁剪并发送”。应用级 `Ctrl/Cmd + N` 打开新对话面板。

@@ -7,6 +7,7 @@ import type {
   ProviderView,
   WebSearchMode as SharedWebSearchMode
 } from '../../shared/types'
+import { t } from '../../shared/i18n'
 
 export type ApiFormat = SharedApiFormat
 export type WebSearchMode = SharedWebSearchMode
@@ -106,7 +107,7 @@ export type IconName =
   | 'zap'
 
 export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
-  'openai-chat-completions': 'OpenAI Chat Completions',
-  'openai-responses': 'OpenAI Responses',
-  'anthropic-messages': 'Anthropic Messages'
+  'openai-chat-completions': t('apiFormat.openaiChatCompletions'),
+  'openai-responses': t('apiFormat.openaiResponses'),
+  'anthropic-messages': t('apiFormat.anthropicMessages')
 }

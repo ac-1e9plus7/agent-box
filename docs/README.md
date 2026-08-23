@@ -1,32 +1,27 @@
-# AgentBox 技术文档中心
+# AgentBox Technical Documentation
 
-欢迎查阅 AgentBox 的架构与技术开发文档。本文档库按模块组织，旨在为开发者、维护者和编码智能体提供清晰、详尽的系统设计原理、核心接口规范与最佳实践。
+> [简体中文文档](../docs_zh/README.md) · [Back to the English project README](../README.md)
 
----
+This documentation set describes AgentBox's current design, boundaries, and maintenance requirements by code module. When behavior, interfaces, schemas, limits, or build workflows change, update the corresponding English and Chinese documents together.
 
-## 📚 文档目录
+## Documentation index
 
-| 文档模块 | 主要内容 | 关键源码文件 |
-| --- | --- | --- |
-| [1. 系统架构概览](./architecture.md) | 进程模型、沙箱隔离、IPC 契约、安全性不变量与生命周期 | `src/electron/main.ts`, `src/electron/preload.ts`, `src/shared/ipc.ts` |
-| [2. 加密存储与 Vault 安全](./storage-and-vault.md) | 双层密钥模型、AES-256-GCM、浅/深 ZIP 备份、原子落盘、资源配额限制 | `src/electron/storage/`, `src/electron/backup/` |
-| [3. API 协议与请求网关](./gateway-and-protocols.md) | 3 种 API 格式适配、流式解析、思考模式、联网搜索、代理转发 | `src/electron/api/` |
-| [4. Agent 技能（Skills）系统](./skills-system.md) | 多文件技能规范、Python 3 优先、Zip 导入导出生态、动态提示词注入 | `src/electron/storage/default-skills.ts`, `src/shared/skill-zip.ts` |
-| [5. MCP 外部工具协议与检索](./mcp-integration.md) | Stdio/SSE 传输、连接池管理器、BM25 智能工具检索、Agent 多轮循环调用 | `src/electron/mcp/`, `src/electron/api/gateway.ts` |
-| [6. 会话工作目录与开发运行时](./workspaces-and-runtimes.md) | 目录分组、终端 cwd、JDK/Go/PHP/Python、venv 与 Conda | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
-| [7. 前端 UI 与交互系统](./ui-and-components.md) | 树状会话与分支版本、Markdown & LaTeX 公式渲染、多模态附件、快捷键 | `src/renderer/src/` |
-| [8. 开发、测试与持续集成](./development-and-testing.md) | 构建命令、TypeScript 类型配置、Vitest 测试规范、跨平台 CI/CD 打包 | `tests/`, `package.json`, `.github/workflows/` |
+| # | Document | Scope | Primary source |
+| --- | --- | --- | --- |
+| 1 | [System architecture](./architecture.md) | Electron process model, sandbox, preload/IPC boundaries, windows, and external-link lifecycle | `src/electron/main.ts`, `src/electron/preload.ts`, `src/shared/ipc.ts` |
+| 2 | [Encrypted storage and Vault security](./storage-and-vault.md) | safeStorage, AES-256-GCM, schemas, quotas, data clearing, and ZIP backups | `src/electron/storage/`, `src/electron/backup/` |
+| 3 | [API protocols and request gateway](./gateway-and-protocols.md) | OpenAI Chat Completions API, OpenAI Responses API, Anthropic Messages API, SSE, reasoning, web search, and proxies | `src/electron/api/` |
+| 4 | [Agent Skills system](./skills-system.md) | Multi-file Skills, built-ins, ZIP import/export, retrieval, and dynamic prompt augmentation | `src/electron/storage/default-skills.ts`, `src/shared/skill-zip.ts` |
+| 5 | [MCP tools and retrieval](./mcp-integration.md) | stdio, Streamable HTTP, legacy HTTP+SSE, connection pooling, retrieval, approvals, and multi-turn Agent execution | `src/electron/mcp/`, `src/electron/api/gateway.ts` |
+| 6 | [Renderer UI and interactions](./ui-and-components.md) | React renderer, message trees, Markdown/KaTeX, attachments, profiles, and keyboard behavior | `src/renderer/src/`, `src/shared/conversation-tree.ts` |
+| 7 | [Development, testing, and CI](./development-and-testing.md) | pnpm scripts, Vitest, CommonJS packaging constraints, smoke tests, and GitHub Actions | `package.json`, `tests/`, `.github/workflows/` |
+| 8 | [Conversation workspaces and development runtimes](./workspaces-and-runtimes.md) | Workspace boundaries, integrated terminal, JDK/Go/PHP/Python, venv, and Conda | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
+| 9 | [Localization and English terminology](./i18n.md) | First-launch language selection, shared bundles, generation, contextual translation, and terminology checks | `src/shared/i18n/`, `scripts/localize-renderer.mjs` |
 
----
+## Core maintenance principles
 
-## 🧭 快速导览与核心设计原则
-
-1. **强进程隔离（Process Sandboxing）**：
-   渲染进程（Renderer）运行在沙箱中（`sandbox: true, contextIsolation: true, nodeIntegration: false`），**绝对禁止接触 API Key 明文**，所有外部网络请求、加密存储与系统进程操作均必须且仅能在 Electron 主进程执行。
-2. **多协议原生适配（Multi-protocol Native Support）**：
-   解耦“模型”、“供应商连接”与“API 格式”。统一支持 OpenAI Chat Completions、OpenAI Responses 与 Anthropic Messages 三大协议格式，并在网关层完成双向归一化转换。
-3. **专家级 Agent 与工具生态（Dual-Track Agent Ecosystem）**：
-   - **Skills 技能体系**：以多文档 Markdown + Python 3 / Shell 规范，通过 Prompt Augmentation 注入高阶思维模式与沙箱脚本。
-   - **MCP 外部工具体系**：以 Model Context Protocol 为标准，支持 Stdio/SSE 接入本地与网络服务，通过 BM25 智能检索选出 Top-K 工具并驱动多轮自主执行循环。
-4. **安全与隐私优先（Privacy & Security by Default）**：
-   本地数据全程 AES-256-GCM 加密，主密钥受操作系统凭据设施（Windows Credential Protection / macOS Keychain / Linux Secret Service）保护；默认选用 OpenRouter Zero Data Retention（ZDR）与拒绝数据留存路由。
+1. **Process isolation:** Keep the renderer at `sandbox: true`, `contextIsolation: true`, and `nodeIntegration: false`. Secrets, network calls, encrypted persistence, and system-process operations belong only in the main process.
+2. **Separate product entities from protocols:** Providers, models, and API formats are distinct entities. The gateway normalizes all three upstream API families into shared request and event types.
+3. **Protect local data:** The Vault uses AES-256-GCM and wraps its data key with OS secure storage. Never fall back to plaintext when secure storage is unavailable.
+4. **Enforce workspace boundaries:** Agent file and execution tools operate only under a conversation's absolute working directory and reject symbolic-link escapes.
+5. **Keep both languages synchronized:** The root READMEs, both documentation indexes, and all nine module documents have language counterparts. Product-copy changes also require synchronized resource bundles and localization tests.

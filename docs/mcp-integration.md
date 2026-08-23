@@ -1,104 +1,133 @@
-# 5. MCP 外部工具协议与智能检索
+# 5. MCP Integration and Intelligent Tool Retrieval
 
-Model Context Protocol (MCP) 是开放的工具集成标准。AgentBox 基于官方 TypeScript SDK 实现客户端生命周期、智能工具检索、权限审批与多轮执行循环。
+> [中文文档](../docs_zh/mcp-integration.md)
+
+The Model Context Protocol (MCP) is an open protocol for tool integration. AgentBox uses the official TypeScript SDK to manage MCP client lifecycles, while the Gateway enforces server allowlists, tool retrieval, argument validation, user approval, and multi-turn execution.
 
 ---
 
-## 🔌 传输架构（Stdio、Streamable HTTP 与旧 SSE）
+## Transports and Connection Lifecycle
 
 ```text
 +--------------------------------------------------------------------+
 |                         ChatGateway                                |
-|             (Multi-turn Tool Loop / Prompt Augmentation)           |
+|          Tool selection / approval / multi-turn execution          |
 +--------------------------------------------------------------------+
                                   |
                                   v
 +--------------------------------------------------------------------+
 |                         McpManager                                 |
-|             (Client Pool / Caching / Tool Aggregation)             |
+|          Client pool / paginated listing / aggregation             |
 +--------------------------------------------------------------------+
                    |                                  |
                    v                                  v
 +------------------------------------+  +----------------------------+
-| Official StdioClientTransport      |  | StreamableHTTPClientTransport |
-| child_process + JSON-RPC           |  | HTTP POST/GET + optional SSE  |
+| Official StdioClientTransport      |  | Remote HTTP transports     |
+| child process + JSON-RPC            |  | Streamable HTTP / legacy HTTP+SSE|
 +------------------------------------+  +----------------------------+
-                   |                                  |
-                   v                                  v
-     [Local Python/Node/CLI MCP]             [Remote MCP Server]
 ```
 
-### 1. Stdio Transport（本地子进程）
-- 使用官方 `StdioClientTransport` 启动本地命令，继承经过 SDK 筛选的安全环境变量并叠加用户配置。
-- 单条协议消息限制为 10 MiB；SDK 负责 JSON-RPC、版本协商、取消通知和进程关闭。
+The persisted transport values map to SDK transports as follows:
 
-### 2. Streamable HTTP（远程服务）
-- 新配置默认使用当前标准 Streamable HTTP，自动处理协议版本头、会话 ID、SSE 流恢复和重连。
-- 若现代握手失败，可回退到旧 HTTP+SSE；也可在配置中显式选择旧 SSE。
-- 自定义认证头在加密 Vault 中保存，Renderer 只能看到遮罩值；所有远程请求遵循应用代理设置。
+| Config value | SDK transport | Behavior |
+| --- | --- | --- |
+| `stdio` | `StdioClientTransport` | Starts a local command and exchanges JSON-RPC over stdin/stdout. |
+| `http` | `StreamableHTTPClientTransport` | Tries the current Streamable HTTP transport first, then automatically falls back to legacy HTTP+SSE if connection setup fails. |
+| `sse` | `SSEClientTransport` | Explicitly uses legacy HTTP+SSE without first trying Streamable HTTP. |
 
----
+- A Stdio child receives the SDK's safe default environment plus environment variables configured for that MCP server. Its per-message buffer limit is 10 MiB.
+- Streamable HTTP uses bounded reconnection settings (500 ms initial delay, 10 seconds maximum, and 3 retries). The SDK handles session IDs, protocol-version headers, and SSE streams.
+- A remote HTTP endpoint must use HTTPS; plain HTTP is allowed only for loopback hosts. Saving a URL removes user information, query parameters, and fragments, so authentication should be supplied through custom request headers.
+- Stdio environment variables and remote headers are stored in the encrypted Vault. Renderer-facing configuration contains only same-key masked values. Controlled headers such as `Host`, `Content-Length`, cookies, and proxy authorization are rejected.
+- Remote MCP requests honor the application's custom network proxy setting.
+- [`McpManager`](../src/electron/mcp/mcp-manager.ts) reuses clients whose configuration has not changed and aggregates tools with a maximum concurrency of 8 servers. Each tool-list page has a 30-second timeout, with limits of 64 pages and 2,000 tools per server. A tool-list change notification is currently logged; the next listing fetches the list again.
 
-## 🎯 BM25 智能工具检索引擎（Tool Retriever）
-
-在大规模工具集成场景下，将所有工具完整注入请求体会迅速耗尽上下文并导致模型注意力分散。AgentBox 在 [`src/electron/mcp/tool-retriever.ts`](../src/electron/mcp/tool-retriever.ts) 中实现了智能检索引擎：
-
-- **分词与索引**：提取用户 Prompt 中的中英文词汇与 N-gram 关键片段。
-- **相关度评分**：使用 BM25 的 TF、IDF 与文档长度归一化，并对工具名精确命中增加权重。
-- **检索模式**：
-  - **智能检索（`auto`）**：只注入超过最低相关度阈值的前 8 个工具；无相关工具时不做任意补齐。
-  - **全部挂载（`all`）**：加载所有已启用服务的全部工具。
+The transport implementation is in [`src/electron/mcp/mcp-client.ts`](../src/electron/mcp/mcp-client.ts).
 
 ---
 
-## 🔄 Agent 多轮自主执行循环（Multi-turn Execution Loop）
+## BM25 Retrieval and the Conversation Allowlist
 
-当大模型在回复过程中发起工具调用时，网关层自动执行闭环处理：
+[`src/electron/mcp/tool-retriever.ts`](../src/electron/mcp/tool-retriever.ts) builds a retrieval document from each tool's name, server name, description, parameter names, and parameter descriptions, then applies BM25 scoring to English and Chinese terms:
+
+- **Automatic retrieval (`auto`)**: the Gateway uses the latest user message as the query and exposes up to 8 MCP tools scoring at least 0.75. Exact tool-name and name-fragment matches receive extra weight. It does not pad an empty or short result with unrelated tools.
+- **Expose all (`all`)**: exposes every MCP tool allowed for the conversation without relevance filtering.
+- Retrieval applies only to external MCP tools. Built-in Agent tools such as `agentbox_load_skill`, the code runner, workspace file tools, and the integrated terminal are appended when available and do not participate in BM25 ranking.
+
+Each conversation establishes a server allowlist through `mcpServerIds`:
+
+- If the field is absent, tools may be aggregated from every globally enabled MCP server.
+- An empty array allows no MCP servers.
+- A non-empty array allows only listed servers that remain globally enabled. Missing or disabled IDs expose no tools.
+
+To prevent collisions and forged calls, the model receives a provider-safe alias of at most 64 characters containing server/tool hashes. The executor accepts only aliases actually exposed during the current turn, then routes them back to the original server ID and tool name.
+
+---
+
+## Multi-turn Agent Execution
 
 ```mermaid
 sequenceDiagram
-    participant User as "用户 / Renderer"
-    participant GW as "ChatGateway"
-    participant Model as "大模型 API (OpenAI/Anthropic)"
-    participant MCP as "McpManager (主进程)"
+    participant User as Renderer
+    participant GW as ChatGateway
+    participant Model as Model API
+    participant MCP as McpManager
 
-    User->>GW: 发送问题（开启 Agent 模式）
-    GW->>Model: 携带 Top-K 工具定义发起请求
-    Model-->>GW: 返回 tool_call (例如 read_file)
-    GW->>User: 推送 tool-call-start / complete 事件 (UI 展示卡片)
-    GW->>MCP: 执行工具调用 (read_file)
-    MCP-->>GW: 返回执行结果 (文件内容)
-    GW->>User: 推送 tool-result 事件
-    GW->>Model: 携带工具执行结果发起下一轮补全 (Turn 2)
-    Model-->>GW: 输出最终回答文本
-    GW->>User: 推送 text-delta 与 done 事件
+    User->>GW: Agent request + server allowlist
+    GW->>Model: System Instructions + selected tool definitions
+    Model-->>GW: tool_call / function_call / tool_use
+    GW->>User: Tool card and approval request when required
+    GW->>MCP: Execute after validation
+    MCP-->>GW: Text, structured, or media result
+    GW->>User: tool-result
+    GW->>Model: Append result and start the next turn
+    Model-->>GW: Final text
+    GW->>User: text-delta + done
 ```
 
-- **最大循环轮次**：默认支持 30 轮连续工具调用，可在「设置 → 通用 → Agent 工具调用轮次」中调整为 1–100 轮；旧 Vault 缺少该字段时自动迁移为 30。
-- **跨协议格式映射**：在 OpenAI `tool_calls`、Responses `function_call` 与 Anthropic `tool_use` 之间自动桥接。
-- **有序事件账本**：`agentTrace` 保留每轮文本、工具调用与工具结果，确保后续对话可以按协议正确重放。
-- **中断检查点与恢复**：API 限流、网络/API 错误、输出上限、工具轮次上限或用户停止时，将错误原因、已完成结果、未完成工具状态与部分正文保存为 `interruption` 检查点。恢复请求会重放 `agentTrace`，优先验证状态未知的副作用操作，并从失败点继续，而不是重新执行已成功步骤。
-- **自然语言继续**：仅当当前分支最后一条助手消息存在中断检查点时，短指令 `go`、`continue`、`resume`、`retry`、`继续`、`再次尝试` 等才会被识别为恢复；包含附件或实质性新要求的消息仍按普通新问题处理。
-- **唯一工具路由**：模型只看到服务器作用域内的安全别名；执行器仅接受本轮实际暴露的别名。
+- The Gateway bridges OpenAI Chat Completions API `tool_calls`, OpenAI Responses API `function_call` items, and Anthropic Messages API `tool_use` blocks.
+- The Agent tool-turn limit defaults to 30 and can be configured from 1 to 100. When the limit is reached, calls not yet executed in that turn receive an error result.
+- `agentTrace` is an ordered, protocol-neutral ledger of model text/thinking blocks, tool calls, tool results, and required provider items. It supports faithful replay in later turns.
+- Rate limits, network/API errors, output limits, the tool-turn limit, and user cancellation produce an `interruption` checkpoint. Resume reuses completed results; before retrying an operation with unknown status and possible side effects, the Agent should inspect external state.
+- Short instructions such as `go`, `continue`, `resume`, `retry`, or `继续` are treated as resume requests only when the last Assistant message on the active branch contains a checkpoint. Attachments or substantive new requirements remain new requests.
 
 ---
 
-## 🛡️ 权限、安全与资源边界
+## Approval Policy and Execution Boundaries
 
-- 默认采用“智能确认”：只有服务器明确声明为只读、非破坏且封闭环境的工具可以自动执行，其余调用必须由用户批准。
-- 可在设置中切换为“每次确认”或 **Full Access**。Full Access 会跳过代码、终端和 MCP 工具的全部审批，仅适合完全可信的模型、服务和任务。
-- 审批等待默认 5 分钟；可切换为“永不超时”，此时只有用户批准/拒绝、停止请求、关闭会话或退出应用才会结束等待。120 秒网络停滞监控不会在审批期间运行。
-- 调用前使用 JSON Schema 校验参数；非法 JSON、未知工具、未暴露工具和 Schema 不匹配均不会执行。
-- 工具请求支持取消和 60 秒超时；文本结果限制为 100,000 字符，二进制结果限制为 2 MiB。
-- 内置 `agentbox_read_file` / `agentbox_write_file` 只接受相对当前工作目录的路径，拒绝目录穿越、绝对路径和符号链接；读取文件限制为 2 MiB，单次写入内容限制为 100,000 字符且不超过 512 KiB。读取工具默认可自动执行，写入工具遵循敏感操作审批策略。
-- 工具描述和返回内容始终按不可信数据处理，不会被提升为系统指令。
-- 每个会话可单独选择允许暴露的 MCP 服务，空列表表示不允许任何 MCP 服务。
+Every tool call is parsed as JSON and checked against the tool's input JSON Schema. Invalid JSON, schema mismatches, unknown tools, and tools not exposed during the current turn are never executed.
+
+### Approval modes
+
+| Setting | Effective behavior |
+| --- | --- |
+| **Confirm sensitive operations (`sensitive`, default)** | A tool runs automatically only if it declares all three conditions: `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. Every other tool requires approval. |
+| **Always confirm (`always`)** | Every code, terminal, workspace, and MCP tool call requires approval, except `agentbox_load_skill`, which only loads local instructions. |
+| **Full Access (`full-access`)** | Skips approval for the code runner, terminal, workspace file tools, and external MCP tools. It does not relax path, schema, timeout, or result-size checks. |
+
+Built-in tools add these fixed rules:
+
+- `agentbox_load_skill` loads local documents from an enabled skill and never executes its scripts, so it completes without an approval prompt.
+- `agentbox_run_code` and `agentbox_run_terminal` are always classified as sensitive. They require approval under every mode except Full Access.
+- `agentbox_read_file` carries a complete read-only, non-destructive, closed-world declaration and may run automatically under the default policy. `agentbox_write_file` is a destructive write and requires approval.
+- `ToolAnnotations` on an external MCP tool are claims made by its server. If any part of the complete low-risk declaration is missing, the default policy treats the tool as sensitive.
+
+An approval waits for 5 minutes by default, or indefinitely when configured. The 120-second network-stall watchdog is paused during approval. Rejection, request cancellation, or the end of the request lifecycle terminates the wait. Full Access is appropriate only for fully trusted models, MCP servers, and tasks.
+
+### Resource and data boundaries
+
+- MCP `callTool` has a 60-second timeout and receives the request cancellation signal.
+- MCP text and structured results retain at most about 100,000 characters. Base64 data for each image, audio item, or binary resource is limited to 2 MiB; over-limit data is omitted or marked as truncated.
+- `agentbox_read_file` and `agentbox_write_file` reject absolute paths, `..`, UNC paths, and symlinks inside the working directory. Reads accept only regular UTF-8 files up to 2 MiB; a single write is constrained by both 100,000 characters and 512 KiB.
+- Tool descriptions, arguments, results, and external resources are untrusted data and cannot override higher-priority instructions.
+- The integrated terminal receives only an initial `cwd`; it is not an operating-system sandbox. An approved command can still use absolute paths, access files outside the working directory, launch processes, or use the network. See [Conversation Working Directories and Developer Runtimes](workspaces-and-runtimes.md).
 
 ---
 
-## 🖥️ UI 组件与交互
+## UI and Diagnostics
 
-1. **设置中心与 Tool Explorer**：在「设置 → MCP 外部工具」中测试连接和传输类型。Tool Explorer 同时汇总已启用 MCP 服务工具和 AgentBox 内置工具（技能加载、代码运行、工作区文件读写与集成终端），可按来源筛选并浏览参数 Schema；内置工具使用独立的「系统内置」标记。工作区文件工具仅在具有工作目录的 Agent 会话中实际挂载。
-2. **会话白名单**：Composer 的 MCP 菜单用于选择当前会话可使用的服务器。
-3. **交互式卡片**：聊天气泡实时显示等待审批、执行中、完成、拒绝和错误状态，并展示参数与截断后的结果。
-4. **中断操作**：可选择“从中断处继续”保留现场恢复，或“重新生成”从原用户问题重新执行整条回复；限流响应会同时展示建议等待时间。
+1. **Settings → MCP External Tools**: create, enable, disable, and test stdio, Streamable HTTP, or legacy HTTP+SSE configurations. A test reports the transport that actually connected, the negotiated protocol version, and the tool count.
+2. **Tool Explorer**: combines enabled MCP tools with AgentBox built-in tools, supports source filtering, and displays input schemas. Workspace file tools appear in the catalog but are mounted only in an Agent conversation that has a working directory.
+3. **Composer allowlist**: selects the MCP servers available to the current conversation.
+4. **Tool cards**: show awaiting approval, executing, completed, denied, or error states, along with arguments and truncated results.
+5. **Interruption recovery**: users can resume from a checkpoint or regenerate from the original user request. These options have different side-effect semantics.

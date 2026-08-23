@@ -1,60 +1,101 @@
-# 4. Agent 技能（Skills）系统
+# 4. Agent Skills System
 
-AgentBox 的技能系统允许用户通过结构化文档与参考脚本，为大模型注入行业专家级工作流与规范。脚本源码不会被应用隐式执行。
+> [中文文档](../docs_zh/skills-system.md)
+
+An AgentBox Skill is a reusable collection of local instructions, Markdown references, and reference scripts. When activated, relevant content is added to the Agent's System Instructions. Importing, enabling, or activating a Skill never executes its script files automatically.
+
+> **Trust boundary:** Skill content influences high-priority model behavior. Import and enable only trusted Skills. Although scripts are not executed automatically, Skill instructions can still ask the model to invoke code, terminal, file, or MCP tools. Those calls remain subject to tool allowlists, argument validation, and approval policy.
 
 ---
 
-## 📁 多文件技能规范
+## Multi-file Format and Storage Model
 
-每个技能以独立的虚拟目录形式组织，包含以下核心文件结构：
+The recommended package structure is:
 
 ```text
 skill-package/
-├── SKILL.md                 # 核心技能规范文档（含 YAML Frontmatter 元数据）
-├── references/              # 辅助参考标准、词库与行业规范文档
+├── SKILL.md                 # Entry instructions; may include simple YAML frontmatter
+├── references/              # Markdown reference material
 │   ├── patterns.md
 │   └── standards.md
-└── scripts/                 # 配套执行脚本（优先采用 Python 3，亦支持 Shell）
+└── scripts/                 # Stored only as reference source
     ├── runner.py
-    └── validator.py
+    └── validator.sh
 ```
 
-### Python 3 参考脚本规范
-- `scripts/*.py` 和 Shell 文件仍是被选中技能的参考实现，不会被自动执行。
-- 启用 Agent 模式后，模型可通过内置 `agentbox_run_code` 对短小、无外部依赖的算法或统计代码进行实际验证：JavaScript 使用隔离 Worker；Python 仅在本机存在 Python 3 时使用受限解释器。
-- 代码运行器带有超时、内存/输出限制，并遵循工具审批策略；默认 `sensitive` 策略下必须由用户确认后才会执行。
+Stored files are classified as `markdown`, `python`, `shell`, or `other`:
+
+- When a Skill is activated, the Gateway injects its entry document, other Markdown files, and Python and Shell files. Script sections are explicitly labeled as reference code that has not been executed.
+- `other` files are preserved and included in ZIP import/export, but are not currently added to the Agent's System Instructions.
+- A Skill can contain at most 50 files, each containing no more than 500,000 characters. A path is limited to 255 characters, must be relative to the package, and cannot be absolute or contain `..` traversal. The Vault can hold at most 500 Skills in total, including built-ins.
+- Built-in Skills cannot be deleted but can be disabled. Resetting default Skills restores their bundled content while preserving custom Skills.
+
+Storage validation and migration are implemented in [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts).
 
 ---
 
-## 📦 Zip 压缩包生态（Import / Export）
+## ZIP and Text Import/Export
 
-在 [`src/shared/skill-zip.ts`](../src/shared/skill-zip.ts) 中实现了纯 TypeScript 的零依赖 Zip 打包与解析引擎：
-- **一键导出（Export）**：将技能的所有 Markdown 文档与脚本打包为标准的 `.zip` 压缩包。
-- **一键导入（Import）**：选择外部 `.zip` 文件时，自动解压并解析 `SKILL.md` 的 Frontmatter 元数据（`name`, `description`, `version`, `author`, `icon`），自动建立多文件索引。
+[`src/shared/skill-zip.ts`](../src/shared/skill-zip.ts) uses `fflate` to read and write regular ZIP archives in the Renderer:
 
-会话备份是另一条独立的主进程链路：[`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts) 使用支持流式文件与 WinZip AES-256 的 `@zip.js/zip.js`，避免深备份把整个工作目录加载进内存。技能 Zip 不包含密码与外部工作目录，二者的格式和安全边界不可混用。
+- **Export** preserves every Skill file. If the entry document has no frontmatter, export adds `name`, `description`, `version`, `author`, and `icon` metadata.
+- **ZIP import** ignores `__MACOSX` and `.DS_Store`. If every file shares one top-level directory, that directory is stripped. Entry-file precedence is a manifest-specified path, `SKILL.md`, `README.md`, the first Markdown file, then the first file.
+- Metadata first comes from a root `skill.json` or `manifest.json`. Without a manifest, the importer reads simple frontmatter from the entry document. Missing values then fall back to its H1, first paragraph, or defaults.
+- **JSON text import** in Settings accepts one object or an array. Each item requires a non-empty `name` and `systemPrompt`, and may include `files`, `entryFile`, author, and version fields.
+- Newly imported Skills are enabled by default and still pass the main process's file-count, path, and content-size validation.
 
----
-
-## 🏛️ 5 大系统内置技能
-
-系统默认内置了 5 个经过深度调优的专业技能：
-1. **代码执行与算法助手**：包含 Python 3 沙箱测试用例执行脚本与算法模式库。
-2. **数据分析与表格可视化**：包含 Python 3 描述性统计计算脚本与图表格式规范。
-3. **研报萃取与长文精读**：包含 Python 3 正文降噪清洗脚本与关键指标提炼标准。
-4. **专业多语言精翻与本地化**：包含 Python 3 术语一致性校验脚本与本地化对照准则。
-5. **提示词工程专家**：包含 Python 3 提示词结构诊断脚本与经典 Prompt 模式集。
+A Skill ZIP archive and a conversation backup are distinct formats. Conversation backups are generated as streams by [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts) and can use WinZip AES-256. A Skill ZIP archive contains no Vault keys, passwords, or external working directories and has no password-protection feature.
 
 ---
 
-## ⚡ Gateway 动态提示词注入（Prompt Augmentation）
+## Five Built-in Skills
 
-当开启会话的 **Agent 模式** 时：
-1. `ChatGateway` 扫描处于启用状态（`enabled: true`）的技能，并注入由名称、ID 和描述构成的轻量目录。
-2. 会话固定的技能以及 `$skill-id` / 完整技能名会直接加载；否则根据最近 3 条用户消息、附件名称、MIME 类型和有限文本摘要检索最多 2 个相关技能。
-3. 仅把命中技能的 `SKILL.md`、参考文档和参考脚本注入 System Instructions，避免所有技能同时占用上下文或产生角色冲突。
-4. 若初始路由不足，模型可调用只读内部工具 `agentbox_load_skill` 按 ID 加载目录中的其他技能；加载后 Gateway 会重建下一轮 System Instructions。
-5. 每次自动、显式或模型按需激活都会发送 `skill-activated` 事件，并在回答中展示激活来源。技能脚本仍不会被隐式执行。
-6. 代码或数据技能需要实算时可调用 `agentbox_run_code`；只有成功工具结果才能作为“已执行”的证据。
-7. 需要读取或输出工作目录中的源码、配置和多行文本时，优先调用 `agentbox_read_file` / `agentbox_write_file`；文件内容直接经本机 API 处理，不通过 Shell 转义，写入操作遵循敏感工具审批策略。
-8. 需要包管理器、编译器或系统命令时可调用 `agentbox_run_terminal`。该工具使用“设置 → 通用 → Integrated terminal shell”中的跨平台 Shell 配置，并遵循敏感工具审批策略。
+[`src/electron/storage/default-skills.ts`](../src/electron/storage/default-skills.ts) currently provides:
+
+1. **Code Execution and Algorithms** (`code-interpreter`): programming, debugging, algorithms, complexity, tests, and performance optimization.
+2. **Data Analysis and Spreadsheet Visualization** (`data-analyst`): CSV/Excel data, statistics, trend analysis, and chart conventions.
+3. **Research Extraction and Long-form Reading** (`web-extractor`): information extraction from PDFs, web pages, papers, research reports, and long documents.
+4. **Professional Translation and Localization** (`translator-polyglot`): translation, localization, and terminology consistency.
+5. **Prompt Engineering Expert** (`prompt-optimizer`): system prompts, task instructions, roles, and structured templates.
+
+Bundled names, descriptions, and documents follow the application's selected language. User changes to enabled state and customized content are preserved.
+
+---
+
+## Gateway Routing and Progressive Loading
+
+Skills participate in routing only in **Agent mode**:
+
+1. The Gateway reads every Skill with `enabled: true` and builds a lightweight catalog from names, IDs, and descriptions.
+2. Conversation-pinned `skillIds` take precedence. Otherwise, routing first recognizes `$id`, `@id`, a complete ID delimited in the query, or a full Skill name.
+3. Without an explicit match, retrieval examines the latest 3 user messages. A text attachment contributes at most its first 2,000 characters; a binary attachment contributes only its file name and MIME type. At most 2 Skills meeting the threshold are activated automatically.
+4. Only the activated Skills' entry documents, Markdown references, and Python/Shell reference source are added to System Instructions, avoiding the cost and conflicts of loading everything at once.
+5. If initial routing is insufficient, the model can call the read-only `agentbox_load_skill` tool with a catalog `skill_id` to load another enabled Skill. The tool never executes scripts and does not require approval.
+6. Automatic, explicit, and model-requested activation all emit a `skill-activated` event, and the Renderer records the activation source.
+
+Retrieval is implemented in [`src/electron/api/skill-retriever.ts`](../src/electron/api/skill-retriever.ts); prompt assembly and on-demand loading are in [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts).
+
+---
+
+## Script and Tool Execution Boundaries
+
+### Reference scripts are not executed code
+
+Files such as `scripts/*.py`, Shell files, and code blocks are reference implementations for the model to read. AgentBox does not write them into the working directory or launch those files directly. The model may claim actual execution only after it explicitly calls an execution tool and receives a successful result.
+
+### `agentbox_run_code`
+
+The Gateway exposes the built-in code runner whenever at least one enabled Skill contains a Python file. It receives short source code supplied in the model's tool-call arguments; it does not automatically run a script from the Skill package:
+
+- JavaScript runs in a separate Worker and `vm` context exposing only a constrained `console` and `input`. String-based code generation and WebAssembly are disabled, and Worker memory limits are applied.
+- Python uses the interpreter resolved by **Settings → Developer Runtimes**, with fallback to an available local Python 3. Its wrapper uses `-I`, a minimal environment, constrained builtins, and a standard-library allowlist, and rejects file opening, dynamic execution, and double-underscore attribute access.
+- Source is limited to 100,000 characters and output to 200,000 characters. The default timeout is 8 seconds; a call may request between 0.5 and 20 seconds.
+- The code runner is a risk-reducing constrained environment, not a complete operating-system sandbox. Every run requires user approval except under Full Access.
+
+### Workspace files and the integrated terminal
+
+- `agentbox_read_file` and `agentbox_write_file` use native file APIs for UTF-8 files inside the conversation working directory and do not pass content through Shell quoting. Writes require approval under the default policy.
+- `agentbox_run_terminal` invokes compilers, package managers, or system commands through the user's configured cross-platform Shell. It can produce arbitrary system side effects, so every command requires approval except under Full Access.
+- The terminal starts in the conversation directory, but it is not directory-sandboxed. Prefer the boundary-enforced workspace file tools when creating source code or multiline text.
+
+See [Conversation Working Directories and Developer Runtimes](workspaces-and-runtimes.md) for runtime and path rules, and [MCP Integration and Intelligent Tool Retrieval](mcp-integration.md) for the shared approval policy.

@@ -1,53 +1,67 @@
-# 6. 前端 UI 与交互系统
+# 6. Renderer UI and Interaction System
 
-AgentBox 的渲染层基于 React 19 构建，注重排版美学、数学表达、多模态处理与流畅的交互体验。
+> [简体中文版本](../docs_zh/ui-and-components.md) · [Back to the English documentation index](./README.md)
 
----
+AgentBox's renderer is built with React 19 and TypeScript. It owns presentation and transient interaction state and calls the main process only through the preload allowlist. It neither reads API keys nor calls model services directly.
 
-## 👤 本地用户资料
+## Renderer organization
 
-- 「设置 → 通用 → 个人资料」支持昵称与头像编辑，昵称最多 50 个字符。
-- 头像在 renderer 中以方形视口拖动和缩放裁剪，优先编码为 WebP；输出不会放大原始裁剪区域，且宽高均不超过 1000px。原图限制为 30MB，并拒绝 SVG 与异常超大像素尺寸。
-- 当前资料展示在侧栏设置入口和所有用户消息上；修改后会统一更新历史消息的展示，不写入单条消息。
-- `userNickname` 与 `userAvatar` 是纯展示设置。请求上下文估算只读取 `systemPrompt`，Electron 网关也只将显式系统提示词与会话消息交给模型，因此资料不会改变或进入任何提示词。
+| Module | Responsibility |
+| --- | --- |
+| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | Initial data loading, conversation and streaming orchestration, settings persistence, and top-level composition |
+| [`src/renderer/src/components/`](../src/renderer/src/components/) | React components for the sidebar, top bar, messages, composer, New conversation dialog, and Settings dialog |
+| [`src/renderer/src/*.ts`](../src/renderer/src/) | Testable logic for context projection, title cleanup, attachments, Markdown preprocessing, keyboard behavior, and workspace grouping |
+| [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) | Message-tree traversal, branch selection, and node deletion shared by the renderer and tests |
 
----
+The renderer sets `document.documentElement.dataset.theme` to `system`, `light`, or `dark`; system mode follows `prefers-color-scheme`. At widths up to 860px, the sidebar becomes a drawer, and below 680px the top bar and composer are further condensed. The stylesheet also honors `prefers-reduced-motion`.
 
-## 🌲 树状会话与分支版本管理（Conversation Tree）
+## Local user profile
 
-在 [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) 中实现了纯函数式的树状消息管理：
+- **Settings → General → Profile** lets the user set a nickname and avatar. Nicknames are limited to 50 characters and cannot contain line breaks.
+- [`avatar-helper.ts`](../src/renderer/src/avatar-helper.ts) provides a 340px square viewport with dragging, arrow-key movement, and 1–3× zoom. Source files are limited to 30 MB. SVG, dimensions above 20,000px, and images above 100 million pixels are rejected.
+- The crop is preferably encoded as WebP. It is never upscaled beyond the sampled source area, and its output edge is capped at 1,000px. Quality and dimensions are reduced progressively when required to fit the stored Data URL limit.
+- The current profile is rendered in the sidebar settings entry and beside every user message. Messages do not copy profile fields, so changing the profile updates how historical messages appear.
+- `userNickname` and `userAvatar` are display-only settings. Context estimation reads `systemPrompt`, while the gateway receives only explicit system instructions, conversation messages, and attachments; profile data is not sent to a model.
 
-- **父子节点索引**：每条消息记录 `parentId` 与 `id`，支持任意分支分叉。
-- **版本切换与分页**：当对某条历史消息重新生成或编辑时，系统自动创建兄弟版本，气泡下方展示版本分页器（如 `2 / 3`），支持随意在各个历史分支间自由切换。
-- **编辑历史消息**：
-  - **仅保存**：仅修改当前用户消息内容，保留其后的对话分支。
-  - **保存并重新生成**：修改内容后丢弃后续节点，并以当前模型重新生成新分支。
-- **Agent 中断恢复**：失败回复同时提供“从中断处继续”和“重新生成”。前者在失败助手消息后创建继续分支并复用工具检查点，后者仍从父级用户消息创建全新回答版本。
+## Conversation tree and versions
 
----
+Messages form a tree through `id` and `parentMessageId`, while `Conversation.currentLeafId` selects the active branch. For legacy linear messages without `parentMessageId`, [`ensureMessageTree`](../src/shared/conversation-tree.ts) reconstructs a parent chain in storage order.
 
-## 📐 Markdown 排版与 LaTeX 数学公式渲染
+- **Active branch:** [`getActiveMessageChain`](../src/shared/conversation-tree.ts) walks from `currentLeafId` back to the root. If no valid leaf is selected, it follows the last stored child at each branch point.
+- **Version pagination:** Messages with the same parent and role are sibling versions. A message bubble can show a paginator such as `2 / 3`; selecting a version activates its deepest, most recently stored descendant.
+- **Regenerate an answer:** A new assistant sibling is appended beneath the same user message. The previous answer and its descendants remain available on their original branch.
+- **Edit a user message:** **Save only** updates the selected node in place and keeps its descendants. **Save & regenerate** appends a new user sibling and assistant child without deleting the original branch.
+- **Delete a message:** The selected node and all descendants are removed. Selection moves to an adjacent sibling version when possible, otherwise to the deepest available leaf below the parent.
 
-- **自然换行（Natural Linebreaks）**：采用 `remark-breaks`，单次回车即渲染为正常换行，符合即时通讯使用直觉。
-- **代码可读性**：行内代码、围栏代码块和工具输出统一使用跨平台等宽字体栈；块级代码保留空白与缩进，超长行通过独立横向滚动查看。
-- **全格式 LaTeX 支持**：结合 `remark-math` 与 `rehype-katex`：
-  - 行内公式：`$E = mc^2$` 与 `\(E = mc^2\)`
-  - 块级独立公式：`$$\int_{-\infty}^\infty e^{-x^2} dx = \sqrt{\pi}$$` 与 `\[...\]`
-  - 代码块与复杂环境：支持 `math` 代码块及矩阵（`matrix`, `pmatrix`, `bmatrix`）、方程组对齐（`aligned`, `cases`）。
-  - **横向防溢出**：超宽公式支持优雅的横向滚动条，具备容错处理。
+When an Agent response is interrupted by cancellation, rate limiting, a network/API error, an output limit, or the tool-turn limit, AgentBox retains `interruption`, completed tool results, and `agentTrace`. Only the final interrupted response on the active branch can be resumed. **Resume from checkpoint** creates a new user/assistant branch and uses the preceding response as the checkpoint; **Regenerate** creates a clean answer version from the original parent user message.
 
----
+## Markdown, code, and math
 
-## 🖼️ 多模态附件与图片优化
+[`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) renders content with `react-markdown` and the following plugins:
 
-- **多途径输入**：支持文件选择器、拖拽上传（Drag & Drop）与剪贴板直接粘贴图片（Paste）。
-- **客户端智能压缩**：在 [`src/renderer/src/file-helper.ts`](../src/renderer/src/file-helper.ts) 中对图片进行智能缩放（最大边限制 2048px），大幅降低传输体积与 Token 开销。
-- **原图灯箱（Lightbox）**：消息中的图片点击可唤起高清灯箱全屏预览。
+- `remark-gfm` for GitHub Flavored Markdown tables, task lists, strikethrough, and autolinks;
+- `remark-breaks` so a single line break is rendered as a line break in chat;
+- `remark-math` and `rehype-katex` for KaTeX rendering without letting malformed math fail the whole message.
 
----
+Before rendering, [`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts) normalizes `\(...\)`, `\[...\]`, `math` / `latex-math` fences, and standalone environments such as `matrix`, `aligned`, and `cases`. It leaves inline code and ordinary fenced code untouched and protects common dollar-denominated amounts from accidental math parsing. Code blocks include a language label and copy action; long code and equations scroll horizontally. Message links open in a new window with `noopener noreferrer`.
 
-## ⌨️ 快捷键与输入框交互
+## Multimodal attachments
 
-在 [`src/renderer/src/composer-helper.ts`](../src/renderer/src/composer-helper.ts) 中统一管理：
-- `Enter`：默认发送消息（可在通用设置中切换为换行）。
-- `Ctrl + Enter` / `Cmd + Enter`：在任何模式下均执行强制换行，避免意外误发送。
+[`file-helper.ts`](../src/renderer/src/file-helper.ts) accepts files through the picker, drag and drop, or clipboard paste:
+
+- Each source file is limited to 25 MB. The main-process gateway also validates attachment count and field sizes.
+- Images are stored as Data URLs. If either edge exceeds 2,048px, the renderer scales the image down proportionally. PNG remains PNG; other decoded images are re-encoded as JPEG at quality 0.9. If decoding or canvas creation fails, the original data is retained.
+- Known text and source-code formats are read as UTF-8 text. PDFs are read as Data URLs. An unrecognized file is first read as text, then falls back to a document Data URL if text reading fails.
+- Image attachments open in a lightbox. Text and document attachments are shown as chips with their name, type icon, and original byte size.
+- Protocol capabilities differ: image and text attachments are converted into native content shapes for all three APIs. Anthropic Messages API can receive a PDF document block, while the current OpenAI Chat Completions API and OpenAI Responses API adapters add only a filename placeholder for a document attachment.
+
+## Composer and keyboard behavior
+
+[`composer-helper.ts`](../src/renderer/src/composer-helper.ts) keeps keyboard decisions in a pure function and ignores Enter while an IME composition is active:
+
+| Preference | Send | Insert a line break |
+| --- | --- | --- |
+| **Press Enter to send** enabled | `Enter` | `Shift + Enter`, or `Ctrl/Cmd + Enter` for an explicit insertion |
+| **Press Enter to send** disabled | `Ctrl/Cmd + Enter` | `Enter` or `Shift + Enter` |
+
+The composer toolbar also controls Agent mode, Skill routing, available MCP servers, reasoning, web search, and the context budget. When the projected context exceeds the input budget, sending is blocked or—when safe trimming is available—the UI offers a one-time **Trim and send** action. At application level, `Ctrl/Cmd + N` opens the New conversation dialog.

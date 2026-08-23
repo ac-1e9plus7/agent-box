@@ -111,9 +111,15 @@ export async function writeWorkspaceFile(
       flag: mode === 'create' ? 'wx' : mode === 'append' ? 'a' : 'w',
     })
     throwIfAborted(signal)
-    const action = mode === 'append' ? t("已追加") : mode === 'create' ? t("已创建") : t("已写入")
     return {
-      result: `${action} ${target.relativePath}（${formatBytes(contentBytes)}，UTF-8）。`,
+      result: t(
+        mode === 'append'
+          ? 'workspace.write.appended'
+          : mode === 'create'
+            ? 'workspace.write.created'
+            : 'workspace.write.written',
+        { path: target.relativePath, size: formatBytes(contentBytes) },
+      ),
     }
   } catch (error) {
     rethrowIfAborted(error, signal)

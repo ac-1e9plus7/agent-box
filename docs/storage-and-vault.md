@@ -1,106 +1,148 @@
-# 2. 加密存储与 Vault 安全
+# 2. Encrypted Storage and Vault Security
 
-AgentBox 的本地存储架构旨在提供坚固的静态数据保护，确保所有聊天记录、自定义技能、API 密钥与偏好设置在写入磁盘前均经过强加密。
+> 中文：[加密存储与 Vault 安全](../docs_zh/storage-and-vault.md)
+
+AgentBox stores settings, provider credentials, models, conversations, skills, and MCP server configurations in a local encrypted Vault managed by the main process. Workspace files are outside the Vault; a conversation stores only the absolute path to its working directory.
 
 ---
 
-## 🔐 双层密钥加密模型
+## 🔐 Envelope encryption model
 
 ```text
 +-------------------------------------------------------------------+
-| 操作系统安全凭据设施 (safeStorage)                                 |
-| Windows DPAPI / macOS Keychain / Linux Secret Service             |
+| Electron safeStorage · OS-backed credential protection            |
 +-------------------------------------------------------------------+
                                |
-                   加密封装 (Encrypt Master Key)
+               encryptString(base64-encoded 256-bit key)
                                v
 +-------------------------------------------------------------------+
-| 256-bit 随机主密钥 (Master Vault Key)                              |
+| <userData>/vault/master-key.bin                                   |
+| safeStorage-wrapped random Vault key                              |
 +-------------------------------------------------------------------+
                                |
-                   AES-256-GCM (Random IV + Auth Tag)
+            AES-256-GCM · random 12-byte IV · 16-byte tag
+            AAD: "agentbox:vault:v1"
                                v
 +-------------------------------------------------------------------+
-| 本地加密 Vault 文件 (app.getPath('userData')/vault/data.enc)       |
-| 包含：Conversations, Models, Providers (Encrypted Keys), Skills,  |
-|      MCP Servers, App Preferences                                 |
+| <userData>/vault/user-data.v1.enc                                 |
+| One encrypted JSON envelope containing the complete Vault state   |
 +-------------------------------------------------------------------+
 ```
 
-### 1. 密钥生成与封装
-- 主进程首次启动时，生成高熵的 256-bit 加密主密钥。
-- 该主密钥直接调用 Electron `safeStorage.encryptString()` 交由操作系统底层凭据设施进行硬件/凭据封装，并保存为独立的文件。
-- **无明文降级原则**：若检测到系统 `safeStorage` 不可用，或在 Linux 下回退到未加密的 `basic_text` 后端，应用将明确报错并拒绝将敏感密钥以明文落盘。
+Provider API keys, MCP environment variables and headers, and proxy credentials are fields inside the Vault JSON and are protected by encryption of the complete Vault. They are not each wrapped in another independent ciphertext. When the renderer reads providers, MCP servers, or settings, it receives a redacted view.
 
-### 2. AES-256-GCM 数据落盘
-- 每次保存数据时，整份 Vault 使用随机生成的 12-byte IV 及 AES-256-GCM 算法进行加密，生成密文与 16-byte 认证标签（Auth Tag）。
-- **原子替换写入（Atomic Write）**：写入时先将加密密文写入临时的 `.tmp` 文件并强制刷新（fsync），校验无误后通过重命名（rename）原子覆盖原数据文件，防止写入中断造成文件损坏。
-- **项目目录边界**：会话只在 Vault 中保存工作目录的绝对路径字符串。工作目录内的源码、依赖、Git 数据和其他项目文件不会复制进 Vault，也不会被 AgentBox 加密或改写。
-- **显式深备份例外**：只有用户在「数据与安全」中主动选择深备份并确认保存位置时，独立备份模块才会只读遍历会话工作目录并写入目标 ZIP；该流程不会把项目文件导入 Vault。
-- **Agent 中断现场**：助手消息可保存结构化 `interruption` 元数据以及既有 `agentTrace`。应用重启后仍能识别失败回复、重放已完成工具结果并继续执行；运行时错误 UI 状态本身不作为恢复依据。
+### 1. Vault-key generation and wrapping
+
+- On first initialization, [`EncryptedStore`](../src/electron/storage/encrypted-store.ts) generates a random 32-byte key, encodes it as Base64, and passes it to Electron's `safeStorage.encryptString()`. The wrapped result is written to `master-key.bin`.
+- If `safeStorage.isEncryptionAvailable()` is false, the application refuses to load user data. On Linux, it also rejects the unencrypted `basic_text` backend rather than falling back to plaintext.
+- On application shutdown, the in-process key Buffer is overwritten and released. The key and decrypted state must still reside in the trusted main-process memory while the application is running.
+- Startup supports legacy ChatBox Lite user-data directories and the legacy AAD. Directory migration either copies or re-persists the old data; after a legacy-AAD envelope is read, the next Vault write uses the current `agentbox:vault:v1` AAD.
+
+### 2. Vault encryption and write semantics
+
+- Every persistence operation serializes the complete state and produces a version-1 JSON envelope using a new random 12-byte IV, AES-256-GCM, and a 16-byte authentication tag.
+- Mutations are serialized through a Promise queue. The store clones the state, applies the mutation, validates the resulting schema, and replaces its in-memory state only after persistence succeeds.
+- Data is first written to a unique `.tmp` file in the same directory with `flag: 'wx'` and mode `0600`, then renamed to the Vault path. The temporary file is removed after failure.
+- The current implementation does **not call `fsync`**. A temporary file plus rename prevents a partial JSON write from directly becoming the active file, but it is not a durability barrier against sudden operating-system or hardware power loss.
+
+### 3. Workspace boundary and Agent recovery
+
+- The Vault persists only the normalized absolute `Conversation.workingDirectory` path. Source code, dependencies, Git data, and other project files are not imported or encrypted by [`EncryptedStore`](../src/electron/storage/encrypted-store.ts).
+- This does not make all Agent tools read-only. When Agent mode is enabled and the applicable tool is approved, workspace writes or terminal commands may operate within that directory. Those actions are separate from Vault persistence.
+- A deep backup is the only storage-related operation that recursively reads an entire working directory. It reads the source directory and writes it to a user-selected ZIP; it does not import the project into the Vault.
+- Assistant messages can persist structured `interruption` metadata, `agentTrace`, and tool results. Recovery uses these persisted checkpoints rather than transient renderer error state.
 
 ---
 
-## 📦 数据结构与实体 Schema
+## 📦 Vault schema
 
-Vault 内部存储结构定义于 [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts) 与 [`src/shared/types.ts`](../src/shared/types.ts)：
+The domain structure is defined in [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts), with shared entities in [`src/shared/types.ts`](../src/shared/types.ts):
 
 ```typescript
 interface VaultState {
-  version: number
-  preferences: AppSettings
+  schemaVersion: 1
+  settings: AppSettings
   providers: StoredProvider[]
   models: ModelConfig[]
-  conversations: StoredConversation[]
-  skills: Skill[]
-  mcpServers: McpServerConfig[]
+  conversations: Conversation[]
+  skills?: Skill[]
+  mcpServers?: McpServerConfig[]
 }
 ```
 
-`AppSettings.userNickname` 与 `AppSettings.userAvatar` 保存用户的本地展示资料。旧 Vault 缺少字段时均迁移为空字符串；昵称最多 50 个字符，头像只接受经客户端裁剪压缩后的 PNG/JPEG/WebP Data URL（最多 3,000,000 字符）。这两个字段只由 renderer 展示，网关构造系统提示词和模型消息时不会读取。
+`skills` and `mcpServers` remain optional in the interface for compatibility with older Vaults; loading and validation normalize both to arrays. [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) similarly migrates missing newer settings to safe defaults.
 
-### 资源配额与上限校验（Resource Quotas）
-为了防止恶意输入或数据膨胀耗尽内存，存储层实施了严格的配额检查：
-- `MAX_PROVIDERS`: 50 个
-- `MAX_MODELS`: 200 个
-- `MAX_CONVERSATIONS`: 1,000 个
-- `MAX_MESSAGES_PER_CONVERSATION`: 2,000 条
-- `MAX_SKILLS`: 100 个
-- `MAX_SKILL_FILES_COUNT`: 每个技能最多 50 个文件
-- `MAX_MCP_SERVERS`: 50 个
-- `MAX_MCP_ARG_CHARACTERS`: 参数单项最大 8,192 字符
+`AppSettings.userNickname` and `userAvatar` are display-only local profile fields and are never included in model prompts. A nickname is limited to 50 characters. An avatar must be a PNG, JPEG, or WebP Base64 data URL no longer than 3,000,000 characters, and the renderer crop flow limits each dimension to 1,000 pixels. When a legacy Vault has no `language`, validation uses the system-language fallback supplied at startup.
 
 ---
 
-## 🧹 清除会话数据机制
+## 📏 Resource quotas and validation
 
-在「设置 → 数据与安全」中提供了「清除全部会话数据」功能：
-1. 主进程首先中止所有当前正在运行的流式请求。
-2. 保持已配置的供应商、模型、API 密钥与自定义技能不变。
-3. 清空 `conversations` 列表，并使用全新的随机 IV 重新加密落盘 Vault 文件。
+The main limits are enforced by [`app-repository.ts`](../src/electron/storage/app-repository.ts), [`vault-resource-limits.ts`](../src/electron/storage/vault-resource-limits.ts), and [`web-metadata-schema.ts`](../src/electron/storage/web-metadata-schema.ts):
+
+| Resource | Current limit |
+| --- | ---: |
+| Providers | 100 |
+| Models | 2,000 |
+| Conversations | 10,000 |
+| Skills | 500 |
+| MCP servers | 100 |
+| Messages per conversation | 20,000 |
+| Message content or reasoning field | 2,000,000 characters each |
+| Counted content per conversation | 50,000,000 characters |
+| Serialized data across all conversations | 50 MiB |
+| Messages / citations across all conversations | 100,000 each |
+| Citations per message | 100 |
+| Attachments per message | 20 |
+| Files per skill / content per skill file | 50 / 500,000 characters |
+| Arguments / environment variables per MCP server | 50 / 100 |
+| Each MCP argument or environment-variable value | 8,192 characters |
+
+Saving a conversation applies both per-conversation and aggregate quotas. To avoid locking users out of legacy data when a newer aggregate quota is introduced, an already-over-limit Vault can still load and the user can delete or shrink data. A save that would further increase any over-limit dimension is rejected.
 
 ---
 
-## 📦 会话 ZIP 备份
+## 🧹 Clearing conversation data
 
-「设置 → 数据与安全 → 导出加密备份」由主进程实现，renderer 只提交模式与一次性密码并接收结果，不会读取解密后的 Vault、API 密钥或主密钥。
+**Settings → Data & Security → Clear all conversation data** performs these steps:
 
-- **浅备份**：导出全部会话。每个会话同时包含一份无损 JSON 和一份便于阅读的 Markdown；JSON 保留完整消息树、所有分支、附件、引用、用量、工具执行与 Agent trace。
-- **深备份**：在浅备份基础上，递归加入所有会话引用的工作目录。相同真实路径只备份一次；空目录与符号链接会保留，符号链接不会被跟随到工作目录之外；普通特殊文件会跳过并记录在清单警告中。
-- **密码策略**：密码可选，但 UI 明确建议设置。设置密码时，每个文件条目使用 WinZip AES-256 AE-2；密码只在当前 IPC 调用和归档过程的内存中存在，不写入设置或 Vault。标准 ZIP 的中央目录不会因此隐藏条目名称，所以深备份的目录与文件名仍可能可见。
-- **明文语义**：JSON、Markdown 与工作目录文件写入 ZIP 前均保持原始明文；未设置密码的 ZIP 可被直接读取。设置密码后由 ZIP 条目加密提供静态保护。
-- **排除内容**：不导出供应商 API 密钥、认证凭据、Vault 主密钥、加密 Vault 文件、服务商/模型/MCP/技能或应用设置。会话正文自身可能包含用户粘贴的敏感内容，因此备份始终应按敏感数据保管。
-- **写入安全**：先在目标目录生成权限收紧的随机 `.partial` 文件，成功关闭 ZIP 后再替换用户确认的目标文件；失败时清理不完整文件。若目标位于被备份工作目录内，目标路径会从深备份内容中排除。
+1. `ChatGateway.cancelAll()` aborts every active request and resolves pending tool approvals as denied.
+2. The repository replaces `conversations` with an empty array. Settings, providers and API keys, models, skills, and MCP server configurations remain unchanged.
+3. The complete Vault is encrypted again with a new random IV and written to disk. The `safeStorage`-wrapped Vault key is retained rather than rotated.
 
-ZIP 根目录布局：
+This operation removes conversations from the active Vault. It is not a forensic secure-erasure guarantee for the underlying storage medium.
+
+---
+
+## 📦 Conversation ZIP backups
+
+**Settings → Data & Security → Export encrypted backup** invokes [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts). The renderer submits only the mode and optional one-time password; the system save dialog, Vault snapshot access, and file creation all run in the main process.
+
+### Backup modes
+
+- **Shallow:** Exports every conversation. Each conversation has both a complete JSON representation and readable Markdown. JSON preserves every branch in the conversation tree, attachments, citations, usage, skill activations, tool executions, Agent trace, and interruption metadata.
+- **Deep:** Adds every working directory referenced by a conversation. The implementation deduplicates identical directories by `realpath`, preserves empty directories and symbolic links without following symlinks, and skips other special files while recording their paths in manifest warnings.
+
+### Encryption and privacy boundary
+
+- The password is optional and limited to 256 characters. With a non-empty password, `@zip.js/zip.js` encrypts ZIP entries using WinZip AES-256 (AE-2). The password is not written to settings or the Vault, and AgentBox cannot recover it.
+- JSON, Markdown, and workspace files enter the archive as their original content. They are directly readable without a password; with a password, at-rest protection comes from ZIP entry encryption.
+- The ZIP central directory does not encrypt entry names. Conversation files use sequence numbers rather than titles, while relative workspace filenames remain visible in a deep backup. `manifest.json` also records absolute working-directory mappings, but its contents are encrypted when a password is set.
+- A backup excludes provider API keys, authentication credentials, the Vault key and Vault files, as well as provider, model, MCP server, skill, and application settings. Conversation text and workspace files may still contain sensitive information.
+
+### Writing and replacement
+
+The archive is first written to a randomly named `.partial` file in the target directory with mode `0600`. The selected destination is replaced only after the ZIP writer closes successfully and the output stream finishes. If the destination already exists, it is temporarily displaced and restored if replacement fails. Failure paths remove the incomplete file. A deep backup excludes the selected destination path; workspace scanning finishes before the `.partial` file is created, so the archive cannot recursively include itself.
+
+ZIP root layout:
 
 ```text
-manifest.json                         # 格式版本、模式、加密方式、计数与工作目录映射
-README.txt                            # 面向用户的内容与安全说明
-conversations/index.json             # 会话索引
-conversations/conversation-0001.json # 无损会话数据
-conversations/conversation-0001.md   # 可读会话文本
-workspaces/workspace-0001/            # 仅深备份存在
+manifest.json                         # Format, mode, version, counts, and workspace mapping
+README.txt                            # User-facing contents and security notes
+conversations/index.json             # Conversation index
+conversations/conversation-0001.json # Complete conversation data
+conversations/conversation-0001.md   # Readable conversation transcript
+workspaces/workspace-0001/            # Deep backups only
 ```
 
-清单格式当前为 `format: "agentbox-backup"`、`formatVersion: 1`。会话文件名使用序号而非标题，避免浅备份在未解密中央目录中暴露会话标题。
+The current manifest uses `format: "agentbox-backup"` and `formatVersion: 1`. Its `encryption.method` explicitly records either `none` or `WinZip AES-256 (AE-2)`.

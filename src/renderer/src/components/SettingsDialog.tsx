@@ -276,7 +276,7 @@ function AgentTurnLimitInput({
         type="number"
         value={inputValue}
       />
-      <span>{t("轮")}</span>
+      <span>{t(value === 1 ? 'agent.turn.one' : 'agent.turn.other')}</span>
     </label>
   )
 }
@@ -1336,7 +1336,7 @@ export function SettingsDialog({
                       }))}
                     >
                       <option value="zh-CN">{t("简体中文")}</option>
-                      <option value="en-US">English</option>
+                      <option value="en-US">{t('language.englishName')}</option>
                     </select>
                   </div>
                   <div className="settings-row">
@@ -1486,7 +1486,7 @@ export function SettingsDialog({
                   </div>
                 </section>
                 <section className="settings-card context-policy-card">
-                  <h3>Integrated terminal shell</h3>
+                  <h3>{t('terminal.integratedShell')}</h3>
                   <div className="context-policy-options">
                     <button
                       className={preferenceDraft.integratedTerminalShell.mode === 'auto' ? 'is-active' : ''}
@@ -1576,7 +1576,7 @@ export function SettingsDialog({
                     >
                       <span className="policy-radio"><i /></span>
                       <span>
-                        <strong>{t("关闭")}<em>{t("默认")}</em></strong>
+                        <strong>{t('common.off')}<em>{t("默认")}</em></strong>
                         <small>{t("直连所有供应商，不经过代理。")}</small>
                       </span>
                     </button>
@@ -2110,8 +2110,7 @@ export function SettingsDialog({
                         <button className="icon-button" onClick={() => setInstallingSkill(false)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
-                        <p className="skill-modal-hint">
-                          <strong>{t("推荐方式")}</strong>{t("：选择包含")}<code>SKILL.md</code>{t("、Python 3 / Shell 脚本和参考文档的")}<strong>{t(".zip 技能压缩包")}</strong>{t("直接导入。")}</p>
+                        <p className="skill-modal-hint">{t('skill.importRecommendation')}</p>
                         <div className="skill-import-dropzone">
                           <label className="skill-file-upload-btn">
                             <Icon name="upload" size={16} />
@@ -2207,7 +2206,7 @@ export function SettingsDialog({
                         className={preferenceDraft.mcpToolApprovalPolicy === 'full-access' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'full-access' }))}
                       >
-                        Full Access
+                        {t('fullAccess.label')}
                       </button>
                     </div>
                   </div>
@@ -2620,7 +2619,7 @@ export function SettingsDialog({
                         )}
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setToolExplorerOpen(false)}>{t("关闭")}</button>
+                        <button className="secondary-button" onClick={() => setToolExplorerOpen(false)}>{t('common.close')}</button>
                       </footer>
                     </div>
                   </div>
@@ -2833,7 +2832,7 @@ export function SettingsDialog({
                           value={selectedModel.anthropicThinkingMode ?? 'adaptive'}
                           onChange={(event) => updateModel({ anthropicThinkingMode: event.target.value as 'adaptive' | 'manual' })}
                         >
-                          <option value="adaptive">Adaptive（Claude 4.6+）</option>
+                          <option value="adaptive">{t('anthropic.thinking.adaptive')}</option>
                           <option value="manual">{t("固定预算（Claude 4.5 及更早）")}</option>
                         </select>
                       </div>
@@ -2991,7 +2990,7 @@ export function SettingsDialog({
                         </div>
                       </label>
                       <label>
-                        <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? t("CLIProxyAPI 默认本机监听地址") : t("请求将发送到此地址")}>Base URL</FieldLabel>
+                        <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? t("CLIProxyAPI 默认本机监听地址") : t("请求将发送到此地址")}>{t('provider.baseUrl')}</FieldLabel>
                         <input
                           className="mono-input"
                           placeholder={selectedProvider.kind === 'cliproxy' ? 'http://127.0.0.1:8317/v1' : 'https://openrouter.ai/api/v1'}
@@ -3041,7 +3040,7 @@ export function SettingsDialog({
                       && !(apiKeyInputs[selectedProvider.id] ?? '').trim() && (
                       <div className="cliproxy-network-warning">
                         <Icon name="info" size={17} />
-                        <div><strong>{t("无密钥时必须限制服务端监听地址")}</strong><p>{t("请在 CLIProxyAPI 的 config.yaml 中设置")}<code>host: "127.0.0.1"</code>{t("。默认")}<code>host: ""</code>{t("可能允许局域网访问，且默认未启用 TLS。")}</p></div>
+                        <div><strong>{t("无密钥时必须限制服务端监听地址")}</strong><p>{t('cliproxy.hostWarning')}</p></div>
                       </div>
                     )}
                     <div className="provider-actions">
@@ -3248,9 +3247,9 @@ export function SettingsDialog({
                 <div className="about-mark"><Icon name="app" size={42} /></div>
                 <h2>AgentBox</h2>
                 <p>{t("私密、强大的多模型 AI 智能体与桌面客户端。")}</p>
-                <span className="version-pill">Version 0.1.0</span>
+                <span className="version-pill">{t('about.version', { version: '0.1.0' })}</span>
                 <div className="about-divider" />
-                <small>Built with React, Electron & OpenRouter</small>
+                <small>{t('about.builtWith')}</small>
               </div>
             )}
           </div>

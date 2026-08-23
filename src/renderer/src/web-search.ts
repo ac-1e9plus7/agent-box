@@ -2,7 +2,7 @@ import type { ModelConfig, ProviderConfig, WebSearchMode } from './types'
 import { t } from "../../shared/i18n"
 
 export const WEB_SEARCH_MODE_LABELS: Record<WebSearchMode, string> = {
-  off: t("关闭"),
+  off: t('common.off'),
   auto: t("自动搜索"),
   native: t("原生优先")
 }

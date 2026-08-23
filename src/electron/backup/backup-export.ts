@@ -473,7 +473,7 @@ function createBackupReadme(manifest: BackupManifest): string {
     '=================',
     '',
     t("导出时间：{value0}", { value0: manifest.createdAt }),
-    t("备份模式：{value0}", { value0: manifest.mode === 'deep' ? '深备份' : '浅备份' }),
+    t("备份模式：{value0}", { value0: t(manifest.mode === 'deep' ? 'backup.mode.deep' : 'backup.mode.shallow') }),
     t("会话数量：{value0}", { value0: manifest.conversations.count }),
     protection,
     workspaceSummary,
@@ -503,7 +503,7 @@ function conversationToMarkdown(conversation: Conversation): string {
     t("- 模型 ID：{value0}", { value0: conversation.modelId }),
     t("- 创建时间：{value0}", { value0: conversation.createdAt }),
     t("- 更新时间：{value0}", { value0: conversation.updatedAt }),
-    t("- 工作目录：{value0}", { value0: conversation.workingDirectory || '无' }),
+    t("- 工作目录：{value0}", { value0: conversation.workingDirectory || t('common.none') }),
     t("- 消息数量：{value0}", { value0: conversation.messages.length }),
     t("- 分支说明：下方按存储顺序列出会话树中的全部分支消息；父消息 ID 用于还原分支。"),
     '',
@@ -527,7 +527,7 @@ function messageToMarkdown(message: Message): string[] {
     `## ${roleLabel} · ${message.createdAt}`,
     '',
     t("- 消息 ID：{value0}", { value0: message.id }),
-    t("- 父消息 ID：{value0}", { value0: message.parentMessageId ?? '无' }),
+    t("- 父消息 ID：{value0}", { value0: message.parentMessageId ?? t('common.none') }),
     ...(message.modelId ? [t("- 模型 ID：{value0}", { value0: message.modelId })] : []),
     '',
     message.content || t("（无正文）"),
@@ -540,21 +540,31 @@ function messageToMarkdown(message: Message): string[] {
   if (message.attachments?.length) {
     lines.push(t("### 附件"), '')
     for (const attachment of message.attachments) {
-      lines.push(`- ${escapeMarkdownText(attachment.name)}（${attachment.mimeType}，${attachment.size} bytes）`)
+      lines.push(t('backup.attachmentItem', {
+        name: escapeMarkdownText(attachment.name),
+        mimeType: attachment.mimeType,
+        size: attachment.size,
+      }))
     }
     lines.push('', t("附件原始数据保存在对应的完整 JSON 文件中。"), '')
   }
   if (message.citations?.length) {
     lines.push(t("### 来源"), '')
     for (const citation of message.citations) {
-      lines.push(`- ${escapeMarkdownText(citation.title || citation.url)}：${citation.url}`)
+      lines.push(t('backup.citationItem', {
+        title: escapeMarkdownText(citation.title || citation.url),
+        url: citation.url,
+      }))
     }
     lines.push('')
   }
   if (message.toolExecutions?.length) {
     lines.push(t("### Agent 工具记录（{value0} 项）", { value0: message.toolExecutions.length }), '')
     for (const execution of message.toolExecutions) {
-      lines.push(`- ${escapeMarkdownText(execution.toolName)}：${execution.status}`)
+      lines.push(t('backup.toolExecutionItem', {
+        toolName: escapeMarkdownText(execution.toolName),
+        status: execution.status,
+      }))
     }
     lines.push('', t("完整参数、结果与 Agent trace 保存在对应的完整 JSON 文件中。"), '')
   }
