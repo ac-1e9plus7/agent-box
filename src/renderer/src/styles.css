@@ -5770,6 +5770,11 @@ select:disabled {
   padding: 10px 12px;
 }
 
+.mcp-tool-item-card.is-builtin {
+  border-color: color-mix(in srgb, var(--accent), var(--border) 52%);
+  background: color-mix(in srgb, var(--accent-soft), var(--surface-soft) 68%);
+}
+
 .mcp-tool-item-head {
   display: flex;
   align-items: center;
@@ -5785,6 +5790,31 @@ select:disabled {
   color: var(--text);
 }
 
+.mcp-tool-item-badges {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+
+.mcp-tool-source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.mcp-tool-source-badge.is-builtin {
+  color: var(--accent-text);
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 58%);
+  background: var(--accent-soft);
+}
+
 .mcp-tool-item-server {
   font-size: 10.5px;
   background: var(--surface-raised);
@@ -5792,6 +5822,7 @@ select:disabled {
   border-radius: 4px;
   padding: 1px 6px;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .mcp-tool-item-desc {

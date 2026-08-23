@@ -54,6 +54,7 @@ CommonJS 包入口。因此调整 Electron/Vite 配置、入口文件或运行�
 | `tests/mcp-schema.test.ts` | MCP 服务配置校验与 Vault CRUD 隔离 |
 | `tests/mcp-manager.test.ts` | Stdio 真实子进程通信、JSON-RPC 协议与连接池 |
 | `tests/tool-retriever.test.ts` | BM25 关键词评分算法与 Top-K 检索排序 |
+| `tests/builtin-agent-tools.test.ts` | 内置 Agent 工具目录、工作区文件工具与技能条件挂载 |
 | `tests/gateway-mcp-loop.test.ts` | Agent 模式多轮 Tool Call 自主执行循环与事件流 |
 | `tests/protocol-adapters.test.ts` | OpenAI / Responses / Anthropic 三协议 SSE 流式解析 |
 | `tests/encrypted-store-safety.test.ts` | AES-256-GCM 加密、认证标签与 safeStorage 封装 |

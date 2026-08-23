@@ -15,6 +15,7 @@ import {
   MAX_AGENT_TOOL_TURN_LIMIT,
   MIN_AGENT_TOOL_TURN_LIMIT,
 } from '../../../shared/agent-limits'
+import { createBuiltinAgentToolCatalog } from '../../../shared/builtin-agent-tools'
 import { API_FORMAT_LABELS } from '../types'
 import {
   DEFAULT_NEW_PROVIDER_API_FORMAT,
@@ -71,6 +72,12 @@ const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<
   { id: 'security', label: '数据与安全', icon: 'shield' },
   { id: 'about', label: '关于', icon: 'info' }
 ]
+
+const BUILTIN_TOOL_FILTER = '__agentbox_builtin__'
+
+interface ExploredToolDefinition extends McpToolDefinition {
+  source: 'builtin' | 'mcp'
+}
 
 function uniqueId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -618,20 +625,38 @@ export function SettingsDialog({
     )
   }, [mcpServersList, mcpSearch])
 
+  const builtinExploredTools = useMemo<ExploredToolDefinition[]>(() => (
+    createBuiltinAgentToolCatalog(skillsList).map((tool) => ({ ...tool, source: 'builtin' }))
+  ), [skillsList])
+
+  const allExploredTools = useMemo<ExploredToolDefinition[]>(() => [
+    ...builtinExploredTools,
+    ...exploredTools.map((tool) => ({ ...tool, source: 'mcp' as const })),
+  ], [builtinExploredTools, exploredTools])
+
   const filteredExploredTools = useMemo(() => {
-    return exploredTools.filter((tool) => {
-      if (toolExplorerServerFilter !== 'all' && tool.serverId !== toolExplorerServerFilter) {
+    return allExploredTools.filter((tool) => {
+      if (toolExplorerServerFilter === BUILTIN_TOOL_FILTER && tool.source !== 'builtin') {
+        return false
+      }
+      if (
+        toolExplorerServerFilter !== 'all'
+        && toolExplorerServerFilter !== BUILTIN_TOOL_FILTER
+        && (tool.source !== 'mcp' || tool.serverId !== toolExplorerServerFilter)
+      ) {
         return false
       }
       const q = toolExplorerSearch.trim().toLowerCase()
       if (!q) return true
       return (
         tool.name.toLowerCase().includes(q) ||
+        (tool.modelName && tool.modelName.toLowerCase().includes(q)) ||
         (tool.description && tool.description.toLowerCase().includes(q)) ||
-        tool.serverName.toLowerCase().includes(q)
+        tool.serverName.toLowerCase().includes(q) ||
+        (tool.source === 'builtin' && '系统内置'.includes(q))
       )
     })
-  }, [exploredTools, toolExplorerServerFilter, toolExplorerSearch])
+  }, [allExploredTools, toolExplorerServerFilter, toolExplorerSearch])
 
 
   const confirmClearData = async (): Promise<void> => {
@@ -2412,8 +2437,8 @@ export function SettingsDialog({
                       <header className="skill-modal-header">
                         <div className="mcp-explorer-header-title">
                           <Icon name="tool" size={18} />
-                          <h3>MCP 工具总览 (Tool Explorer)</h3>
-                          <span className="tool-count-pill">{exploredTools.length} 个可用工具</span>
+                          <h3>工具总览 (Tool Explorer)</h3>
+                          <span className="tool-count-pill">{allExploredTools.length} 个工具</span>
                         </div>
                         <button className="icon-button" onClick={() => setToolExplorerOpen(false)}><Icon name="close" size={16} /></button>
                       </header>
@@ -2432,30 +2457,48 @@ export function SettingsDialog({
                             value={toolExplorerServerFilter}
                             onChange={(e) => setToolExplorerServerFilter(e.target.value)}
                           >
-                            <option value="all">全部服务 ({exploredTools.length})</option>
-                            {mcpServersList.map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
+                            <option value="all">全部来源 ({allExploredTools.length})</option>
+                            <option value={BUILTIN_TOOL_FILTER}>系统内置 ({builtinExploredTools.length})</option>
+                            {mcpServersList.length > 0 && (
+                              <optgroup label="MCP 外部服务">
+                                {mcpServersList.map((s) => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </optgroup>
+                            )}
                           </select>
                         </div>
 
                         {loadingTools ? (
                           <div className="mcp-loading-tools">
                             <span className="button-spinner large" />
-                            <p>正在从各 MCP 服务检索工具列表…</p>
+                            <p>正在检索 MCP 外部工具列表…</p>
                           </div>
                         ) : filteredExploredTools.length === 0 ? (
                           <div className="mcp-empty">
-                            <p>未发现匹配的 MCP 工具</p>
-                            <small>请确保 MCP 服务处于启用状态且连接正常</small>
+                            <p>未发现匹配的工具</p>
+                            <small>可调整搜索或来源筛选，并确保 MCP 服务处于启用状态</small>
                           </div>
                         ) : (
                           <div className="mcp-tools-list">
                             {filteredExploredTools.map((tool) => (
-                              <div key={`${tool.serverId}-${tool.name}`} className="mcp-tool-item-card">
+                              <div
+                                key={`${tool.source}-${tool.serverId}-${tool.name}`}
+                                className={`mcp-tool-item-card ${tool.source === 'builtin' ? 'is-builtin' : ''}`}
+                              >
                                 <div className="mcp-tool-item-head">
-                                  <span className="mcp-tool-item-name">{tool.name}</span>
-                                  <span className="mcp-tool-item-server">{tool.serverName}</span>
+                                  <span className="mcp-tool-item-name">
+                                    {tool.source === 'builtin' ? tool.modelName || tool.name : tool.name}
+                                  </span>
+                                  <span className="mcp-tool-item-badges">
+                                    {tool.source === 'builtin' && (
+                                      <span className="mcp-tool-source-badge is-builtin">
+                                        <Icon name="sparkles" size={10} />
+                                        系统内置
+                                      </span>
+                                    )}
+                                    <span className="mcp-tool-item-server">{tool.serverName}</span>
+                                  </span>
                                 </div>
                                 <p className="mcp-tool-item-desc">{tool.description || '无描述说明'}</p>
                                 {tool.inputSchema?.properties && Object.keys(tool.inputSchema.properties).length > 0 && (

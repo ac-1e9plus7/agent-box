@@ -17,6 +17,7 @@
 - 🛠️ **MCP (Model Context Protocol) 外部工具集成**：
   - 基于官方 MCP TypeScript SDK，支持 **Stdio** 与 **Streamable HTTP**，并兼容旧式 HTTP+SSE 服务。
   - 内置 **BM25 智能工具检索**，根据问题意图动态筛选 Top-K 工具注入上下文，防止 Token 膨胀。
+  - 设置中的 **Tool Explorer** 统一展示 MCP 外部工具与文件读写、集成终端等系统内置工具，并以专属标记区分来源。
   - **Agent 自主多轮执行循环**默认最多 30 轮，并可在设置中调整为 1–100 轮；支持会话级服务白名单、敏感操作审批与交互式调用卡片。
   - API 限流、网络错误、输出上限或手动停止时自动保存 Agent 工具现场；可点击“从中断处继续”，也可输入 `go`、`继续`、`再次尝试` 等自然语言指令恢复原任务。
 - 💻 **跨平台 Integrated terminal shell**：
