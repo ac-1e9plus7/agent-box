@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type {
-  AgentInterruption,
-  AgentTraceItem,
   AppSettings,
-  Conversation as StoredConversation,
+  ChatRequest,
   ExportBackupInput,
   ExportBackupResult,
   McpServerConfig,
@@ -18,8 +16,6 @@ import type {
   Skill,
   SkillInput,
   StreamEvent,
-  ToolCallExecution,
-  WebCitation
 } from '../../shared/types'
 import { ChatContent } from './components/ChatContent'
 import { Composer } from './components/Composer'
@@ -39,11 +35,8 @@ import type {
   WebSearchMode
 } from './types'
 import {
-  deleteMessageNode,
-  ensureMessageTree,
   getActiveMessageChain,
   getAncestorsForRegeneration,
-  switchBranch
 } from '../../shared/conversation-tree'
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
@@ -58,6 +51,14 @@ import {
 } from './title'
 import { languageFromSystemLocale, setLanguage } from '../../shared/i18n'
 import { t } from "../../shared/i18n"
+import {
+  toStoredConversation,
+  toUiConversation,
+  useConversation,
+  useNewConversationShortcut,
+} from './hooks/useConversation'
+import { useChatStream } from './hooks/useChatStream'
+import type { StreamRegistration } from './hooks/useChatStream'
 
 const emptySettings: AppSettings = {
   language: languageFromSystemLocale(navigator.language),
@@ -86,20 +87,6 @@ const emptySettings: AppSettings = {
   }
 }
 
-interface ActiveStream {
-  requestId: string
-  conversationId: string
-  assistantMessageId: string
-  agentMode: boolean
-}
-
-interface CreateConversationOptions {
-  modeOverrides?: Pick<Conversation, 'reasoningEnabled' | 'webSearchMode' | 'agentMode'>
-  modelId?: string
-  preserveComposer?: boolean
-  workingDirectory: string
-}
-
 interface SendOptions {
   content?: string
   preserveComposer?: boolean
@@ -108,195 +95,6 @@ interface SendOptions {
 
 function createId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`
-}
-
-function appendAssistantTrace(
-  trace: AgentTraceItem[] | undefined,
-  turn: number,
-  delta: string,
-): AgentTraceItem[] {
-  const next = [...(trace || [])]
-  const last = next.at(-1)
-  if (last?.type === 'assistant_text' && last.turn === turn) {
-    next[next.length - 1] = { ...last, text: last.text + delta }
-  } else {
-    next.push({ type: 'assistant_text', turn, text: delta })
-  }
-  return next
-}
-
-function appendToolCallTrace(
-  trace: AgentTraceItem[] | undefined,
-  turn: number,
-  callId: string,
-  toolName: string,
-  modelToolName: string,
-  serverName: string | undefined,
-  args: Record<string, unknown>,
-): AgentTraceItem[] {
-  const next = [...(trace || [])]
-  const item: AgentTraceItem = {
-    type: 'tool_call',
-    turn,
-    callId,
-    toolName,
-    modelToolName,
-    serverName,
-    args,
-  }
-  const index = next.findIndex((entry) => entry.type === 'tool_call' && entry.callId === callId)
-  if (index >= 0) next[index] = { ...(next[index] as Extract<AgentTraceItem, { type: 'tool_call' }>), ...item }
-  else next.push(item)
-  return next
-}
-
-function appendThinkingTrace(
-  trace: AgentTraceItem[] | undefined,
-  turn: number,
-  blockIndex: number,
-  thinkingDelta: string,
-  signatureDelta?: string,
-): AgentTraceItem[] {
-  const next = [...(trace || [])]
-  const index = next.findIndex((entry) => (
-    entry.type === 'assistant_thinking' && entry.turn === turn && entry.blockIndex === blockIndex
-  ))
-  if (index >= 0) {
-    const current = next[index] as Extract<AgentTraceItem, { type: 'assistant_thinking' }>
-    next[index] = {
-      ...current,
-      thinking: current.thinking + thinkingDelta,
-      signature: `${current.signature || ''}${signatureDelta || ''}` || undefined,
-    }
-  } else {
-    next.push({
-      type: 'assistant_thinking',
-      turn,
-      blockIndex,
-      thinking: thinkingDelta,
-      signature: signatureDelta,
-    })
-  }
-  return next
-}
-
-function appendProviderItemTrace(
-  trace: AgentTraceItem[] | undefined,
-  turn: number,
-  item: Record<string, unknown>,
-): AgentTraceItem[] {
-  const next = [...(trace || [])]
-  const itemId = typeof item.id === 'string' ? item.id : undefined
-  const index = itemId
-    ? next.findIndex((entry) => entry.type === 'provider_item' && entry.item.id === itemId)
-    : -1
-  const traceItem: AgentTraceItem = { type: 'provider_item', turn, format: 'openai-responses', item }
-  if (index >= 0) next[index] = traceItem
-  else next.push(traceItem)
-  return next
-}
-
-function appendToolResultTrace(
-  trace: AgentTraceItem[] | undefined,
-  turn: number,
-  callId: string,
-  toolName: string,
-  event: Extract<StreamEvent, { type: 'tool-result' }>,
-): AgentTraceItem[] {
-  const next = [...(trace || [])]
-  const item: AgentTraceItem = {
-    type: 'tool_result',
-    turn,
-    callId,
-    toolName,
-    result: event.result,
-    resultContent: event.resultContent,
-    structuredResult: event.structuredResult,
-    resultTruncated: event.resultTruncated,
-    isError: event.isError,
-  }
-  const index = next.findIndex((entry) => entry.type === 'tool_result' && entry.callId === callId)
-  if (index >= 0) next[index] = item
-  else next.push(item)
-  return next
-}
-
-function checkpointInterruptedMessage(
-  message: ChatMessage,
-  interruption: AgentInterruption,
-): ChatMessage {
-  const pendingExecutions = (message.toolExecutions ?? []).filter((execution) => (
-    execution.status === 'calling'
-    || execution.status === 'awaiting-approval'
-    || execution.status === 'executing'
-  ))
-  if (pendingExecutions.length === 0) {
-    return { ...message, interruption, status: 'error', error: interruption.message }
-  }
-
-  const trace = [...(message.agentTrace ?? [])]
-  const interruptedResult = t("Agent 执行在工具完成前中断：{value0}", { value0: interruption.message })
-  for (const execution of pendingExecutions) {
-    const hasCall = trace.some((item) => item.type === 'tool_call' && item.callId === execution.id)
-    const hasResult = trace.some((item) => item.type === 'tool_result' && item.callId === execution.id)
-    if (hasCall && !hasResult) {
-      trace.push({
-        type: 'tool_result',
-        turn: execution.turn ?? 1,
-        callId: execution.id,
-        toolName: execution.toolName,
-        result: interruptedResult,
-        isError: true,
-      })
-    }
-  }
-  return {
-    ...message,
-    agentTrace: trace.length > 0 ? trace : undefined,
-    toolExecutions: (message.toolExecutions ?? []).map((execution) => pendingExecutions.some((item) => item.id === execution.id)
-      ? { ...execution, result: interruptedResult, isError: true, status: 'error' as const }
-      : execution),
-    interruption,
-    status: 'error',
-    error: interruption.message,
-  }
-}
-
-function toUiConversation(conversation: StoredConversation): Conversation {
-  const normalizedMessages = ensureMessageTree(conversation.messages)
-  return {
-    ...conversation,
-    currentLeafId: conversation.currentLeafId ?? (normalizedMessages[normalizedMessages.length - 1]?.id),
-    messages: normalizedMessages.map((message) => ({
-      ...message,
-      modelId: message.role === 'assistant' ? conversation.modelId : undefined,
-      error: message.interruption?.message,
-      status: message.interruption ? 'error' : 'complete'
-    }))
-  }
-}
-
-function toStoredConversation(conversation: Conversation): StoredConversation {
-  return {
-    id: conversation.id,
-    title: conversation.title,
-    modelId: conversation.modelId,
-    reasoningEnabled: conversation.reasoningEnabled,
-    agentMode: conversation.agentMode,
-    skillIds: conversation.skillIds,
-    mcpServerIds: conversation.mcpServerIds,
-    workingDirectory: conversation.workingDirectory,
-    webSearchMode: conversation.webSearchMode ?? 'off',
-    currentLeafId: conversation.currentLeafId,
-    createdAt: conversation.createdAt,
-    updatedAt: conversation.updatedAt,
-    messages: conversation.messages.map(({
-      status: _status,
-      modelId: _modelId,
-      error: _error,
-      ...message
-    }) => message)
-  }
 }
 
 function makeTitle(content: string): string {
@@ -308,21 +106,6 @@ function normalizeError(error: unknown): string {
   return error instanceof Error ? error.message : t("发生未知错误，请稍后重试。")
 }
 
-function mergeCitation(
-  citations: WebCitation[] | undefined,
-  citation: WebCitation
-): WebCitation[] {
-  const existing = citations ?? []
-  const index = existing.findIndex((item) => item.url === citation.url)
-  if (index < 0) return [...existing, citation]
-  return existing.map((item, itemIndex) => itemIndex === index ? {
-    url: citation.url,
-    title: citation.title ?? item.title,
-    content: citation.content ?? item.content,
-    startIndex: citation.startIndex ?? item.startIndex,
-    endIndex: citation.endIndex ?? item.endIndex
-  } : item)
-}
 
 export default function App(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(emptySettings)
@@ -331,8 +114,6 @@ export default function App(): JSX.Element {
   const [skills, setSkills] = useState<Skill[]>([])
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([])
   const [mcpTools, setMcpTools] = useState<McpToolDefinition[]>([])
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [activeConversationId, setActiveConversationId] = useState('')
   const [activeModelId, setActiveModelId] = useState('')
   const [agentMode, setAgentMode] = useState(false)
   const [reasoningEnabled, setReasoningEnabled] = useState(false)
@@ -345,29 +126,56 @@ export default function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [newConversationOpen, setNewConversationOpen] = useState(false)
-  const [creatingConversation, setCreatingConversation] = useState(false)
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState('')
   const [toast, setToast] = useState('')
-  const [streamingConversationIds, setStreamingConversationIds] = useState<Set<string>>(new Set())
 
-  const conversationsRef = useRef<Conversation[]>([])
-  const activeStreamsRef = useRef<Map<string, ActiveStream>>(new Map())
   const toastTimerRef = useRef<number | undefined>(undefined)
   const autoRenamingRef = useRef<Set<string>>(new Set())
   const manualRenamedRef = useRef<Set<string>>(new Set())
-  const creatingConversationRef = useRef(false)
 
-  const activeConversation = conversations.find((conversation) => conversation.id === activeConversationId)
   const activeModel = models.find((model) => model.id === activeModelId)
   const activeProvider = providers.find((provider) => provider.id === activeModel?.providerId)
   const webSearchAvailable = isWebSearchAvailable(activeModel, activeProvider)
 
-  const isCurrentStreaming = Boolean(activeConversationId && streamingConversationIds.has(activeConversationId))
-
   useEffect(() => {
     document.documentElement.lang = settings.language
   }, [settings.language])
+
+  const showToast = useCallback((message: string): void => {
+    window.clearTimeout(toastTimerRef.current)
+    setToast(message)
+    toastTimerRef.current = window.setTimeout(() => setToast(''), 4200)
+  }, [])
+
+  const handleMissingConversationModel = useCallback((): void => {
+      setNewConversationOpen(false)
+      setSettingsSection('models')
+      setSettingsOpen(true)
+      showToast(t("请先添加一个模型。"))
+  }, [showToast])
+
+  const {
+    activeConversation,
+    activeConversationId,
+    clearConversationState,
+    conversations,
+    conversationsRef,
+    createConversation,
+    creatingConversation,
+    deleteActiveMessageBranch,
+    hydrateConversations,
+    persistConversation,
+    replaceConversations,
+    setActiveConversationId,
+    switchActiveBranch,
+  } = useConversation({
+    models,
+    onMissingModel: handleMissingConversationModel,
+    providers,
+    settings,
+    showToast,
+  })
 
   const visibleMessages = useMemo(
     () => (activeConversation ? getActiveMessageChain(activeConversation) : []).filter((message) => message.role !== 'system'),
@@ -382,117 +190,29 @@ export default function App(): JSX.Element {
     attachments
   ) : undefined, [activeModel, attachments, draft, settings, visibleMessages])
 
-  const showToast = useCallback((message: string): void => {
-    window.clearTimeout(toastTimerRef.current)
-    setToast(message)
-    toastTimerRef.current = window.setTimeout(() => setToast(''), 4200)
-  }, [])
-
-  const replaceConversations = useCallback((updater: (current: Conversation[]) => Conversation[]): Conversation[] => {
-    const next = updater(conversationsRef.current)
-    conversationsRef.current = next
-    setConversations(next)
-    return next
-  }, [])
-
-  const persistConversation = useCallback(async (conversation: Conversation): Promise<boolean> => {
-    try {
-      const saved = await window.agentbox.conversations.save(toStoredConversation(conversation))
-      replaceConversations((current) => current.map((item) => (
-        item.id === saved.id ? { ...toUiConversation(saved), messages: item.messages } : item
-      )))
-      return true
-    } catch (error) {
-      showToast(t("保存会话失败：{value0}", { value0: normalizeError(error) }))
-      return false
-    }
-  }, [replaceConversations, showToast])
-
-  const createConversation = useCallback(async ({
-    modeOverrides,
-    modelId,
-    preserveComposer = false,
-    workingDirectory,
-  }: CreateConversationOptions): Promise<Conversation | undefined> => {
-    const resolvedWorkingDirectory = workingDirectory.trim()
-    if (!resolvedWorkingDirectory) {
-      showToast(t("新建对话前必须指定工作目录。"))
-      return undefined
-    }
-    if (creatingConversationRef.current) return undefined
-
-    const resolvedModel = models.find((model) => model.id === modelId)
-      ?? models.find((model) => model.id === settings.defaultModelId)
-      ?? models[0]
-    if (!resolvedModel) {
-      setNewConversationOpen(false)
-      setSettingsSection('models')
-      setSettingsOpen(true)
-      showToast(t("请先添加一个模型。"))
-      return undefined
-    }
-
-    creatingConversationRef.current = true
-    setCreatingConversation(true)
-    const now = new Date().toISOString()
-    const resolvedProvider = providers.find((provider) => provider.id === resolvedModel.providerId)
-    const conversation: Conversation = {
-      id: createId('conversation'),
-      title: t("新对话"),
-      modelId: resolvedModel.id,
-      reasoningEnabled: resolvedModel.supportsReasoning && (
-        modeOverrides?.reasoningEnabled ?? (
-          resolvedModel.defaultReasoningEnabled || settings.defaultReasoningEnabled
-        )
-      ),
-      agentMode: modeOverrides?.agentMode ?? settings.defaultAgentMode ?? false,
-      workingDirectory: resolvedWorkingDirectory,
-      webSearchMode: effectiveWebSearchMode(
-        resolvedModel,
-        resolvedProvider,
-        modeOverrides?.webSearchMode ?? resolvedModel.defaultWebSearchMode
-      ),
-      messages: [],
-      createdAt: now,
-      updatedAt: now
-    }
-
-    try {
-      const saved = toUiConversation(await window.agentbox.conversations.save(toStoredConversation(conversation)))
-      replaceConversations((current) => [saved, ...current])
-      setActiveConversationId(saved.id)
-      setActiveModelId(saved.modelId)
-      setAgentMode(Boolean(saved.agentMode))
-      setReasoningEnabled(Boolean(saved.reasoningEnabled))
-      setWebSearchMode(saved.webSearchMode ?? 'off')
-      if (!preserveComposer) {
-        setDraft('')
-        setAttachments([])
-      }
-      setQuery('')
-      setMobileSidebarOpen(false)
-      return saved
-    } catch (error) {
-      showToast(t("无法新建会话：{value0}", { value0: normalizeError(error) }))
-      return undefined
-    } finally {
-      creatingConversationRef.current = false
-      setCreatingConversation(false)
-    }
-  }, [models, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, showToast])
-
   const openNewConversationDialog = useCallback((): void => {
     setNewConversationOpen(true)
     setMobileSidebarOpen(false)
   }, [])
 
   const handleNewConversationInWorkspace = useCallback(async (workingDirectory: string): Promise<void> => {
+    const preserveComposer = !activeConversation
     const created = await createConversation({
       modelId: activeModelId,
-      preserveComposer: !activeConversation,
       workingDirectory,
     })
-    if (created) setNewConversationOpen(false)
+    if (!created) return
+    setActiveModelId(created.modelId)
+    setAgentMode(Boolean(created.agentMode))
+    setReasoningEnabled(Boolean(created.reasoningEnabled))
+    setWebSearchMode(created.webSearchMode ?? 'off')
+    if (!preserveComposer) {
+      setDraft('')
+      setAttachments([])
+    }
+    setQuery('')
+    setMobileSidebarOpen(false)
+    setNewConversationOpen(false)
   }, [activeConversation, activeModelId, createConversation])
 
   const handleChooseNewConversationDirectory = useCallback(async (): Promise<void> => {
@@ -511,7 +231,15 @@ export default function App(): JSX.Element {
     setBootstrapError('')
     try {
       if (!window.agentbox) throw new Error(t("安全桥接未加载，请重新启动应用。"))
-      const [nextSettings, providerViews, modelViews, conversationViews, initialSkills] = await Promise.all([
+      const [
+        nextSettings,
+        providerViews,
+        modelViews,
+        conversationViews,
+        initialSkills,
+        initialMcpServers,
+        initialMcpTools,
+      ] = await Promise.all([
         window.agentbox.settings.get(),
         window.agentbox.providers.list(),
         window.agentbox.models.list(),
@@ -530,15 +258,15 @@ export default function App(): JSX.Element {
       setProviders(uiProviders)
       setModels(modelViews)
       setSkills(initialSkills)
-      conversationsRef.current = uiConversations
-      setConversations(uiConversations)
+      setMcpServers(initialMcpServers)
+      setMcpTools(initialMcpTools)
 
       const initialConversation = uiConversations[0]
       const initialModel = modelViews.find((model) => model.id === initialConversation?.modelId)
         ?? modelViews.find((model) => model.id === nextSettings.defaultModelId)
         ?? modelViews[0]
       const initialProvider = uiProviders.find((provider) => provider.id === initialModel?.providerId)
-      setActiveConversationId(initialConversation?.id ?? '')
+      hydrateConversations(uiConversations, initialConversation?.id)
       setActiveModelId(initialModel?.id ?? '')
       setAgentMode(initialConversation?.agentMode ?? nextSettings.defaultAgentMode ?? false)
       setReasoningEnabled(
@@ -557,28 +285,16 @@ export default function App(): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [hydrateConversations])
 
   useEffect(() => {
     void bootstrap()
   }, [bootstrap])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent): void => {
-      if (
-        !loading
-        && !settingsOpen
-        && !event.altKey
-        && (event.ctrlKey || event.metaKey)
-        && event.key.toLowerCase() === 'n'
-      ) {
-        event.preventDefault()
-        openNewConversationDialog()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [loading, openNewConversationDialog, settingsOpen])
+  useNewConversationShortcut({
+    enabled: !loading && !settingsOpen,
+    onOpen: openNewConversationDialog,
+  })
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme
@@ -669,287 +385,26 @@ export default function App(): JSX.Element {
     void persistConversation(renamed)
   }, [persistConversation, replaceConversations])
 
-  const finishStream = useCallback((event: Extract<StreamEvent, { type: 'done' | 'error' }>): void => {
-    let targetStream: ActiveStream | undefined
-    for (const stream of activeStreamsRef.current.values()) {
-      if (stream.requestId === event.requestId) {
-        targetStream = stream
-        break
-      }
-    }
-    if (!targetStream) return
+  const {
+    cancelAllStreams,
+    cancelConversationStream,
+    discardStream,
+    launchPreparedStream,
+    prepareStream,
+    resolveToolApproval,
+    stopStream,
+    streamingConversationIds,
+  } = useChatStream({
+    maybeGenerateTitle,
+    persistConversation,
+    replaceConversations,
+    showToast,
+  })
 
-    const activeStream = targetStream
-    const targetConvId = activeStream.conversationId
-    const targetAssistantId = activeStream.assistantMessageId
+  const isCurrentStreaming = Boolean(
+    activeConversationId && streamingConversationIds.has(activeConversationId),
+  )
 
-    const next = replaceConversations((current) => current.map((conversation) => {
-      if (conversation.id !== targetConvId) return conversation
-      const interruption = interruptionFromStreamEvent(event, activeStream.agentMode)
-      return {
-        ...conversation,
-        updatedAt: new Date().toISOString(),
-        messages: conversation.messages.map((message) => (
-          message.id === targetAssistantId
-            ? interruption
-              ? checkpointInterruptedMessage(message, interruption)
-              : {
-                ...message,
-                interruption: undefined,
-                status: event.type === 'error' ? 'error' : 'complete',
-                error: event.type === 'error' ? event.error.message : undefined
-              }
-            : message
-        ))
-      }
-    }))
-    const completedConversation = next.find((conversation) => conversation.id === targetConvId)
-    const completedAssistant = completedConversation?.messages.find((message) => message.id === targetAssistantId)
-    if (completedConversation) void persistConversation(completedConversation)
-    if (event.type === 'error') showToast(event.error.message)
-    else if (completedAssistant?.interruption) showToast(completedAssistant.interruption.message)
-    activeStreamsRef.current.delete(targetConvId)
-    setStreamingConversationIds((prev) => {
-      const nextSet = new Set(prev)
-      nextSet.delete(targetConvId)
-      return nextSet
-    })
-
-    // After the first successful user+assistant turn, ask the current model for a concise generated title
-    // unless the user has already manually renamed it.
-    if (
-      event.type === 'done' &&
-      event.finishReason !== 'cancelled' &&
-      !completedAssistant?.interruption &&
-      completedConversation &&
-      !manualRenamedRef.current.has(completedConversation.id) &&
-      !autoRenamingRef.current.has(completedConversation.id) &&
-      completedConversation.messages.filter((message) => message.role !== 'system').length === 2
-    ) {
-      void maybeGenerateTitle(completedConversation)
-    }
-  }, [maybeGenerateTitle, persistConversation, replaceConversations, showToast])
-
-  useEffect(() => window.agentbox.chat.onEvent((event) => {
-    if (event.type === 'start') {
-      for (const stream of activeStreamsRef.current.values()) {
-        if (!stream.requestId) {
-          stream.requestId = event.requestId
-          break
-        }
-      }
-    }
-
-    let activeStream: ActiveStream | undefined
-    for (const stream of activeStreamsRef.current.values()) {
-      if (stream.requestId === event.requestId) {
-        activeStream = stream
-        break
-      }
-    }
-    if (!activeStream) return
-
-    if (event.type === 'skill-activated') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream!.assistantMessageId) return message
-            const currentActivations = message.skillActivations ?? []
-            const existingIndex = currentActivations.findIndex((item) => item.id === event.skill.id)
-            const nextActivations = [...currentActivations]
-            if (existingIndex >= 0) nextActivations[existingIndex] = event.skill
-            else nextActivations.push(event.skill)
-            return { ...message, skillActivations: nextActivations }
-          })
-        }
-      }))
-      return
-    }
-
-    if (event.type === 'agent-provider-item') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => message.id === activeStream!.assistantMessageId
-            ? { ...message, agentTrace: appendProviderItemTrace(message.agentTrace, event.turn, event.item) }
-            : message)
-        }
-      }))
-      return
-    }
-
-    if (event.type === 'text-delta' || event.type === 'reasoning-delta') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream!.assistantMessageId) return message
-            return event.type === 'text-delta'
-              ? {
-                ...message,
-                content: message.content + event.delta,
-                agentTrace: appendAssistantTrace(message.agentTrace, event.turn ?? 1, event.delta),
-              }
-              : {
-                ...message,
-                reasoning: (message.reasoning ?? '') + event.delta,
-                agentTrace: event.thinkingBlockIndex === undefined
-                  ? message.agentTrace
-                  : appendThinkingTrace(
-                    message.agentTrace,
-                    event.turn ?? 1,
-                    event.thinkingBlockIndex,
-                    event.delta,
-                    event.signatureDelta,
-                  ),
-              }
-          })
-        }
-      }))
-      return
-    }
-    
-    if (event.type === 'tool-call-start') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream!.assistantMessageId) return message
-            const existing = message.toolExecutions ?? []
-            if (existing.some((t) => t.id === event.callId)) return message
-            const newExecution: ToolCallExecution = {
-              id: event.callId,
-              toolName: event.toolName,
-              modelToolName: event.modelToolName,
-              serverName: event.serverName,
-              turn: event.turn,
-              args: {},
-              status: 'calling'
-            }
-            return {
-              ...message,
-              toolExecutions: [...existing, newExecution]
-            }
-          })
-        }
-      }))
-      return
-    }
-    if (event.type === 'tool-approval-required') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream!.assistantMessageId) return message
-            const existing = message.toolExecutions ?? []
-            const nextExecution: ToolCallExecution = {
-              id: event.callId,
-              toolName: event.toolName,
-              modelToolName: event.modelToolName,
-              serverName: event.serverName,
-              turn: event.turn,
-              args: event.args,
-              riskLevel: event.riskLevel,
-              approvalReason: event.reason,
-              status: 'awaiting-approval'
-            }
-            return {
-              ...message,
-              toolExecutions: existing.some((execution) => execution.id === event.callId)
-                ? existing.map((execution) => execution.id === event.callId ? { ...execution, ...nextExecution } : execution)
-                : [...existing, nextExecution],
-              agentTrace: appendToolCallTrace(message.agentTrace, event.turn, event.callId, event.toolName, event.modelToolName, event.serverName, event.args)
-            }
-          })
-        }
-      }))
-      return
-    }
-    if (event.type === 'tool-call-complete') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream!.assistantMessageId) return message
-            const existing = message.toolExecutions ?? []
-            const modelToolName = event.modelToolName
-              || existing.find((execution) => execution.id === event.callId)?.modelToolName
-              || event.toolName
-            return {
-              ...message,
-              toolExecutions: existing.map((exec) => exec.id === event.callId
-                ? { ...exec, toolName: event.toolName, modelToolName, turn: event.turn ?? exec.turn, args: event.args, status: 'executing' as const }
-                : exec),
-              agentTrace: appendToolCallTrace(message.agentTrace, event.turn ?? 1, event.callId, event.toolName, modelToolName, undefined, event.args)
-            }
-          })
-        }
-      }))
-      return
-    }
-    if (event.type === 'tool-result') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => {
-            if (message.id !== activeStream!.assistantMessageId) return message
-            const existing = message.toolExecutions ?? []
-            const execution = existing.find((item) => item.id === event.callId)
-            return {
-              ...message,
-              toolExecutions: existing.map((item) => item.id === event.callId
-                ? {
-                  ...item,
-                  result: event.result,
-                  resultContent: event.resultContent,
-                  structuredResult: event.structuredResult,
-                  resultTruncated: event.resultTruncated,
-                  isError: event.isError,
-                  turn: event.turn ?? item.turn,
-                  status: event.denied ? 'denied' as const : event.isError ? 'error' as const : 'complete' as const
-                }
-                : item),
-              agentTrace: appendToolResultTrace(message.agentTrace, event.turn ?? execution?.turn ?? 1, event.callId, event.toolName, event)
-            }
-          })
-        }
-      }))
-      return
-    }
-    if (event.type === 'citation') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => message.id === activeStream!.assistantMessageId
-            ? { ...message, citations: mergeCitation(message.citations, event.citation) }
-            : message)
-        }
-      }))
-      return
-    }
-    if (event.type === 'usage') {
-      replaceConversations((current) => current.map((conversation) => {
-        if (conversation.id !== activeStream!.conversationId) return conversation
-        return {
-          ...conversation,
-          messages: conversation.messages.map((message) => message.id === activeStream!.assistantMessageId
-            ? { ...message, usage: { ...message.usage, ...event.usage } }
-            : message)
-        }
-      }))
-      return
-    }
-    if (event.type === 'done' || event.type === 'error') finishStream(event)
-  }), [finishStream, replaceConversations])
 
   const handleSelectConversation = (conversationId: string): void => {
     const conversation = conversationsRef.current.find((item) => item.id === conversationId)
@@ -966,16 +421,7 @@ export default function App(): JSX.Element {
   }
 
   const handleDeleteConversation = async (conversationId: string): Promise<void> => {
-    const stream = activeStreamsRef.current.get(conversationId)
-    if (stream) {
-      if (stream.requestId) await window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
-      activeStreamsRef.current.delete(conversationId)
-      setStreamingConversationIds((prev) => {
-        const nextSet = new Set(prev)
-        nextSet.delete(conversationId)
-        return nextSet
-      })
-    }
+    await cancelConversationStream(conversationId)
     autoRenamingRef.current.delete(conversationId)
     manualRenamedRef.current.delete(conversationId)
     try {
@@ -1220,6 +666,29 @@ export default function App(): JSX.Element {
     return true
   }, [activeProvider, showToast])
 
+  const buildChatRequest = useCallback((
+    conversation: Conversation,
+    messages: Message[],
+    options?: Pick<ChatRequest, 'allowContextTrimming' | 'resumeFromMessageId'>,
+  ): ChatRequest => {
+    if (!activeModel) throw new Error(t("当前模型不可用。"))
+    return {
+      conversationId: conversation.id,
+      modelId: activeModel.id,
+      messages,
+      agentMode: conversation.agentMode ?? agentMode,
+      skillIds: conversation.skillIds,
+      mcpServerIds: conversation.mcpServerIds,
+      workingDirectory: conversation.workingDirectory,
+      resumeFromMessageId: options?.resumeFromMessageId,
+      reasoningEnabled,
+      webSearchMode,
+      reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
+      maxOutputTokens: activeModel.maxOutputTokens,
+      allowContextTrimming: options?.allowContextTrimming,
+    }
+  }, [activeModel, agentMode, reasoningEnabled, settings.defaultReasoningEffort, webSearchMode])
+
   const handleSend = async (allowContextTrimming = false, options?: SendOptions): Promise<void> => {
     const usesExplicitContent = options?.content !== undefined
     const content = (options?.content ?? draft).trim()
@@ -1307,13 +776,12 @@ export default function App(): JSX.Element {
       setAttachments([])
     }
     if (resumeFromMessageId) setAgentMode(true)
-    setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
-    activeStreamsRef.current.set(nextConversation.id, {
-      requestId: '',
+    const streamRegistration: StreamRegistration = {
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id,
       agentMode: Boolean(nextConversation.agentMode),
-    })
+    }
+    prepareStream(streamRegistration)
 
     const requestMessages: Message[] = [...activeChain, userMessage].map(
       ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
@@ -1331,44 +799,17 @@ export default function App(): JSX.Element {
         setDraft(content)
         setAttachments(currentAttachments)
       }
-      activeStreamsRef.current.delete(nextConversation.id)
-      setStreamingConversationIds((prev) => {
-        const nextSet = new Set(prev)
-        nextSet.delete(nextConversation.id)
-        return nextSet
-      })
+      discardStream(nextConversation.id)
       return
     }
 
-    try {
-      const { requestId } = await window.agentbox.chat.stream({
-        conversationId: nextConversation.id,
-        modelId: activeModel.id,
-        messages: requestMessages,
-        agentMode: nextConversation.agentMode ?? agentMode,
-        skillIds: nextConversation.skillIds,
-        mcpServerIds: nextConversation.mcpServerIds,
-        workingDirectory: nextConversation.workingDirectory,
+    await launchPreparedStream(
+      streamRegistration,
+      buildChatRequest(nextConversation, requestMessages, {
         resumeFromMessageId,
-        reasoningEnabled,
-        webSearchMode,
-        reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
-        maxOutputTokens: activeModel.maxOutputTokens,
-        allowContextTrimming: allowContextTrimming || undefined
-      })
-      const stream = activeStreamsRef.current.get(nextConversation.id)
-      if (stream && stream.assistantMessageId === assistantMessage.id) {
-        stream.requestId = requestId
-      }
-    } catch (error) {
-      const stream = activeStreamsRef.current.get(nextConversation.id)
-      const requestId = stream?.requestId ?? ''
-      finishStream({
-        type: 'error',
-        requestId,
-        error: { message: normalizeError(error) }
-      })
-    }
+        allowContextTrimming: allowContextTrimming || undefined,
+      }),
+    )
   }
 
   const handleResumeAgentExecution = async (assistantMessageId: string): Promise<void> => {
@@ -1381,28 +822,12 @@ export default function App(): JSX.Element {
 
   const handleStop = async (conversationId?: string): Promise<void> => {
     const targetConvId = conversationId ?? activeConversationId
-    const activeStream = activeStreamsRef.current.get(targetConvId)
-    if (!activeStream?.requestId) return
-    try {
-      await window.agentbox.chat.cancel(activeStream.requestId)
-      finishStream({ type: 'done', requestId: activeStream.requestId, finishReason: 'cancelled' })
-    } catch (error) {
-      showToast(t("无法停止生成：{value0}", { value0: normalizeError(error) }))
-    }
+    await stopStream(targetConvId)
   }
 
   const handleToolApproval = useCallback(async (callId: string, approved: boolean): Promise<void> => {
-    const stream = activeStreamsRef.current.get(activeConversationId)
-    if (!stream?.requestId) {
-      showToast(t("该工具审批请求已结束。"))
-      return
-    }
-    try {
-      await window.agentbox.chat.resolveToolApproval(stream.requestId, callId, approved)
-    } catch (error) {
-      showToast(t("无法提交工具审批：{value0}", { value0: normalizeError(error) }))
-    }
-  }, [activeConversationId, showToast])
+    await resolveToolApproval(activeConversationId, callId, approved)
+  }, [activeConversationId, resolveToolApproval])
 
   const handleRegenerate = async (targetAssistantId?: string, allowContextTrimming = false): Promise<void> => {
     if (!activeModel || !activeConversation || streamingConversationIds.has(activeConversation.id)) return
@@ -1460,13 +885,12 @@ export default function App(): JSX.Element {
     }
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
-    activeStreamsRef.current.set(nextConversation.id, {
-      requestId: '',
+    const streamRegistration: StreamRegistration = {
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id,
       agentMode: Boolean(nextConversation.agentMode ?? agentMode),
-    })
+    }
+    prepareStream(streamRegistration)
 
     const requestMessages: Message[] = ancestors.map(
       ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
@@ -1480,74 +904,28 @@ export default function App(): JSX.Element {
       replaceConversations((current) => current.map((item) => (
         item.id === activeConversation.id ? activeConversation : item
       )))
-      activeStreamsRef.current.delete(nextConversation.id)
-      setStreamingConversationIds((prev) => {
-        const nextSet = new Set(prev)
-        nextSet.delete(nextConversation.id)
-        return nextSet
-      })
+      discardStream(nextConversation.id)
       return
     }
 
-    try {
-      const { requestId } = await window.agentbox.chat.stream({
-        conversationId: nextConversation.id,
-        modelId: activeModel.id,
-        messages: requestMessages,
-        agentMode: nextConversation.agentMode ?? agentMode,
-        skillIds: nextConversation.skillIds,
-        mcpServerIds: nextConversation.mcpServerIds,
-        workingDirectory: nextConversation.workingDirectory,
-        reasoningEnabled,
-        webSearchMode,
-        reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
-        maxOutputTokens: activeModel.maxOutputTokens,
-        allowContextTrimming: allowContextTrimming || undefined
-      })
-      const stream = activeStreamsRef.current.get(nextConversation.id)
-      if (stream && stream.assistantMessageId === assistantMessage.id) {
-        stream.requestId = requestId
-      }
-    } catch (error) {
-      const stream = activeStreamsRef.current.get(nextConversation.id)
-      const requestId = stream?.requestId ?? ''
-      finishStream({
-        type: 'error',
-        requestId,
-        error: { message: normalizeError(error) }
-      })
-    }
+    await launchPreparedStream(
+      streamRegistration,
+      buildChatRequest(nextConversation, requestMessages, {
+        allowContextTrimming: allowContextTrimming || undefined,
+      }),
+    )
   }
 
   const handleSwitchVersion = useCallback((targetMessageId: string): void => {
     if (!activeConversation || streamingConversationIds.has(activeConversation.id)) return
-    const nextConversation = switchBranch(activeConversation, targetMessageId)
-    replaceConversations((current) => current.map((item) => (
-      item.id === nextConversation.id ? nextConversation : item
-    )))
-    void persistConversation(nextConversation)
-  }, [activeConversation, persistConversation, replaceConversations, streamingConversationIds])
+    switchActiveBranch(targetMessageId)
+  }, [activeConversation, streamingConversationIds, switchActiveBranch])
 
   const handleDeleteMessage = useCallback(async (messageId: string): Promise<void> => {
     if (!activeConversation) return
-
-    const activeStream = activeStreamsRef.current.get(activeConversation.id)
-    if (activeStream) {
-      if (activeStream.requestId) await window.agentbox.chat.cancel(activeStream.requestId).catch(() => undefined)
-      activeStreamsRef.current.delete(activeConversation.id)
-      setStreamingConversationIds((prev) => {
-        const nextSet = new Set(prev)
-        nextSet.delete(activeConversation.id)
-        return nextSet
-      })
-    }
-
-    const nextConversation = deleteMessageNode(activeConversation, messageId)
-    replaceConversations((current) => current.map((item) => (
-      item.id === nextConversation.id ? nextConversation : item
-    )))
-    void persistConversation(nextConversation)
-  }, [activeConversation, persistConversation, replaceConversations])
+    await cancelConversationStream(activeConversation.id)
+    deleteActiveMessageBranch(messageId)
+  }, [activeConversation, cancelConversationStream, deleteActiveMessageBranch])
 
   const handleEditMessage = async (messageId: string, nextContent: string, regenerate: boolean): Promise<boolean> => {
     const content = nextContent.trim()
@@ -1617,13 +995,12 @@ export default function App(): JSX.Element {
     }
 
     replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    setStreamingConversationIds((prev) => new Set(prev).add(nextConversation.id))
-    activeStreamsRef.current.set(nextConversation.id, {
-      requestId: '',
+    const streamRegistration: StreamRegistration = {
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id,
       agentMode: Boolean(nextConversation.agentMode ?? agentMode),
-    })
+    }
+    prepareStream(streamRegistration)
 
     const requestMessages: Message[] = historyForPrompt.map(
       ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
@@ -1637,44 +1014,14 @@ export default function App(): JSX.Element {
       replaceConversations((current) => current.map((item) => (
         item.id === activeConversation.id ? activeConversation : item
       )))
-      activeStreamsRef.current.delete(nextConversation.id)
-      setStreamingConversationIds((prev) => {
-        const nextSet = new Set(prev)
-        nextSet.delete(nextConversation.id)
-        return nextSet
-      })
+      discardStream(nextConversation.id)
       return false
     }
 
-    try {
-      const { requestId } = await window.agentbox.chat.stream({
-        conversationId: nextConversation.id,
-        modelId: activeModel.id,
-        messages: requestMessages,
-        agentMode: nextConversation.agentMode ?? agentMode,
-        skillIds: nextConversation.skillIds,
-        mcpServerIds: nextConversation.mcpServerIds,
-        workingDirectory: nextConversation.workingDirectory,
-        reasoningEnabled,
-        webSearchMode,
-        reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
-        maxOutputTokens: activeModel.maxOutputTokens
-      })
-      const stream = activeStreamsRef.current.get(nextConversation.id)
-      if (stream && stream.assistantMessageId === assistantMessage.id) {
-        stream.requestId = requestId
-      }
-      return true
-    } catch (error) {
-      const stream = activeStreamsRef.current.get(nextConversation.id)
-      const requestId = stream?.requestId ?? ''
-      finishStream({
-        type: 'error',
-        requestId,
-        error: { message: normalizeError(error) }
-      })
-      return false
-    }
+    return launchPreparedStream(
+      streamRegistration,
+      buildChatRequest(nextConversation, requestMessages),
+    )
   }
 
   const saveSettings = async (payload: SettingsSavePayload): Promise<void> => {
@@ -1769,8 +1116,7 @@ export default function App(): JSX.Element {
     setProviders(savedProviders)
     setModels(savedModels)
     setSettings(savedSettings)
-    conversationsRef.current = updatedConversations
-    setConversations(updatedConversations)
+    hydrateConversations(updatedConversations, activeConversationId)
 
     const nextActiveModel = modelIdMap.get(activeModelId)
       ?? (savedModels.some((model) => model.id === activeModelId) ? activeModelId : fallbackModelId)
@@ -1818,17 +1164,9 @@ export default function App(): JSX.Element {
   }
 
   const handleClearAllData = async (): Promise<void> => {
-    for (const stream of activeStreamsRef.current.values()) {
-      if (stream.requestId) {
-        await window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
-      }
-    }
-    activeStreamsRef.current.clear()
-    setStreamingConversationIds(new Set())
+    await cancelAllStreams()
     await window.agentbox.data.clearConversations()
-    conversationsRef.current = []
-    setConversations([])
-    setActiveConversationId('')
+    clearConversationState()
     const fallbackModel = models.find((model) => model.id === settings.defaultModelId) ?? models[0]
     setActiveModelId(fallbackModel?.id ?? '')
     setReasoningEnabled(Boolean(fallbackModel?.supportsReasoning && (
