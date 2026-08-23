@@ -70,6 +70,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   sendShortcut: 'enter',
   contextManagementMode: 'manual',
+  userNickname: '',
+  userAvatar: '',
   defaultModelId: 'openrouter-auto',
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
@@ -117,6 +119,8 @@ export class AppRepository {
       if (patch.contextManagementMode !== undefined) {
         next.contextManagementMode = patch.contextManagementMode
       }
+      if (patch.userNickname !== undefined) next.userNickname = patch.userNickname
+      if (patch.userAvatar !== undefined) next.userAvatar = patch.userAvatar
       if (patch.defaultModelId !== undefined) next.defaultModelId = patch.defaultModelId
       if (patch.titleGenerationModelId !== undefined) {
         next.titleGenerationModelId = patch.titleGenerationModelId

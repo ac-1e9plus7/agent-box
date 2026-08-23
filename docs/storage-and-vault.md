@@ -57,6 +57,8 @@ interface VaultState {
 }
 ```
 
+`AppSettings.userNickname` 与 `AppSettings.userAvatar` 保存用户的本地展示资料。旧 Vault 缺少字段时均迁移为空字符串；昵称最多 50 个字符，头像只接受经客户端裁剪压缩后的 PNG/JPEG/WebP Data URL（最多 3,000,000 字符）。这两个字段只由 renderer 展示，网关构造系统提示词和模型消息时不会读取。
+
 ### 资源配额与上限校验（Resource Quotas）
 为了防止恶意输入或数据膨胀耗尽内存，存储层实施了严格的配额检查：
 - `MAX_PROVIDERS`: 50 个

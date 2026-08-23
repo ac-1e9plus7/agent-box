@@ -60,6 +60,8 @@ import {
 const emptySettings: AppSettings = {
   theme: 'system',
   sendShortcut: 'enter',
+  userNickname: '',
+  userAvatar: '',
   defaultReasoningEnabled: false,
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
@@ -1880,6 +1882,8 @@ export default function App(): JSX.Element {
         conversations={conversations}
         mobileOpen={mobileSidebarOpen}
         query={query}
+        userAvatar={settings.userAvatar}
+        userNickname={settings.userNickname}
         onCloseMobile={() => setMobileSidebarOpen(false)}
         onCollapse={() => setSidebarCollapsed(true)}
         onDeleteConversation={(id) => void handleDeleteConversation(id)}
@@ -1923,6 +1927,8 @@ export default function App(): JSX.Element {
             models={models}
             streaming={isCurrentStreaming}
             suggestions={promptSuggestions}
+            userAvatar={settings.userAvatar}
+            userNickname={settings.userNickname}
             onDeleteMessage={(messageId) => void handleDeleteMessage(messageId)}
             onEditMessage={(messageId, content, regenerate) => handleEditMessage(messageId, content, regenerate)}
             onRegenerate={(targetAssistantId) => void handleRegenerate(targetAssistantId)}

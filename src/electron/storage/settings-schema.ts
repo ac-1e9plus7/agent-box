@@ -1,6 +1,7 @@
 import { isAbsolute } from 'node:path'
 import type { AppSettings, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, ProxyConfig, ProxyMode } from '../../shared/types'
 import { normalizeAgentToolTurnLimit } from '../../shared/agent-limits'
+import { MAX_USER_AVATAR_DATA_URL_LENGTH, MAX_USER_NICKNAME_LENGTH } from '../../shared/user-profile'
 import { isLoopbackUrl } from '../api/provider-policy'
 import { normalizeRuntimePathInput } from '../runtime-path'
 
@@ -34,6 +35,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
   if (typeof value.systemPrompt !== 'string' || value.systemPrompt.length > 100_000) {
     throw new Error('Invalid system prompt')
   }
+  const userNickname = normalizeUserNickname(value.userNickname)
+  const userAvatar = normalizeUserAvatar(value.userAvatar)
   if (value.defaultModelId !== undefined && typeof value.defaultModelId !== 'string') {
     throw new Error('Invalid default model')
   }
@@ -69,6 +72,8 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     sendShortcut: value.sendShortcut as AppSettings['sendShortcut'],
     contextManagementMode:
       contextManagementMode as AppSettings['contextManagementMode'],
+    userNickname,
+    userAvatar,
     defaultModelId: value.defaultModelId as string | undefined,
     defaultReasoningEnabled: value.defaultReasoningEnabled,
     defaultReasoningEffort:
@@ -89,6 +94,29 @@ export function normalizeAppSettings(value: unknown): AppSettings {
     settings.titleGenerationModelId = value.titleGenerationModelId as string
   }
   return settings
+}
+
+function normalizeUserNickname(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  if (
+    typeof value !== 'string'
+    || value.length > MAX_USER_NICKNAME_LENGTH
+    || /[\r\n\0]/.test(value)
+  ) {
+    throw new Error('昵称不能超过 50 个字符或包含换行。')
+  }
+  return value.trim()
+}
+
+function normalizeUserAvatar(value: unknown): string {
+  if (value === undefined || value === null || value === '') return ''
+  if (typeof value !== 'string' || value.length > MAX_USER_AVATAR_DATA_URL_LENGTH) {
+    throw new Error('头像数据过大或格式无效。')
+  }
+  const match = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value)
+  const payload = match?.[1]
+  if (!payload || payload.length % 4 !== 0) throw new Error('头像数据过大或格式无效。')
+  return value
 }
 
 export function defaultDeveloperRuntimeSettings(): DeveloperRuntimeSettings {

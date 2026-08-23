@@ -16,6 +16,7 @@ import {
   MIN_AGENT_TOOL_TURN_LIMIT,
 } from '../../../shared/agent-limits'
 import { createBuiltinAgentToolCatalog } from '../../../shared/builtin-agent-tools'
+import { MAX_USER_NICKNAME_LENGTH } from '../../../shared/user-profile'
 import { API_FORMAT_LABELS } from '../types'
 import {
   DEFAULT_NEW_PROVIDER_API_FORMAT,
@@ -25,6 +26,8 @@ import {
 import { stepTokenValue } from '../token-step'
 import { isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../web-search'
 import { formatFileSize } from '../file-helper'
+import { validateAvatarSourceFile } from '../avatar-helper'
+import { AvatarCropDialog } from './AvatarCropDialog'
 import { Icon } from './Icon'
 
 export interface SettingsSavePayload {
@@ -338,6 +341,8 @@ export function SettingsDialog({
   const [condaEnvironmentResult, setCondaEnvironmentResult] = useState<CondaEnvironmentListResult | null>(null)
   const [loadingCondaEnvironments, setLoadingCondaEnvironments] = useState(false)
   const [condaEnvironmentRefresh, setCondaEnvironmentRefresh] = useState(0)
+  const [avatarCropSource, setAvatarCropSource] = useState<string | null>(null)
+  const [avatarInputError, setAvatarInputError] = useState('')
 
   // Skills UI state
   const [editingSkill, setEditingSkill] = useState<SkillInput | null>(null)
@@ -727,6 +732,8 @@ export function SettingsDialog({
     setBackupPasswordConfirmation('')
     setBackupError('')
     setBackupResult(null)
+    setAvatarCropSource(null)
+    setAvatarInputError('')
     onClose()
   }, [backupExporting, onClose])
 
@@ -759,7 +766,24 @@ export function SettingsDialog({
     setBackupExporting(false)
     setBackupError('')
     setBackupResult(null)
+    setAvatarCropSource(null)
+    setAvatarInputError('')
   }, [initialSection, models, open, preferences, providers, skills])
+
+  useEffect(() => () => {
+    if (avatarCropSource) URL.revokeObjectURL(avatarCropSource)
+  }, [avatarCropSource])
+
+  const selectAvatarFile = (file: File | undefined): void => {
+    if (!file) return
+    try {
+      validateAvatarSourceFile(file)
+      setAvatarInputError('')
+      setAvatarCropSource(URL.createObjectURL(file))
+    } catch (error) {
+      setAvatarInputError(error instanceof Error ? error.message : '无法读取头像图片。')
+    }
+  }
 
   const handleToggleSkill = async (id: string, enabled: boolean): Promise<void> => {
     if (!onToggleSkill) return
@@ -935,11 +959,13 @@ export function SettingsDialog({
   useEffect(() => {
     if (!open) return
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') closeDialog()
+      if (event.key !== 'Escape') return
+      if (avatarCropSource) setAvatarCropSource(null)
+      else closeDialog()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [closeDialog, open])
+  }, [avatarCropSource, closeDialog, open])
 
   const selectedModel = useMemo(
     () => modelDrafts.find((model) => model.id === selectedModelId),
@@ -1247,6 +1273,59 @@ export function SettingsDialog({
           <div className="settings-content">
             {activeSection === 'general' && (
               <div className="settings-section-content narrow-settings">
+                <section className="settings-card user-profile-card">
+                  <h3>个人资料</h3>
+                  <div className="user-profile-settings">
+                    <div className={`user-profile-avatar-preview ${preferenceDraft.userAvatar ? 'has-image' : ''}`}>
+                      {preferenceDraft.userAvatar
+                        ? <img alt="当前头像" src={preferenceDraft.userAvatar} />
+                        : <Icon name="user" size={28} />}
+                    </div>
+                    <div className="user-profile-fields">
+                      <label>
+                        <FieldLabel hint={`最多 ${MAX_USER_NICKNAME_LENGTH} 个字符，可留空`}>昵称</FieldLabel>
+                        <input
+                          maxLength={MAX_USER_NICKNAME_LENGTH}
+                          onChange={(event) => setPreferenceDraft((current) => ({
+                            ...current,
+                            userNickname: event.target.value,
+                          }))}
+                          placeholder="你希望显示的名字"
+                          type="text"
+                          value={preferenceDraft.userNickname ?? ''}
+                        />
+                      </label>
+                      <div className="user-profile-avatar-actions">
+                        <label className="secondary-button">
+                          <Icon name="image" size={14} />
+                          {preferenceDraft.userAvatar ? '更换头像' : '选择头像'}
+                          <input
+                            accept="image/*"
+                            onChange={(event) => {
+                              selectAvatarFile(event.currentTarget.files?.[0])
+                              event.currentTarget.value = ''
+                            }}
+                            type="file"
+                          />
+                        </label>
+                        {preferenceDraft.userAvatar && (
+                          <button
+                            className="secondary-button"
+                            onClick={() => setPreferenceDraft((current) => ({ ...current, userAvatar: '' }))}
+                            type="button"
+                          >
+                            移除
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="user-profile-note">
+                    <Icon name="shield" size={13} />
+                    昵称与头像仅用于本地界面展示，不会加入任何提示词或发送给模型。
+                  </p>
+                  {avatarInputError && <p className="user-profile-error" role="alert">{avatarInputError}</p>}
+                </section>
                 <section className="settings-card">
                   <h3>外观与行为</h3>
                   <div className="settings-row">
@@ -3219,6 +3298,17 @@ export function SettingsDialog({
           </footer>
         </div>
       </section>
+      {avatarCropSource && (
+        <AvatarCropDialog
+          onCancel={() => setAvatarCropSource(null)}
+          onComplete={(userAvatar) => {
+            setPreferenceDraft((current) => ({ ...current, userAvatar }))
+            setAvatarCropSource(null)
+            setAvatarInputError('')
+          }}
+          sourceUrl={avatarCropSource}
+        />
+      )}
     </div>
   )
 }

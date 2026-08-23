@@ -101,6 +101,9 @@ export interface AppSettings {
   theme: ThemeMode
   sendShortcut: 'enter' | 'mod-enter'
   contextManagementMode: ContextManagementMode
+  /** Local display-only profile fields; never included in model prompts. */
+  userNickname?: string
+  userAvatar?: string
   defaultModelId?: string
   titleGenerationModelId?: string
   defaultReasoningEnabled: boolean

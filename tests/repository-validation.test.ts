@@ -155,6 +155,15 @@ describe('AppRepository business constraints and relational integrity', () => {
     await repo.initialize()
   })
 
+  it('persists display-only user profile settings', async () => {
+    const userAvatar = 'data:image/webp;base64,UklGRg=='
+    await repo.updateSettings({ userNickname: '小明', userAvatar })
+    expect(repo.getSettings()).toMatchObject({ userNickname: '小明', userAvatar })
+
+    await repo.updateSettings({ userNickname: '', userAvatar: '' })
+    expect(repo.getSettings()).toMatchObject({ userNickname: '', userAvatar: '' })
+  })
+
   it('prevents removing a provider if it is still referenced by models', async () => {
     const provider = await repo.upsertProvider({
       name: 'Custom Provider',

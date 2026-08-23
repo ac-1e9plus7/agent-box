@@ -4,6 +4,15 @@ AgentBox 的渲染层基于 React 19 构建，注重排版美学、数学表达�
 
 ---
 
+## 👤 本地用户资料
+
+- 「设置 → 通用 → 个人资料」支持昵称与头像编辑，昵称最多 50 个字符。
+- 头像在 renderer 中以方形视口拖动和缩放裁剪，优先编码为 WebP；输出不会放大原始裁剪区域，且宽高均不超过 1000px。原图限制为 30MB，并拒绝 SVG 与异常超大像素尺寸。
+- 当前资料展示在侧栏设置入口和所有用户消息上；修改后会统一更新历史消息的展示，不写入单条消息。
+- `userNickname` 与 `userAvatar` 是纯展示设置。请求上下文估算只读取 `systemPrompt`，Electron 网关也只将显式系统提示词与会话消息交给模型，因此资料不会改变或进入任何提示词。
+
+---
+
 ## 🌲 树状会话与分支版本管理（Conversation Tree）
 
 在 [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) 中实现了纯函数式的树状消息管理：

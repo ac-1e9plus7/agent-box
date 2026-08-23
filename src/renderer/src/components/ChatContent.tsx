@@ -18,6 +18,8 @@ interface ChatContentProps {
   models: ModelConfig[]
   streaming: boolean
   suggestions: PromptSuggestion[]
+  userAvatar?: string
+  userNickname?: string
   onDeleteMessage?: (messageId: string) => void
   onEditMessage: (messageId: string, content: string, regenerate: boolean) => Promise<boolean>
   onRegenerate: (messageId?: string) => void
@@ -337,6 +339,8 @@ function UserMessage({
   message,
   allMessages,
   canEdit,
+  userAvatar,
+  userNickname,
   onDelete,
   onEdit,
   onSwitchVersion,
@@ -345,6 +349,8 @@ function UserMessage({
   message: ChatMessage
   allMessages?: ChatMessage[]
   canEdit: boolean
+  userAvatar?: string
+  userNickname?: string
   onDelete?: (messageId: string) => void
   onEdit: (messageId: string, content: string, regenerate: boolean) => Promise<boolean>
   onSwitchVersion?: (messageId: string) => void
@@ -399,9 +405,14 @@ function UserMessage({
               <button className="user-edit-regen" onClick={() => void commitEdit(true)}><Icon name="refresh" size={14} /> 保存并重新生成</button>
             </div>
           </div>
-          <div className="user-message-time">{formatTime(message.createdAt)}</div>
+          <div className="user-message-meta">
+            {userNickname?.trim() && <strong>{userNickname.trim()}</strong>}
+            <span>{formatTime(message.createdAt)}</span>
+          </div>
         </div>
-        <div className="message-avatar user-avatar"><Icon name="user" size={17} /></div>
+        <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || '你'}>
+          {userAvatar ? <img alt="" src={userAvatar} /> : <Icon name="user" size={17} />}
+        </div>
       </article>
     )
   }
@@ -452,9 +463,14 @@ function UserMessage({
             )}
           </div>
         )}
-        <div className="user-message-time">{formatTime(message.createdAt)}</div>
+        <div className="user-message-meta">
+          {userNickname?.trim() && <strong>{userNickname.trim()}</strong>}
+          <span>{formatTime(message.createdAt)}</span>
+        </div>
       </div>
-      <div className="message-avatar user-avatar"><Icon name="user" size={17} /></div>
+      <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || '你'}>
+        {userAvatar ? <img alt="" src={userAvatar} /> : <Icon name="user" size={17} />}
+      </div>
     </article>
   )
 }
@@ -658,7 +674,9 @@ export function ChatContent({
   onResumeAgent,
   onSwitchVersion,
   onSuggestion,
-  onResolveToolApproval
+  onResolveToolApproval,
+  userAvatar,
+  userNickname,
 }: ChatContentProps): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null)
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null)
@@ -704,6 +722,8 @@ export function ChatContent({
               message={message}
               allMessages={allMessages}
               canEdit={!streaming}
+              userAvatar={userAvatar}
+              userNickname={userNickname}
               onDelete={onDeleteMessage}
               onEdit={onEditMessage}
               onSwitchVersion={onSwitchVersion}

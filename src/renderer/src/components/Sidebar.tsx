@@ -10,6 +10,8 @@ interface SidebarProps {
   conversations: Conversation[]
   mobileOpen: boolean
   query: string
+  userAvatar?: string
+  userNickname?: string
   onCloseMobile: () => void
   onCollapse: () => void
   onDeleteConversation: (conversationId: string) => void
@@ -27,6 +29,8 @@ export function Sidebar({
   conversations,
   mobileOpen,
   query,
+  userAvatar,
+  userNickname,
   onCloseMobile,
   onCollapse,
   onDeleteConversation,
@@ -183,10 +187,14 @@ export function Sidebar({
 
         <footer className="sidebar-footer">
           <button className="sidebar-footer-button" onClick={onOpenSettings}>
-            <span className="sidebar-footer-icon"><Icon name="settings" size={17} /></span>
+            <span className={`sidebar-footer-icon ${userAvatar ? 'has-user-avatar' : ''}`}>
+              {userAvatar
+                ? <img alt="" src={userAvatar} />
+                : <Icon name="settings" size={17} />}
+            </span>
             <span className="sidebar-footer-copy">
-              <strong>设置</strong>
-              <small>模型、服务商与数据</small>
+              <strong>{userNickname?.trim() || '设置'}</strong>
+              <small>{userNickname?.trim() ? '个人资料与设置' : '模型、服务商与数据'}</small>
             </span>
             <Icon name="chevron-right" size={15} />
           </button>

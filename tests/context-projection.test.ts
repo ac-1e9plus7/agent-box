@@ -43,6 +43,17 @@ function msg(id: string, role: ProjectionMessage['role'], content: string): Proj
 }
 
 describe('projectContext system prompt accounting', () => {
+  it('does not count display-only nickname or avatar as prompt content', () => {
+    const messages = [msg('u1', 'user', 'hello')]
+    const withoutProfile = projectContext(messages, '', baseSettings, model())
+    const withProfile = projectContext(messages, '', {
+      ...baseSettings,
+      userNickname: '只用于展示的昵称',
+      userAvatar: 'data:image/webp;base64,UklGRg==',
+    }, model())
+    expect(withProfile.estimatedInputTokens).toBe(withoutProfile.estimatedInputTokens)
+  })
+
   it('counts the configured system prompt exactly once even though history has no system messages', () => {
     const withoutPrompt = projectContext(
       [msg('u1', 'user', 'hello'), msg('a1', 'assistant', 'hi')],

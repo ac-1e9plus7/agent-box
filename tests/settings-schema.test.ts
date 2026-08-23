@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeAppSettings } from '../src/electron/storage/settings-schema'
+import { MAX_USER_AVATAR_DATA_URL_LENGTH } from '../src/shared/user-profile'
 
 const legacySettings = {
   theme: 'system',
@@ -11,6 +12,35 @@ const legacySettings = {
 }
 
 describe('settings schema migration', () => {
+  it('defaults legacy settings to an empty display-only user profile', () => {
+    expect(normalizeAppSettings(legacySettings)).toMatchObject({
+      userNickname: '',
+      userAvatar: '',
+    })
+  })
+
+  it('normalizes a display-only nickname and avatar', () => {
+    const avatar = 'data:image/webp;base64,UklGRg=='
+    expect(normalizeAppSettings({
+      ...legacySettings,
+      userNickname: '  小明  ',
+      userAvatar: avatar,
+    })).toMatchObject({
+      userNickname: '小明',
+      userAvatar: avatar,
+    })
+  })
+
+  it('rejects invalid or oversized display profile fields', () => {
+    expect(() => normalizeAppSettings({ ...legacySettings, userNickname: 'a'.repeat(51) })).toThrow('昵称不能超过 50 个字符')
+    expect(() => normalizeAppSettings({ ...legacySettings, userNickname: '第一行\n第二行' })).toThrow('昵称不能超过 50 个字符')
+    expect(() => normalizeAppSettings({ ...legacySettings, userAvatar: 'https://example.com/avatar.png' })).toThrow('头像数据过大或格式无效')
+    expect(() => normalizeAppSettings({
+      ...legacySettings,
+      userAvatar: `data:image/webp;base64,${'A'.repeat(MAX_USER_AVATAR_DATA_URL_LENGTH)}`,
+    })).toThrow('头像数据过大或格式无效')
+  })
+
   it('defaults legacy settings to thirty Agent tool turns', () => {
     expect(normalizeAppSettings(legacySettings).agentToolTurnLimit).toBe(30)
   })
