@@ -14,7 +14,7 @@ export function normalizeAgentToolTurnLimit(value: unknown): number {
     || resolved < MIN_AGENT_TOOL_TURN_LIMIT
     || resolved > MAX_AGENT_TOOL_TURN_LIMIT
   ) {
-    throw new Error(t("Agent 工具调用轮次必须是 {value0}-{value1} 之间的整数。", { value0: MIN_AGENT_TOOL_TURN_LIMIT, value1: MAX_AGENT_TOOL_TURN_LIMIT }))
+    throw new Error(t("The Agent tool-call limit must be an integer from {value0} to {value1}.", { value0: MIN_AGENT_TOOL_TURN_LIMIT, value1: MAX_AGENT_TOOL_TURN_LIMIT }))
   }
   return resolved
 }

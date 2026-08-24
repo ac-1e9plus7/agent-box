@@ -93,7 +93,7 @@ export function projectContext(
       canTrimOnce: false,
       trimTurnCount: 0,
       tone: 'error',
-      message: t("系统提示词与最新问题已超过可用上下文。请缩短内容，或提高模型上下文窗口。"),
+      message: t("The system prompt and latest question exceed the available context. Shorten them or increase the model’s context window."),
     }
   }
 
@@ -129,7 +129,7 @@ export function projectContext(
       canTrimOnce: true,
       trimTurnCount: trimCount,
       tone: 'error',
-      message: t("已超出可用上下文约 {value0} tokens。手动模式不会自动删除历史；你可仅为本次请求按完整轮次裁剪。", { value0: overflow.toLocaleString(getLanguage()) }),
+      message: t("The input exceeds the available context by approximately {value0} tokens. Manual mode never removes history automatically; you can trim complete turns for this request only.", { value0: overflow.toLocaleString(getLanguage()) }),
     }
   }
 
@@ -146,6 +146,6 @@ export function projectContext(
     canTrimOnce: false,
     trimTurnCount,
     tone: 'warning',
-    message: t("发送时将从最早记录开始，自动裁剪约 {value0} 个完整对话轮次；最新问题会保留。", { value0: trimTurnCount }),
+    message: t("When sent, approximately {value0} complete conversation turns will be trimmed from the oldest history; the latest question will be kept.", { value0: trimTurnCount }),
   }
 }

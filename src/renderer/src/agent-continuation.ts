@@ -12,18 +12,18 @@ const EXACT_CONTINUATION_COMMANDS = new Set([
   'retry please',
   'try again',
   'again',
-  t("继续"),
-  t("继续执行"),
-  t("继续吧"),
-  t("请继续"),
-  t("接着来"),
-  t("接着做"),
-  t("重试"),
-  t("再试一次"),
-  t("再次尝试"),
-  t("重新尝试"),
-  t("从中断处继续"),
-  t("继续之前的工作"),
+  t("Continue"),
+  t("Continue execution"),
+  t("Go ahead"),
+  t("Please continue"),
+  t("agentContinuation.continueVariant1"),
+  t("agentContinuation.continueVariant2"),
+  t("Try again"),
+  t("agentContinuation.tryAgainVariant2"),
+  t("agentContinuation.tryAgainVariant1"),
+  t("agentContinuation.tryAgainVariant3"),
+  t("Resume from the interruption"),
+  t("Continue previous work"),
 ])
 
 export function isAgentContinuationCommand(content: string): boolean {
@@ -69,13 +69,13 @@ export function interruptionFromStreamEvent(
 
   const finishReason = event.finishReason
   if (finishReason === 'cancelled') {
-    return { reason: 'cancelled', message: t("Agent 执行已停止，当前现场已保留。"), occurredAt, finishReason }
+    return { reason: 'cancelled', message: t("Agent execution stopped. The current checkpoint was preserved."), occurredAt, finishReason }
   }
   if (finishReason === 'tool_turn_limit') {
-    return { reason: 'tool_turn_limit', message: t("Agent 已达到工具调用轮次上限，当前现场已保留。"), occurredAt, finishReason }
+    return { reason: 'tool_turn_limit', message: t("The Agent reached the tool-call turn limit. The current checkpoint was preserved."), occurredAt, finishReason }
   }
   if (finishReason && ['length', 'max_tokens', 'incomplete'].includes(finishReason)) {
-    return { reason: 'output_limit', message: t("模型输出达到长度限制，当前 Agent 现场已保留。"), occurredAt, finishReason }
+    return { reason: 'output_limit', message: t("The model reached its output limit. The current Agent checkpoint was preserved."), occurredAt, finishReason }
   }
   return undefined
 }
@@ -83,10 +83,10 @@ export function interruptionFromStreamEvent(
 function classifyChatError(error: ChatError): AgentInterruption['reason'] {
   const code = (error.code || '').toLocaleLowerCase()
   const message = error.message.toLocaleLowerCase()
-  if (error.status === 429 || code.includes('rate') || message.includes(t("限流").toLocaleLowerCase()) || message.includes('rate limit')) {
+  if (error.status === 429 || code.includes('rate') || message.includes(t("Rate limited").toLocaleLowerCase()) || message.includes('rate limit')) {
     return 'rate_limit'
   }
-  if (code.includes('timeout') || message.includes(t("超时").toLocaleLowerCase()) || message.includes('timed out')) return 'timeout'
+  if (code.includes('timeout') || message.includes(t("time out").toLocaleLowerCase()) || message.includes('timed out')) return 'timeout'
   if (
     code.includes('network')
     || code.includes('fetch')

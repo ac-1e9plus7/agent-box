@@ -58,14 +58,14 @@ interface SettingsDialogProps {
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
-  { id: 'general', label: t("通用"), icon: 'settings' },
-  { id: 'runtimes', label: t("开发运行时"), icon: 'code' },
-  { id: 'skills', label: t("Agent 技能"), icon: 'bot' },
-  { id: 'mcp', label: t("MCP 外部工具"), icon: 'tool' },
-  { id: 'models', label: t("模型"), icon: 'sparkles' },
-  { id: 'providers', label: t("服务商"), icon: 'globe' },
-  { id: 'security', label: t("数据与安全"), icon: 'shield' },
-  { id: 'about', label: t("关于"), icon: 'info' }
+  { id: 'general', label: t("General"), icon: 'settings' },
+  { id: 'runtimes', label: t("Developer runtimes"), icon: 'code' },
+  { id: 'skills', label: t("Agent skills"), icon: 'bot' },
+  { id: 'mcp', label: t("MCP tools"), icon: 'tool' },
+  { id: 'models', label: t("Model"), icon: 'sparkles' },
+  { id: 'providers', label: t("Provider"), icon: 'globe' },
+  { id: 'security', label: t("Data and security"), icon: 'shield' },
+  { id: 'about', label: t("About"), icon: 'info' }
 ]
 
 export function SettingsDialog({
@@ -140,7 +140,7 @@ export function SettingsDialog({
       setClearConfirming(false)
       closeDialog()
     } catch (error) {
-      setClearError(error instanceof Error ? error.message : t("清除失败，请重试。"))
+      setClearError(error instanceof Error ? error.message : t("Could not clear the data. Try again."))
     } finally {
       setClearing(false)
     }
@@ -149,7 +149,7 @@ export function SettingsDialog({
   const exportBackup = async (): Promise<void> => {
     if (!onExportBackup || backupExporting) return
     if (backupPassword !== backupPasswordConfirmation) {
-      setBackupError(t("两次输入的备份密码不一致。"))
+      setBackupError(t("The backup passwords do not match."))
       return
     }
 
@@ -167,7 +167,7 @@ export function SettingsDialog({
         setBackupResult(result)
       }
     } catch (error) {
-      setBackupError(error instanceof Error ? error.message : t("导出备份失败，请重试。"))
+      setBackupError(error instanceof Error ? error.message : t("Could not export the backup. Try again."))
     } finally {
       setBackupExporting(false)
     }
@@ -219,7 +219,7 @@ export function SettingsDialog({
       setAvatarInputError('')
       setAvatarCropSource(URL.createObjectURL(file))
     } catch (error) {
-      setAvatarInputError(error instanceof Error ? error.message : t("无法读取头像图片。"))
+      setAvatarInputError(error instanceof Error ? error.message : t("Unable to read avatar image."))
     }
   }
 
@@ -249,7 +249,7 @@ export function SettingsDialog({
 
   const save = async (): Promise<void> => {
     if (providersRequiringNewKey.length > 0) {
-      setSaveError(t("“{value0}”的连接地址或类型已更改，请重新输入 API 密钥。", { value0: providersRequiringNewKey[0]?.name ?? t("服务商") }))
+      setSaveError(t("The connection address or type of \"{value0}\" has changed, please re-enter the API key.", { value0: providersRequiringNewKey[0]?.name ?? t("Provider") }))
       return
     }
     setSaving(true)
@@ -265,7 +265,7 @@ export function SettingsDialog({
       setApiKeyInputs({})
       closeDialog()
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : t("保存失败，请检查配置后重试。"))
+      setSaveError(error instanceof Error ? error.message : t("Saving failed. Check the configuration and try again."))
     } finally {
       setSaving(false)
     }
@@ -282,7 +282,7 @@ export function SettingsDialog({
         ok: false,
         platform: 'unknown',
         latencyMs: 0,
-        message: error instanceof Error ? error.message : t("Shell 测试失败"),
+        message: error instanceof Error ? error.message : t("Shell test failed"),
       })
     } finally {
       setTestingTerminalShell(false)
@@ -301,7 +301,7 @@ export function SettingsDialog({
     <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.currentTarget === event.target) closeDialog()
     }}>
-      <section className="settings-dialog" role="dialog" aria-modal="true" aria-label={t("设置")}>
+      <section className="settings-dialog" role="dialog" aria-modal="true" aria-label={t("Settings")}>
         <aside className="settings-sidebar">
           <div className="settings-brand">
             <span className="brand-mark"><Icon name="app" size={21} /></span>
@@ -321,7 +321,7 @@ export function SettingsDialog({
           </nav>
           <div className="settings-secure-note">
             <Icon name="lock" size={15} />
-            <span><strong>{t("隐私优先")}</strong><small>{t("密钥与数据仅存于本机")}</small></span>
+            <span><strong>{t("Privacy first")}</strong><small>{t("Keys and data stay on this device")}</small></span>
           </div>
         </aside>
 
@@ -329,16 +329,16 @@ export function SettingsDialog({
           <header className="settings-header">
             <div>
               <h2>{settingsNav.find((item) => item.id === activeSection)?.label}</h2>
-              <p>{activeSection === 'general' && t("调整 AgentBox 的使用偏好")}</p>
-              <p>{activeSection === 'runtimes' && t("配置项目默认 JDK、Go、PHP 与 Python 环境")}</p>
-              <p>{activeSection === 'skills' && t("管理、安装与自定义 Agent 智能体专业技能")}</p>
-              <p>{activeSection === 'mcp' && t("连接与管理 Model Context Protocol (MCP) 外部工具服务")}</p>
-              <p>{activeSection === 'models' && t("配置模型能力、上下文窗口与请求格式")}</p>
-              <p>{activeSection === 'providers' && t("管理 API 端点与访问密钥")}</p>
-              <p>{activeSection === 'security' && t("了解本地加密与系统安全存储")}</p>
-              <p>{activeSection === 'about' && t("关于 AgentBox 与系统信息")}</p>
+              <p>{activeSection === 'general' && t("Adjust AgentBox preferences")}</p>
+              <p>{activeSection === 'runtimes' && t("Configure the default JDK, Go, PHP, and Python environments for projects")}</p>
+              <p>{activeSection === 'skills' && t("Manage, install, and customize Agent Skills")}</p>
+              <p>{activeSection === 'mcp' && t("Connect and manage external tool servers through the Model Context Protocol (MCP)")}</p>
+              <p>{activeSection === 'models' && t("Configure model capabilities, context windows and request formats")}</p>
+              <p>{activeSection === 'providers' && t("Manage API endpoints and access keys")}</p>
+              <p>{activeSection === 'security' && t("Learn about local encryption and system secure storage")}</p>
+              <p>{activeSection === 'about' && t("About AgentBox and system information")}</p>
             </div>
-            <button className="icon-button" aria-label={t("关闭设置")} onClick={closeDialog}><Icon name="close" /></button>
+            <button className="icon-button" aria-label={t("Close settings")} onClick={closeDialog}><Icon name="close" /></button>
           </header>
 
           <div className="settings-content">
@@ -445,12 +445,12 @@ export function SettingsDialog({
 
           <footer className="settings-footer">
             <span className={saveError ? 'settings-save-error' : ''}>
-              {saveError || t("更改将安全地保存在本机")}
+              {saveError || t("Changes are stored securely on this device")}
             </span>
             <div>
-              <button className="secondary-button" onClick={closeDialog}>{t("取消")}</button>
+              <button className="secondary-button" onClick={closeDialog}>{t("Cancel")}</button>
               <button className="primary-button" disabled={saving || providersRequiringNewKey.length > 0} onClick={save}>
-                {saving ? t("保存中…") : t("保存更改")}
+                {saving ? t("Saving…") : t("Save changes")}
               </button>
             </div>
           </footer>

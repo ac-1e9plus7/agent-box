@@ -91,20 +91,22 @@ Do not update only one language and leave the counterpart stale. If a term has n
 
 ## Localization and product terminology
 
-All user-visible copy in the renderer or main process must go through the shared localization layer under `src/shared/i18n/`.
+All user-visible copy in the renderer or main process must go through the shared localization layer under `src/shared/i18n/`. **English source copy is the message key**; the Simplified Chinese translations live in `zh-CN.ts`.
 
 - `AppLanguage` currently supports `zh-CN` and `en-US`.
-- The Chinese and English bundles must have identical keys and placeholder sets.
-- Use semantic keys when identical Chinese text needs different English in different contexts, for example `common.close` versus `common.off`.
+- Author copy in English and pass it to `t('English source text')`. The `key` parameter is typed `MessageKey` (`keyof typeof zhCN`), so typos and references to removed keys surface at compile time.
+- `zh-CN.ts` is generated. Do not hand-edit it as the only source change. Update message usage, `reviewedZh`, or `normalizeZhByContext` in `scripts/localize-renderer.mjs`, then run `node scripts/localize-renderer.mjs generate` (and `pnpm i18n:check`).
+- The `en-US.ts` bundle holds only semantic "hatch" keys: cases where one English string must render as different Chinese messages (for example the Chinese Agent resume phrases that all read `Continue`/`Try again`). Add a hatch key only when a new same-English/different-Chinese collision appears; otherwise the English key renders as itself.
+- Keys and their Chinese values must preserve identical placeholder sets (named `{count}` or positional `{value0}`).
 - Dates and numbers shown to users must use `getLanguage()` with `Intl` or `toLocaleString`; do not hard-code `zh-CN`.
-- English product terminology must be reviewed manually and added to `reviewedEn` in `scripts/localize-renderer.mjs`. Do not rely on raw machine translation for API names, security copy, or long Skill instructions.
-- Do not hand-edit a generated locale bundle as the only source change. Update message usage, `manualZh` / `manualEn`, contextual normalization, or `reviewedEn`, then run `node scripts/localize-renderer.mjs generate`.
+- Canonical Simplified Chinese for product terms must be reviewed manually and added to `reviewedZh`. Do not rely on raw machine translation for API names, security copy, or long Skill instructions.
+- `node scripts/localize-renderer.mjs check` must pass: it fails on Chinese strings or JSX text outside `t()` (including raw-Chinese fallback values that should be wrapped) and on `t()` keys absent from `zh-CN.ts`.
 - Executable Skill assets (`python`, `shell`, and other code files) must never enter language bundles or machine translation. Localize Skill names, descriptions, System Instructions, and `kind === 'markdown'` files only.
 - Preserve these official terms: Responses API, Chat Completions API, reasoning effort, adaptive thinking, manual extended thinking, MCP server, MCP tool, Streamable HTTP, legacy HTTP+SSE, provider, provider fallback, Zero Data Retention (ZDR), and native web search.
 
 First-launch language selection and migration are compatibility behavior: locales beginning with `zh` select Simplified Chinese; all other locales select English. The selected language is encrypted in `AppSettings.language`. The main process must set a language before repository initialization, and the renderer must set the stored language before dynamically importing the application.
 
-Run `tests/i18n.test.ts` after localization changes. It checks bundle parity, placeholders, terminology rules, built-in Skill localization, and exclusion of executable assets.
+Run `tests/i18n.test.ts` after localization changes. It checks key/value placeholder parity, terminology on English keys, hatch-key resolution, built-in Skill localization, and exclusion of executable assets.
 
 ## Responsibility map
 

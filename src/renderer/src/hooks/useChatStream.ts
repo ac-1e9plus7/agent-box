@@ -33,7 +33,7 @@ interface UseChatStreamOptions {
 }
 
 function normalizeError(error: unknown): string {
-  return error instanceof Error ? error.message : t("发生未知错误，请稍后重试。")
+  return error instanceof Error ? error.message : t("An unknown error occurred. Try again later.")
 }
 
 function appendAssistantTrace(
@@ -177,7 +177,7 @@ function checkpointInterruptedMessage(
   }
 
   const trace = [...(message.agentTrace ?? [])]
-  const interruptedResult = t("Agent 执行在工具完成前中断：{value0}", { value0: interruption.message })
+  const interruptedResult = t("Agent execution interrupted before tool completion: {value0}", { value0: interruption.message })
   for (const execution of pendingExecutions) {
     const hasCall = trace.some((item) => item.type === 'tool_call' && item.callId === execution.id)
     const hasResult = trace.some((item) => item.type === 'tool_result' && item.callId === execution.id)
@@ -465,7 +465,7 @@ export function useChatStream({
       await window.agentbox.chat.cancel(stream.requestId)
       finalizeStream(stream, { type: 'done', requestId: stream.requestId, finishReason: 'cancelled' })
     } catch (error) {
-      showToast(t("无法停止生成：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Unable to stop generation: {value0}", { value0: normalizeError(error) }))
     }
   }, [finalizeStream, showToast])
 
@@ -476,13 +476,13 @@ export function useChatStream({
   ): Promise<void> => {
     const stream = activeStreamsRef.current.get(conversationId)
     if (!stream?.requestId) {
-      showToast(t("该工具审批请求已结束。"))
+      showToast(t("This tool approval request has already ended."))
       return
     }
     try {
       await window.agentbox.chat.resolveToolApproval(stream.requestId, callId, approved)
     } catch (error) {
-      showToast(t("无法提交工具审批：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Unable to submit tool for approval: {value0}", { value0: normalizeError(error) }))
     }
   }, [showToast])
 

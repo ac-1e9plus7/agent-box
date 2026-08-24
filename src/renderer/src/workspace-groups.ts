@@ -80,6 +80,6 @@ function workspaceKey(directory?: string): string {
 }
 
 function workspaceLabel(directory?: string): string {
-  if (!directory) return t("无工作目录")
+  if (!directory) return t("No working directory")
   return directory.replaceAll('\\', '/').split('/').filter(Boolean).at(-1) || directory
 }

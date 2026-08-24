@@ -12,6 +12,8 @@
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "i18n:generate": "node scripts/localize-renderer.mjs generate",
+    "i18n:check": "node scripts/localize-renderer.mjs check",
     "build": "pnpm typecheck && electron-vite build",
     "package": "pnpm build && electron-builder --dir",
     "dist": "pnpm build && electron-builder"

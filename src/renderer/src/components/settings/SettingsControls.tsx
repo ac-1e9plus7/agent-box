@@ -83,10 +83,10 @@ export function TokenStepper({
   return (
     <div className="token-stepper">
       <button
-        aria-label={t("减少{value0}", { value0: ariaLabel })}
+        aria-label={t("Reduce {value0}", { value0: ariaLabel })}
         disabled={value <= minimum}
         onClick={() => applyButtonStep('decrease')}
-        title={t("按钮按 64K 调整，并在 2ⁿ、1M、2M 等关键值停靠")}
+        title={t("Buttons adjust in 64K increments and snap to key values such as 2ⁿ, 1M, and 2M")}
         type="button"
       >
         <Icon name="minus" size={14} />
@@ -109,10 +109,10 @@ export function TokenStepper({
         }}
       />
       <button
-        aria-label={t("增加{value0}", { value0: ariaLabel })}
+        aria-label={t("Add {value0}", { value0: ariaLabel })}
         disabled={value >= maximum}
         onClick={() => applyButtonStep('increase')}
-        title={t("按钮按 64K 调整，并在 2ⁿ、1M、2M 等关键值停靠")}
+        title={t("Buttons adjust in 64K increments and snap to key values such as 2ⁿ, 1M, and 2M")}
         type="button"
       >
         <Icon name="plus" size={14} />
@@ -151,7 +151,7 @@ export function AgentTurnLimitInput({
   return (
     <label className="agent-turn-limit-control">
       <input
-        aria-label={t("Agent 工具调用轮次上限")}
+        aria-label={t("Agent tool-call limit")}
         max={MAX_AGENT_TOOL_TURN_LIMIT}
         min={MIN_AGENT_TOOL_TURN_LIMIT}
         onBlur={commit}
@@ -166,7 +166,7 @@ export function AgentTurnLimitInput({
         type="number"
         value={inputValue}
       />
-      <span>{t(value === 1 ? 'agent.turn.one' : 'agent.turn.other')}</span>
+      <span>{t(value === 1 ? "turn" : "turns")}</span>
     </label>
   )
 }

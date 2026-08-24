@@ -44,7 +44,7 @@ Then launch the unpacked application for the current platform. On Windows, verif
 | Agent, MCP, Skills, and code execution | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor` |
 | Pure renderer logic | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
 | Renderer integration | `app.integration`, `settings-dialog.integration`: application shortcuts, streaming updates, and staged Settings save/cancel behavior against a mocked preload bridge |
-| Localization | `i18n`: bundle shape, placeholders, locale selection, terminology rules, and localized built-in Skills |
+| Localization | `i18n`: English-source-key bundle shape, placeholder parity, hatch-key resolution, locale selection, terminology on English keys, and localized built-in Skills |
 
 Tests around external input should cover the normal path, disabled behavior, missing legacy fields, malformed or oversized values, and cancellation/failure paths. A protocol change must cover every affected API format rather than only one provider.
 

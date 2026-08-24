@@ -133,21 +133,21 @@ function migrateLegacyUserDataDirectory(): void {
 }
 
 async function handleStartupFailure(error: unknown): Promise<void> {
-  const errorMessage = error instanceof Error ? error.message : t("未知错误")
+  const errorMessage = error instanceof Error ? error.message : t("Unknown error")
   const normalizedErrorMessage = errorMessage.toLowerCase()
-  const isDecryptionError = [t("解密"), 'decrypt', 'safeStorage', t("系统密钥")]
+  const isDecryptionError = [t("Decrypt"), 'decrypt', 'safeStorage', t("system key")]
     .some((marker) => normalizedErrorMessage.includes(marker.toLowerCase()))
 
   const choice = dialog.showMessageBoxSync({
     type: 'warning',
-    title: t("AgentBox - 数据加载提示"),
+    title: t("AgentBox — Data recovery"),
     message: isDecryptionError
-      ? t("无法解密现有的本地数据（可能是系统凭据发生变化、数据文件损坏或迁移密钥不匹配）。")
-      : t("应用启动遇到问题：{value0}", { value0: errorMessage }),
+      ? t("Unable to decrypt existing local data (possibly due to changes in system credentials, corrupted data files, or mismatched migration keys).")
+      : t("The app could not start: {value0}", { value0: errorMessage }),
     detail: isDecryptionError
-      ? t("您可以选择【重置并创建新数据】（现有文件将被安全备份为 .bak，应用将以初始状态启动），或选择【退出应用】以便稍后手动排查。")
-      : t("您可以选择重置本地数据并重新启动，或退出应用。"),
-    buttons: [t("重置并创建新数据（推荐）"), t("退出应用")],
+      ? t("Choose “Reset and create new data” to back up the current files as `.bak` and start from a clean state, or choose “Exit app” to troubleshoot manually.")
+      : t("You can choose to reset local data and restart, or exit the app."),
+    buttons: [t("Reset and create new data (recommended)"), t("Exit application")],
     defaultId: 0,
     cancelId: 1,
     noLink: true,
@@ -168,8 +168,8 @@ async function handleStartupFailure(error: unknown): Promise<void> {
       return
     } catch (resetError) {
       dialog.showErrorBox(
-        t("重置数据失败"),
-        t("无法重置本地数据：{value0}", { value0: resetError instanceof Error ? resetError.message : String(resetError) }),
+        t("Reset data failed"),
+        t("Unable to reset local data: {value0}", { value0: resetError instanceof Error ? resetError.message : String(resetError) }),
       )
     }
   }

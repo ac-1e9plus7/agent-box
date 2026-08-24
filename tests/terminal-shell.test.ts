@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import {
   automaticShellCandidates,
   commandArguments,
   executeTerminalCommand,
+  terminalTruncationSuffix,
   type ResolvedTerminalShell,
 } from '../src/electron/api/terminal-shell'
+import { setLanguage } from '../src/shared/i18n'
+
+afterEach(() => setLanguage('zh-CN'))
 
 describe('integrated terminal shell resolution', () => {
   it('orders Windows shells from modern PowerShell to cmd', () => {
@@ -45,6 +49,14 @@ describe('integrated terminal shell resolution', () => {
       kind: 'custom',
       displayName: 'Custom',
     }, 'echo ok')).toEqual(['run', '--expression=echo ok'])
+  })
+
+  it('separates localized truncation markers from terminal output', () => {
+    setLanguage('en-US')
+    expect(`output${terminalTruncationSuffix(true)}`).toBe('output\n[Output truncated]')
+    setLanguage('zh-CN')
+    expect(`输出${terminalTruncationSuffix(true)}`).toBe('输出\n[输出已截断]')
+    expect(terminalTruncationSuffix(false)).toBe('')
   })
 
   it('executes a command with the operating-system automatic shell', async () => {

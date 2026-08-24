@@ -100,18 +100,18 @@ export function Composer({
 
   const contextPercentage = contextLimit ? Math.min((contextTokens / contextLimit) * 100, 100) : 0
   const reasoningLabel = !activeModel?.supportsReasoning
-    ? t("思考不可用")
+    ? t("Reasoning unavailable")
     : reasoningEnabled
-      ? t("思考 · {value0}", { value0: activeModel.defaultReasoningEffort.toUpperCase() })
-      : t("思考关闭")
+      ? t("Reasoning · {value0}", { value0: activeModel.defaultReasoningEffort.toUpperCase() })
+      : t("Reasoning off")
   const webSearchLabel = !webSearchAvailable
-    ? t("联网不可用")
+    ? t("Web search unavailable")
     : webSearchMode === 'off'
-      ? t("联网关闭")
+      ? t("Web search off")
       : WEB_SEARCH_MODE_LABELS[webSearchMode]
   const webSearchDescription = webSearchAvailable
-    ? t("联网搜索可能额外计费，并会将查询发送给搜索服务。“原生优先”不受支持时会自动回退。")
-    : t("当前仅 OpenRouter 连接支持联网搜索。")
+    ? t("Web search may incur additional charges and sends queries to a search provider. “Prefer native web search” falls back automatically when native search is unavailable.")
+    : t("Web search is currently available only with OpenRouter connections.")
   const enabledMcpServers = mcpServers.filter((server) => server.enabled)
   const effectiveMcpServerIds = selectedMcpServerIds ?? enabledMcpServers.map((server) => server.id)
   const enabledSkills = skills.filter((skill) => skill.enabled)
@@ -131,7 +131,7 @@ export function Composer({
       const processed = await processSelectedFiles(files)
       onAttachmentsChange([...attachments, ...processed])
     } catch (error) {
-      onShowToast(error instanceof Error ? error.message : t("文件读取失败"))
+      onShowToast(error instanceof Error ? error.message : t("Could not read the file"))
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -194,9 +194,9 @@ export function Composer({
           <Icon name={contextTone === 'error' ? 'info' : 'refresh'} size={15} />
           <span>{contextMessage}</span>
           {contextCanTrimOnce ? (
-            <button onClick={onSendWithTrim}>{t("本次裁剪并发送")}</button>
+            <button onClick={onSendWithTrim}>{t("Trim context and send")}</button>
           ) : contextTone === 'error' ? (
-            <button onClick={onOpenContextSettings}>{t("上下文设置")}</button>
+            <button onClick={onOpenContextSettings}>{t("Context settings")}</button>
           ) : null}
         </div>
       )}
@@ -204,7 +204,7 @@ export function Composer({
         <input
           ref={fileInputRef}
           accept="image/*,.pdf,.txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.yaml,.yml,.xml,.sql,.sh,.log"
-          aria-label={t("上传文件")}
+          aria-label={t("Upload files")}
           hidden
           multiple
           type="file"
@@ -229,7 +229,7 @@ export function Composer({
                   <small className="composer-attachment-size">{formatFileSize(attachment.size)}</small>
                 </div>
                 <button
-                  aria-label={t("移除附件")}
+                  aria-label={t("Remove attachment")}
                   className="composer-attachment-remove"
                   onClick={() => handleRemoveAttachment(attachment.id)}
                 >
@@ -242,7 +242,7 @@ export function Composer({
 
         <textarea
           ref={textareaRef}
-          aria-label={t("消息输入框")}
+          aria-label={t("Message input box")}
           disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
@@ -278,7 +278,7 @@ export function Composer({
             }
           }}
           onPaste={handlePaste}
-          placeholder={disabled ? t("请先配置可用模型与 API 密钥") : t("给 AgentBox 发送消息（支持拖拽/粘贴文件或图片）…")}
+          placeholder={disabled ? t("Please configure available models and API keys first") : t("Send a message to AgentBox (supports dragging/pasting files or images)…")}
           rows={1}
           value={draft}
         />
@@ -286,11 +286,11 @@ export function Composer({
         <div className="composer-toolbar">
           <div className="composer-tools-left">
             <button
-              aria-label={t("添加图片或文件")}
+              aria-label={t("Add a picture or file")}
               className="composer-action-button"
               disabled={disabled || uploading}
               onClick={() => fileInputRef.current?.click()}
-              title={t("上传图片或文本文件（支持粘贴与拖拽）")}
+              title={t("Upload images or text files (paste or drag and drop supported)")}
             >
               <Icon name="paperclip" size={15} />
               {uploading && <span className="upload-spinner" />}
@@ -299,7 +299,7 @@ export function Composer({
               className={`agent-pill ${agentMode ? 'is-active' : ''}`}
               disabled={disabled}
               onClick={onToggleAgentMode}
-              title={agentMode ? t("Agent 模式已开启（执行时支持 Skills 与 MCP 工具调用）") : t("点击开启 Agent 智能体模式")}
+              title={agentMode ? t("Agent mode is on (Skills and MCP tool calls are available during execution)") : t("Click to enable Agent mode")}
             >
               <Icon name="bot" size={15} />
               <span>Agent</span>
@@ -309,19 +309,19 @@ export function Composer({
               <details className="mcp-conversation-selector skill-conversation-selector">
                 <summary
                   className={`mcp-indicator-pill skill-indicator-pill ${fixedSkillIds.length > 0 ? 'is-active' : ''}`}
-                  title={t("固定本会话技能；不选择时由 Agent 自动路由")}
+                  title={t("Pin skills for this conversation; when none are selected, the Agent routes automatically")}
                 >
                   <Icon name="sparkles" size={14} />
-                  <span>{t('skills.selectorLabel', { selection: fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : t("自动") })}</span>
+                  <span>{t("Skills · {selection}", { selection: fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : t("Auto") })}</span>
                   <Icon name="chevron-down" size={12} />
                 </summary>
                 <div className="mcp-conversation-menu skill-conversation-menu">
-                  <strong>{t("本会话技能路由")}</strong>
+                  <strong>{t("Skill routing for this conversation")}</strong>
                   <button
                     className={fixedSkillIds.length === 0 ? 'is-selected' : ''}
                     type="button"
                     onClick={() => onSkillSelectionChange?.([])}
-                  >{t("自动选择相关技能")}</button>
+                  >{t("Automatically select relevant skills")}</button>
                   <div className="mcp-conversation-options">
                     {enabledSkills.map((skill) => (
                       <label key={skill.id} title={skill.description}>
@@ -339,20 +339,20 @@ export function Composer({
                       </label>
                     ))}
                   </div>
-                  <small>{t("固定技能会在每轮预加载；自动模式按请求匹配，模型也可按需加载目录中的其他技能。")}</small>
-                  <button type="button" onClick={onOpenSkillsSettings}>{t("管理 Skills")}</button>
+                  <small>{t("Fixed skills are preloaded each round; automatic mode matches on request, and the model can also load other skills from the catalog on demand.")}</small>
+                  <button type="button" onClick={onOpenSkillsSettings}>{t("Manage Skills")}</button>
                 </div>
               </details>
             )}
             {agentMode && enabledMcpServers.length > 0 && (
               <details className="mcp-conversation-selector">
-                <summary className="mcp-indicator-pill" title={t("选择本会话允许使用的 MCP 服务")}>
+                <summary className="mcp-indicator-pill" title={t("Select the MCP servers available to this conversation")}>
                   <Icon name="tool" size={14} />
                   <span>MCP · {effectiveMcpServerIds.length}/{enabledMcpServers.length}</span>
                   <Icon name="chevron-down" size={12} />
                 </summary>
                 <div className="mcp-conversation-menu">
-                  <strong>{t("本会话允许的 MCP 服务")}</strong>
+                  <strong>{t("MCP servers available to this conversation")}</strong>
                   {enabledMcpServers.map((server) => (
                     <label key={server.id}>
                       <input
@@ -368,8 +368,8 @@ export function Composer({
                       <span>{server.name}</span>
                     </label>
                   ))}
-                  <small>{t("已发现 {value0} 个工具；未选中的服务不会暴露给模型。", { value0: mcpToolsCount ?? 0 })}</small>
-                  <button type="button" onClick={onOpenMcpSettings}>{t("管理 MCP 服务")}</button>
+                  <small>{t("{value0} tools found; unselected servers will not be exposed to the model.", { value0: mcpToolsCount ?? 0 })}</small>
+                  <button type="button" onClick={onOpenMcpSettings}>{t("Manage MCP servers")}</button>
                 </div>
               </details>
             )}
@@ -377,7 +377,7 @@ export function Composer({
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}
               disabled={!activeModel?.supportsReasoning || disabled}
               onClick={onToggleReasoning}
-              title={activeModel?.supportsReasoning ? t("切换思考模式") : t("当前模型不支持思考模式")}
+              title={activeModel?.supportsReasoning ? t("Toggle reasoning") : t("The current model does not support reasoning")}
             >
               <Icon name="brain" size={15} />
               {reasoningLabel}
@@ -392,30 +392,30 @@ export function Composer({
               <Icon name="chevron-down" size={12} />
               <select
                 aria-describedby="web-search-description"
-                aria-label={t("会话联网搜索模式")}
+                aria-label={t("Conversation web search mode")}
                 disabled={!webSearchAvailable || disabled}
                 value={webSearchAvailable ? webSearchMode : 'off'}
                 onChange={(event) => onWebSearchModeChange(event.target.value as WebSearchMode)}
               >
-                <option value="off">{t('common.off')}</option>
-                <option value="auto">{t("自动搜索")}</option>
-                <option value="native">{t("原生优先（不支持时回退）")}</option>
+                <option value="off">{t("Off")}</option>
+                <option value="auto">{t("Automatic web search")}</option>
+                <option value="native">{t("Prefer native web search (fallback when unavailable)")}</option>
               </select>
             </label>
           </div>
 
           <div className="composer-tools-right">
-            <button className={`context-meter is-${contextTone}`} onClick={onOpenModelSettings} title={t("可用输入预算（已预留模型输出空间）")}>
+            <button className={`context-meter is-${contextTone}`} onClick={onOpenModelSettings} title={t("Available input budget (after reserving space for model output)")}>
               <span className="context-ring" style={{ '--context': `${contextPercentage * 3.6}deg` } as CSSProperties} />
               <span>{compactNumber(contextTokens)} / {compactNumber(contextLimit)}</span>
-              <em>{contextMode === 'manual' ? t("手动") : t("自动")}</em>
+              <em>{contextMode === 'manual' ? t("Manual") : t("Auto")}</em>
             </button>
             {streaming ? (
-              <button className="send-button stop-button" aria-label={t("停止生成")} onClick={onStop}><span /></button>
+              <button className="send-button stop-button" aria-label={t("Stop generating")} onClick={onStop}><span /></button>
             ) : (
               <button
                 className="send-button"
-                aria-label={t("发送消息")}
+                aria-label={t("Send message")}
                 disabled={!canSend}
                 onClick={onSend}
               >
@@ -425,7 +425,7 @@ export function Composer({
           </div>
         </div>
       </div>
-      <p className="composer-hint" id="web-search-description">{t("AI 可能会出错，请核查重要信息。")}{sendOnEnter ? t("Enter 发送，Shift / Ctrl / ⌘ + Enter 换行") : t("⌘ / Ctrl + Enter 发送，Enter 换行")}
+      <p className="composer-hint" id="web-search-description">{t("AI can make mistakes. Check important information.")}{sendOnEnter ? t("Enter to send; Shift / Ctrl / ⌘ + Enter for a new line") : t("⌘ / Ctrl + Enter to send; Enter for a new line")}
         {webSearchMode !== 'off' && webSearchAvailable && <span> · {webSearchDescription}</span>}
       </p>
     </div>

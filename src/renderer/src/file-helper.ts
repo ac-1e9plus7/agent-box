@@ -46,7 +46,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error(t("读取文件 {value0} 失败", { value0: file.name })))
+    reader.onerror = () => reject(new Error(t("Failed to read file {value0}", { value0: file.name })))
     reader.readAsDataURL(file)
   })
 }
@@ -55,7 +55,7 @@ function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error(t("读取文本文件 {value0} 失败", { value0: file.name })))
+    reader.onerror = () => reject(new Error(t("Reading text file {value0} failed", { value0: file.name })))
     reader.readAsText(file, 'utf-8')
   })
 }
@@ -98,7 +98,7 @@ async function resizeImageIfNeeded(dataUrl: string, mimeType: string): Promise<s
 
 export async function processFile(file: File): Promise<MessageAttachment> {
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(t("文件 \"{value0}\" 超过大小限制 ({value1})", { value0: file.name, value1: formatFileSize(MAX_FILE_SIZE) }))
+    throw new Error(t("File \"{value0}\" exceeds the size limit ({value1}).", { value0: file.name, value1: formatFileSize(MAX_FILE_SIZE) }))
   }
 
   let type: MessageAttachmentType

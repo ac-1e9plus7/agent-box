@@ -276,7 +276,7 @@ function applyOpenAiTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        t("网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。"),
+        t("Web search is available only with OpenRouter connections. Turn it off or switch providers."),
         'web_search_not_supported',
       )
     }
@@ -318,7 +318,7 @@ function applyResponsesTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        t("网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。"),
+        t("Web search is available only with OpenRouter connections. Turn it off or switch providers."),
         'web_search_not_supported',
       )
     }
@@ -358,7 +358,7 @@ function applyAnthropicTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        t("网页搜索仅支持 OpenRouter 连接；请关闭网页搜索或切换服务商。"),
+        t("Web search is available only with OpenRouter connections. Turn it off or switch providers."),
         'web_search_not_supported',
       )
     }
@@ -393,7 +393,7 @@ function reasoningBudget(
 ): number {
   if (maxOutputTokens <= 1_024) {
     throw new RequestAdapterError(
-      t("Anthropic 思考模式要求最大输出长度大于 1024 token。"),
+      t("Manual extended thinking requires maximum output tokens greater than 1,024."),
       'invalid_reasoning_budget',
     )
   }

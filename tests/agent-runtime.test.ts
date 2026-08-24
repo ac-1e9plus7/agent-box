@@ -6,7 +6,7 @@ import {
   retrieveExplicitlyMentionedSkills,
   retrieveRelevantSkills,
 } from '../src/electron/api/skill-retriever'
-import { DEFAULT_SKILLS } from '../src/electron/storage/default-skills'
+import { DEFAULT_SKILLS, localizedDefaultSkills } from '../src/electron/storage/default-skills'
 import { createModelToolName } from '../src/electron/mcp/mcp-client'
 import { evaluateToolApproval, validateToolArguments } from '../src/electron/mcp/tool-policy'
 import type { ChatRequest, McpToolDefinition, Message, ModelConfig, Skill } from '../src/shared/types'
@@ -244,7 +244,10 @@ describe('progressive skill loading', () => {
     ['总结这篇 PDF 研报', 'web-extractor'],
     ['帮我优化 system prompt', 'prompt-optimizer'],
   ])('routes a real built-in request %s to %s', (query, expectedId) => {
-    expect(retrieveRelevantSkills(query, DEFAULT_SKILLS).map((skill) => skill.id)).toContain(expectedId)
+    // Production routes against the active-language skill catalog (listSkills()
+    // materializes localized built-ins); match that precondition here so a
+    // Chinese query is scored against Chinese-localized skill content.
+    expect(retrieveRelevantSkills(query, localizedDefaultSkills()).map((skill) => skill.id)).toContain(expectedId)
   })
 
   it('treats a $skill id as an explicit invocation', () => {

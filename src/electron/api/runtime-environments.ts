@@ -55,7 +55,7 @@ export async function testDeveloperRuntime(
     : {
         kind,
         ok: false,
-        message: t("未找到可用的 {value0} 运行时，请检查自动探测结果或指定路径。", { value0: runtimeDisplayName(kind) }),
+        message: t("No usable {value0} runtime was found. Check auto-detection or specify a path.", { value0: runtimeDisplayName(kind) }),
       }
 }
 
@@ -110,7 +110,7 @@ export async function listCondaEnvironments(condaExecutableInput: string): Promi
       ok: false,
       condaExecutable,
       environments: [],
-      message: detail ? t("无法读取 Conda 环境：{value0}", { value0: detail }) : t("未找到可用的 Conda 可执行文件。"),
+      message: detail ? t("Unable to read Conda environment: {value0}", { value0: detail }) : t("No usable Conda executable was found."),
     }
   }
 
@@ -121,15 +121,15 @@ export async function listCondaEnvironments(condaExecutableInput: string): Promi
       condaExecutable,
       environments,
       message: environments.length > 0
-        ? t("已发现 {value0} 个 Conda 环境。", { value0: environments.length })
-        : t("Conda 可用，但没有返回任何环境。"),
+        ? t("{value0} Conda environments found.", { value0: environments.length })
+        : t("Conda is available but returned no environments."),
     }
   } catch {
     return {
       ok: false,
       condaExecutable,
       environments: [],
-      message: t("Conda 返回了无法解析的环境列表。"),
+      message: t("Conda returned an environment list that could not be parsed."),
     }
   }
 }

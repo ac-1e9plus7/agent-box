@@ -63,7 +63,7 @@ export class McpManager {
     signal?: AbortSignal,
   ): Promise<McpToolExecutionResult & { serverName: string }> {
     if (this.repository.getSettings().mcpEnabled === false) {
-      return { result: t("MCP 已在全局设置中停用。"), isError: true, serverName: 'Unknown' }
+      return { result: t("MCP is disabled in global settings."), isError: true, serverName: 'Unknown' }
     }
     const server = this.repository.getMcpServer(serverId)
     if (!server || !server.enabled) {
@@ -106,12 +106,12 @@ export class McpManager {
     try {
       const connection = await client.connect()
       const tools = await client.listTools()
-      const protocol = connection.protocolVersion ? t("，协议 {value0}", { value0: connection.protocolVersion }) : ''
+      const protocol = connection.protocolVersion ? t(", protocol {value0}", { value0: connection.protocolVersion }) : ''
       return {
         ok: true,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: tools.length,
-        message: t("连接成功（{value0}{value1}，已发现 {value2} 个工具）", { value0: connection.transport, value1: protocol, value2: tools.length }),
+        message: t("Connection successful ({value0}{value1}, {value2} tools found)", { value0: connection.transport, value1: protocol, value2: tools.length }),
         tools,
       }
     } catch (error) {
@@ -119,7 +119,7 @@ export class McpManager {
         ok: false,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: 0,
-        message: error instanceof Error ? error.message : t("连接失败"),
+        message: error instanceof Error ? error.message : t("Connection failed"),
       }
     } finally {
       await client.close().catch(() => undefined)

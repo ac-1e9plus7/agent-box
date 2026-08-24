@@ -129,9 +129,9 @@ export async function executeCode(
   request: CodeExecutionRequest,
   signal?: AbortSignal,
 ): Promise<CodeExecutionResult> {
-  if (!request.code.trim()) return { result: t('代码不能为空。'), isError: true }
+  if (!request.code.trim()) return { result: t("Code cannot be empty."), isError: true }
   if (request.code.length > MAX_CODE_CHARACTERS) {
-    return { result: t('代码长度超过 {value0} 字符限制。', { value0: MAX_CODE_CHARACTERS.toLocaleString(getLanguage()) }), isError: true }
+    return { result: t("Code length exceeds {value0} character limit.", { value0: MAX_CODE_CHARACTERS.toLocaleString(getLanguage()) }), isError: true }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, request.timeoutMs ?? 8_000))
   if (request.language === 'javascript') {
@@ -155,8 +155,8 @@ function executeJavaScript(
         timeoutMs,
         maxOutput: MAX_OUTPUT_CHARACTERS,
         messages: {
-          noOutput: t('code.noOutput'),
-          outputTruncated: t('code.outputTruncated'),
+          noOutput: t("(Code execution completed with no output)"),
+          outputTruncated: t("[Output truncated]"),
         },
       },
       resourceLimits: { maxOldGenerationSizeMb: 32, maxYoungGenerationSizeMb: 8, stackSizeMb: 4 },
@@ -170,15 +170,15 @@ function executeJavaScript(
       void worker.terminate()
       resolve(result)
     }
-    const onAbort = () => finish({ result: t('代码执行已取消。'), isError: true })
+    const onAbort = () => finish({ result: t("Code execution canceled."), isError: true })
     const timer = setTimeout(
-      () => finish({ result: t('代码执行超过 {value0} 秒，已终止。', { value0: (timeoutMs / 1_000).toFixed(1) }), isError: true }),
+      () => finish({ result: t("Code execution exceeded {value0} seconds and terminated.", { value0: (timeoutMs / 1_000).toFixed(1) }), isError: true }),
       timeoutMs + 250,
     )
     worker.once('message', (message: CodeExecutionResult) => finish(message))
     worker.once('error', (error) => finish({ result: error.stack || error.message, isError: true }))
     worker.once('exit', (code) => {
-      if (!settled) finish({ result: t('代码运行器异常退出（退出码 {value0}）。', { value0: code }), isError: true })
+      if (!settled) finish({ result: t("The code runner exited abnormally (exit code {value0}).", { value0: code }), isError: true })
     })
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
@@ -207,7 +207,7 @@ async function executePython(
       : await resolvePythonCommand()
   if (!python) {
     return {
-      result: t('未检测到可用的 Python 3 解释器。请改用 language="javascript"，或在系统 PATH 中安装 Python 3。'),
+      result: t("No available Python 3 interpreter detected. Please use language=\"javascript\" instead, or install Python 3 in your system PATH."),
       isError: true,
     }
   }
@@ -218,9 +218,9 @@ async function executePython(
     const wrapper = PYTHON_WRAPPER
       .replace('__USER_INPUT__', JSON.stringify(JSON.stringify(input ?? null)))
       .replace('__USER_CODE__', JSON.stringify(code))
-      .replace('__MODULE_NOT_ALLOWED__', JSON.stringify(t('code.moduleNotAllowed')))
-      .replace('__DUNDER_NOT_ALLOWED__', JSON.stringify(t('code.dunderNotAllowed')))
-      .replace('__NAME_NOT_ALLOWED__', JSON.stringify(t('code.nameNotAllowed')))
+      .replace('__MODULE_NOT_ALLOWED__', JSON.stringify(t("Module {name} is not allowed")))
+      .replace('__DUNDER_NOT_ALLOWED__', JSON.stringify(t("Double-underscore attributes are not allowed")))
+      .replace('__NAME_NOT_ALLOWED__', JSON.stringify(t("{name} is not allowed")))
     await writeFile(scriptPath, wrapper, { encoding: 'utf8', mode: 0o600 })
     return await runProcess(
       python.command,
@@ -294,15 +294,15 @@ function runProcess(
     }
     const onAbort = () => {
       child.kill()
-      finish({ result: t('代码执行已取消。'), isError: true })
+      finish({ result: t("Code execution canceled."), isError: true })
     }
     const timer = setTimeout(() => {
       child.kill()
       finish({
-        result: t('代码执行超过 {value0} 秒，已终止。\n{value1}{value2}', {
+        result: t("Code execution exceeded {value0} seconds and terminated.\n{value1}{value2}", {
           value0: (timeoutMs / 1_000).toFixed(1),
           value1: output,
-          value2: truncated ? `\n${t('code.outputTruncated')}` : '',
+          value2: truncated ? `\n${t("[Output truncated]")}` : '',
         }).trim(),
         isError: true,
         truncated,
@@ -313,8 +313,8 @@ function runProcess(
     child.once('error', (error) => finish({ result: error.message, isError: true }))
     child.once('close', (code) => finish({
       result: output.trim()
-        ? `${output.trim()}${truncated ? `\n${t('code.outputTruncated')}` : ''}`
-        : t('(进程退出码 {value0}，无输出)', { value0: code ?? 'unknown' }),
+        ? `${output.trim()}${truncated ? `\n${t("[Output truncated]")}` : ''}`
+        : t("(Process exited with code {value0}; no output)", { value0: code ?? 'unknown' }),
       isError: code !== 0,
       truncated,
     }))

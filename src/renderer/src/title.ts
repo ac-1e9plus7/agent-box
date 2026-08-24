@@ -10,8 +10,8 @@ export const MAX_TITLE_LENGTH = 100
  * the raw text can be cleaned into a displayable title.
  */
 export const TITLE_SYSTEM_PROMPT =
-  t("你是一个标题生成助手。根据用户的消息，生成一个简短的对话标题（不超过 12 个汉字）。") +
-  t("只输出标题本身，不要加引号、解释、标点前缀或换行。")
+  t("You generate concise conversation titles from user messages. Keep each title under 12 words.") +
+  t("Output only the title itself, without quotes, explanations, punctuation prefixes, or line breaks.")
 
 /**
  * The user question that will be turned into a title. Empty messages, system
@@ -21,7 +21,7 @@ export function firstUserQuestion(messages: { role: Message['role']; content: st
   const first = messages.find((message) => message.role === 'user' && (message.content.trim() || message.attachments?.length))
   if (!first) return ''
   if (first.content.trim()) return first.content.trim()
-  return first.attachments?.[0]?.name ? t("[文件] {value0}", { value0: first.attachments[0].name }) : ''
+  return first.attachments?.[0]?.name ? t("[File] {value0}", { value0: first.attachments[0].name }) : ''
 }
 
 /**

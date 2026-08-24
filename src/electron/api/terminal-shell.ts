@@ -27,6 +27,10 @@ const MAX_TIMEOUT_MS = 60_000
 
 let automaticShellPromise: Promise<ResolvedTerminalShell | undefined> | undefined
 
+export function terminalTruncationSuffix(truncated: boolean): string {
+  return truncated ? `\n${t("[Output truncated]")}` : ''
+}
+
 export function automaticShellCandidates(
   platform: NodeJS.Platform,
   env: NodeJS.ProcessEnv,
@@ -96,20 +100,20 @@ export async function executeTerminalCommand(
 ): Promise<TerminalCommandResult> {
   const shell = await resolveIntegratedTerminalShell(config)
   const fallbackShell = config.mode === 'custom'
-    ? shellFromExecutable(config.executable.trim() || t("(未配置)"), config.args, 'Custom shell')
-    : { executable: t("(未找到)"), launchArgs: [], kind: 'custom' as const, displayName: 'Auto shell' }
+    ? shellFromExecutable(config.executable.trim() || t("(not configured)"), config.args, 'Custom shell')
+    : { executable: t("(not found)"), launchArgs: [], kind: 'custom' as const, displayName: 'Auto shell' }
   if (!shell) {
     return {
       result: config.mode === 'custom'
-        ? t("无法启动指定 Shell：{value0}。请检查可执行文件路径和启动参数。", { value0: config.executable || '(空)' })
-        : t("未找到可用的集成终端 Shell。Windows 请安装 PowerShell 或确认 cmd.exe 可用；macOS/Linux 请配置 SHELL 或安装 bash/zsh/sh。"),
+        ? t("Unable to start specified shell: {value0}. Please check the executable path and startup parameters.", { value0: config.executable || t('(empty)') })
+        : t("No usable integrated terminal shell was found. On Windows, install PowerShell or make sure cmd.exe is available. On macOS/Linux, configure the SHELL environment variable or install bash, zsh, or sh."),
       isError: true,
       shell: fallbackShell,
     }
   }
-  if (!command.trim()) return { result: t("终端命令不能为空。"), isError: true, shell }
+  if (!command.trim()) return { result: t("Terminal command cannot be empty."), isError: true, shell }
   if (command.length > MAX_COMMAND_CHARACTERS) {
-    return { result: t("终端命令超过 {value0} 字符限制。", { value0: MAX_COMMAND_CHARACTERS.toLocaleString(getLanguage()) }), isError: true, shell }
+    return { result: t("Terminal command exceeds {value0} character limit.", { value0: MAX_COMMAND_CHARACTERS.toLocaleString(getLanguage()) }), isError: true, shell }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, options.timeoutMs ?? 20_000))
   const runtimeSettings = options.developerRuntimes
@@ -131,8 +135,8 @@ export async function testIntegratedTerminalShell(
       platform: process.platform,
       latencyMs: Math.round(performance.now() - startedAt),
       message: config.mode === 'custom'
-        ? t("无法启动指定 Shell：{value0}", { value0: config.executable || '(空)' })
-        : t("当前操作系统没有探测到可用 Shell。"),
+        ? t("Unable to start specified shell: {value0}", { value0: config.executable || t('(empty)') })
+        : t("No usable shell was detected on this operating system."),
     }
   }
   return {
@@ -141,7 +145,7 @@ export async function testIntegratedTerminalShell(
     displayName: shell.displayName,
     executable: shell.executable,
     latencyMs: Math.round(performance.now() - startedAt),
-    message: t("已连接 {value0}（{value1}）", { value0: shell.displayName, value1: shell.executable }),
+    message: t("Connected {value0} ({value1})", { value0: shell.displayName, value1: shell.executable }),
   }
 }
 
@@ -210,12 +214,12 @@ function runShellProcess(
     }
     const onAbort = () => {
       child.kill()
-      finish({ result: t("终端命令已取消。"), isError: true })
+      finish({ result: t("Terminal command canceled."), isError: true })
     }
     const timer = setTimeout(() => {
       child.kill()
       finish({
-        result: t("终端命令超过 {value0} 秒，已终止。\n{value1}{value2}", { value0: (timeoutMs / 1_000).toFixed(1), value1: output, value2: truncated ? '\n[输出已截断]' : '' }).trim(),
+        result: t("The terminal command exceeded the {value0}-second timeout and was terminated.\n{value1}{value2}", { value0: (timeoutMs / 1_000).toFixed(1), value1: output, value2: terminalTruncationSuffix(truncated) }).trim(),
         isError: true,
         truncated,
       })
@@ -225,8 +229,8 @@ function runShellProcess(
     child.once('error', (error) => finish({ result: error.message, isError: true }))
     child.once('close', (code) => finish({
       result: output.trim()
-        ? `${output.trim()}${truncated ? t("\n[输出已截断]") : ''}`
-        : t("(Shell 退出码 {value0}，无输出)", { value0: code ?? 'unknown' }),
+        ? `${output.trim()}${terminalTruncationSuffix(truncated)}`
+        : t("(Shell exited with code {value0}; no output)", { value0: code ?? 'unknown' }),
       isError: code !== 0,
       truncated,
     }))

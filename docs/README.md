@@ -16,7 +16,7 @@ This documentation set describes AgentBox's current design, boundaries, and main
 | 6 | [Renderer UI and interactions](./ui-and-components.md) | React renderer, message trees, Markdown/KaTeX, attachments, profiles, and keyboard behavior | `src/renderer/src/`, `src/shared/conversation-tree.ts` |
 | 7 | [Development, testing, and CI](./development-and-testing.md) | pnpm scripts, Vitest, CommonJS packaging constraints, smoke tests, and GitHub Actions | `package.json`, `tests/`, `.github/workflows/` |
 | 8 | [Conversation workspaces and development runtimes](./workspaces-and-runtimes.md) | Workspace boundaries, integrated terminal, JDK/Go/PHP/Python, venv, and Conda | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
-| 9 | [Localization and English terminology](./i18n.md) | First-launch language selection, shared bundles, generation, contextual translation, and terminology checks | `src/shared/i18n/`, `scripts/localize-renderer.mjs` |
+| 9 | [Localization and English terminology](./i18n.md) | First-launch language selection, English-source-key bundles, generation, the `check` linter, semantic hatch keys, and terminology | `src/shared/i18n/`, `scripts/localize-renderer.mjs` |
 
 ## Core maintenance principles
 

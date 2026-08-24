@@ -83,7 +83,7 @@ export function ProvidersTab({
       ...current,
       {
         id,
-        name: t("自定义服务商"),
+        name: t("Custom provider"),
         kind: 'custom',
         baseUrl: 'https://api.example.com/v1',
         apiFormat: DEFAULT_NEW_PROVIDER_API_FORMAT,
@@ -109,7 +109,7 @@ export function ProvidersTab({
       ...current,
       {
         id,
-        name: t("CLIProxyAPI（本地）"),
+        name: t("provider.cliProxyLocalVariant"),
         kind: 'cliproxy',
         baseUrl: 'http://127.0.0.1:8317/v1',
         apiFormat: 'openai-chat-completions',
@@ -163,12 +163,12 @@ export function ProvidersTab({
               <div className="settings-split-view">
                 <aside className="settings-list-panel">
                   <div className="settings-list-toolbar">
-                    <span>{t("{value0} 个服务商", { value0: providerDrafts.length })}</span>
-                    <button onClick={addProvider}><Icon name="plus" size={15} />{t("添加")}</button>
+                    <span>{t("{value0} providers", { value0: providerDrafts.length })}</span>
+                    <button onClick={addProvider}><Icon name="plus" size={15} />{t("Add")}</button>
                   </div>
                   <button className="cliproxy-preset-button" onClick={addCliProxyPreset}>
                     <span><Icon name="code" size={17} /></span>
-                    <span><strong>{t("CLIProxyAPI 本地预设")}</strong><small>{t("127.0.0.1:8317 · 密钥可选")}</small></span>
+                    <span><strong>{t("CLIProxyAPI local default")}</strong><small>{t("127.0.0.1:8317 · Key optional")}</small></span>
                     <Icon name="plus" size={14} />
                   </button>
                   <div className="settings-entity-list">
@@ -179,7 +179,7 @@ export function ProvidersTab({
                         onClick={() => { setSelectedProviderId(provider.id); setTestState('idle') }}
                       >
                         <span className="entity-icon provider-icon"><Icon name="globe" size={16} /></span>
-                        <span><strong>{provider.name}</strong><small>{provider.hasApiKey ? t("密钥已保存") : isProviderKeyOptional(provider) ? t("本机连接 · 密钥可选") : t("需要 API 密钥")}</small></span>
+                        <span><strong>{provider.name}</strong><small>{provider.hasApiKey ? t("Key stored") : isProviderKeyOptional(provider) ? t("Local connection · Key optional") : t("Requires API key")}</small></span>
                         <i className={`status-dot ${provider.hasApiKey || isProviderKeyOptional(provider) ? 'is-ready' : ''}`} />
                       </button>
                     ))}
@@ -190,33 +190,33 @@ export function ProvidersTab({
                     <div className="editor-title-row">
                       <div>
                         <span className="entity-icon large provider-icon"><Icon name="globe" size={18} /></span>
-                        <div><h3>{selectedProvider.name}</h3><small>{selectedProvider.id === 'openrouter' ? t("内置服务商") : selectedProvider.kind === 'cliproxy' ? t("本机兼容代理") : t("自定义服务商")}</small></div>
+                        <div><h3>{selectedProvider.name}</h3><small>{selectedProvider.id === 'openrouter' ? t("Built-in provider") : selectedProvider.kind === 'cliproxy' ? t("Local compatible proxy") : t("Custom provider")}</small></div>
                       </div>
-                      <span className="settings-value-note">{clearApiKeyIds.includes(selectedProvider.id) ? t("密钥待清除") : selectedProvider.hasApiKey ? t("密钥已保存") : selectedProviderKeyOptional ? t("密钥可选") : t("待配置")}</span>
+                      <span className="settings-value-note">{clearApiKeyIds.includes(selectedProvider.id) ? t("Key will be cleared") : selectedProvider.hasApiKey ? t("Key stored") : selectedProviderKeyOptional ? t("Key optional") : t("To be configured")}</span>
                     </div>
                     <div className="editor-form-grid single-column">
                       <label>
-                        <FieldLabel>{t("名称")}</FieldLabel>
+                        <FieldLabel>{t("Name")}</FieldLabel>
                         <input value={selectedProvider.name} onChange={(event) => updateProvider({ name: event.target.value })} />
                       </label>
                       <label>
-                        <FieldLabel>{t("服务商类型")}</FieldLabel>
+                        <FieldLabel>{t("Provider type")}</FieldLabel>
                         <select value={selectedProvider.kind} onChange={(event) => updateProvider({ kind: event.target.value as ProviderConfig['kind'] })}>
                           <option value="openrouter">OpenRouter</option>
-                          <option value="openai">{t("OpenAI 兼容")}</option>
+                          <option value="openai">{t("OpenAI-compatible")}</option>
                           <option value="anthropic">Anthropic</option>
-                          <option value="cliproxy">{t("CLIProxyAPI（本机）")}</option>
-                          <option value="custom">{t("自定义")}</option>
+                          <option value="cliproxy">{t("CLIProxyAPI (local)")}</option>
+                          <option value="custom">{t("Custom")}</option>
                         </select>
                       </label>
                       <label>
-                        <FieldLabel hint={t("新接入推荐 Responses")}>{t("默认 API 格式")}</FieldLabel>
+                        <FieldLabel hint={t("Responses API is recommended for new integrations")}>{t("Default API format")}</FieldLabel>
                         <div className="provider-api-format-control">
                           <select
                             aria-describedby="legacy-chat-completions-hint"
                             title={selectedProvider.apiFormat === 'openai-chat-completions'
                               ? LEGACY_CHAT_COMPLETIONS_HINT
-                              : t("Responses 是新接入的推荐格式。")}
+                              : t("The Responses API is recommended for new integrations.")}
                             value={selectedProvider.apiFormat}
                             onChange={(event) => updateProvider({ apiFormat: event.target.value as ApiFormat })}
                           >
@@ -238,12 +238,12 @@ export function ProvidersTab({
                             title={LEGACY_CHAT_COMPLETIONS_HINT}
                           >
                             <Icon name="info" size={13} />
-                            <span>{t("旧版格式说明")}</span>
+                            <span>{t("Chat Completions API guidance")}</span>
                           </span>
                         </div>
                       </label>
                       <label>
-                        <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? t("CLIProxyAPI 默认本机监听地址") : t("请求将发送到此地址")}>{t('provider.baseUrl')}</FieldLabel>
+                        <FieldLabel hint={selectedProvider.kind === 'cliproxy' ? t("CLIProxyAPI default local listening address") : t("Requests are sent to this URL")}>{t("Base URL")}</FieldLabel>
                         <input
                           className="mono-input"
                           placeholder={selectedProvider.kind === 'cliproxy' ? 'http://127.0.0.1:8317/v1' : 'https://openrouter.ai/api/v1'}
@@ -252,12 +252,12 @@ export function ProvidersTab({
                         />
                       </label>
                       <label>
-                        <FieldLabel hint={selectedProviderKeyOptional ? t("config.yaml 的 api-keys 为空时可留空") : selectedProvider.hasApiKey ? t("已加密保存；留空则保持不变") : t("保存后将由系统安全加密")}>{t("API 密钥")}</FieldLabel>
+                        <FieldLabel hint={selectedProviderKeyOptional ? t("If api-keys in config.yaml is empty, it can be left blank.") : selectedProvider.hasApiKey ? t("Saved encrypted; leave blank to remain unchanged") : t("Encrypted with OS-protected storage when saved")}>{t("API key")}</FieldLabel>
                         <div className="secret-input">
                           <Icon name="key" size={16} />
                           <input
                             autoComplete="off"
-                            placeholder={clearApiKeyIds.includes(selectedProvider.id) ? t("保存后将清除密钥；输入新值可取消") : selectedProvider.hasApiKey ? '••••••••••••••••••••' : selectedProviderKeyOptional ? t("可选：填写 CLIProxyAPI 配置的密钥") : 'sk-or-v1-…'}
+                            placeholder={clearApiKeyIds.includes(selectedProvider.id) ? t("The key will be cleared when you save; enter a new value to keep a key instead") : selectedProvider.hasApiKey ? '••••••••••••••••••••' : selectedProviderKeyOptional ? t("Optional: Fill in the key configured by CLIProxyAPI") : 'sk-or-v1-…'}
                             type={showApiKey ? 'text' : 'password'}
                             value={apiKeyInputs[selectedProvider.id] ?? ''}
                             onChange={(event) => {
@@ -266,7 +266,7 @@ export function ProvidersTab({
                               if (value.trim()) setClearApiKeyIds((current) => current.filter((id) => id !== selectedProvider.id))
                             }}
                           />
-                          <button type="button" onClick={() => setShowApiKey((current) => !current)}>{showApiKey ? t("隐藏") : t("显示")}</button>
+                          <button type="button" onClick={() => setShowApiKey((current) => !current)}>{showApiKey ? t("Hide") : t("Show")}</button>
                         </div>
                         {selectedProvider.hasApiKey && (
                           <button
@@ -275,25 +275,25 @@ export function ProvidersTab({
                             onClick={() => toggleClearApiKey(selectedProvider.id)}
                           >
                             <Icon name={clearApiKeyIds.includes(selectedProvider.id) ? 'refresh' : 'trash'} size={13} />
-                            {clearApiKeyIds.includes(selectedProvider.id) ? t("保留原密钥") : t("保存时清除密钥")}
+                            {clearApiKeyIds.includes(selectedProvider.id) ? t("Keep existing key") : t("Clear key when saving")}
                           </button>
                         )}
                         {selectedProviderNeedsNewKey && (
                           <span className="credential-warning">
-                            <Icon name="info" size={13} />{t("连接地址或服务商类型已改变。安全策略会清除旧密钥，请重新输入。")}</span>
+                            <Icon name="info" size={13} />{t("The provider URL or type changed. For security, the saved API key will be cleared; enter it again.")}</span>
                         )}
                       </label>
                     </div>
                     <div className="provider-security-banner">
                       <Icon name="shield" size={18} />
-                      <div><strong>{selectedProviderKeyOptional ? t("本机回环连接可无密钥使用") : t("密钥不会进入 renderer 持久状态")}</strong><p>{selectedProviderKeyOptional ? t("若 CLIProxyAPI 的 api-keys 未配置，请保持为空；填写时仍会安全加密。") : t("保存时通过安全通道交给主进程，并使用系统密钥链派生的密钥加密。")}</p></div>
+                      <div><strong>{selectedProviderKeyOptional ? t("Local loopback connections can be used without an API key") : t("The key is never stored in persistent renderer state")}</strong><p>{selectedProviderKeyOptional ? t("If the api-keys of CLIProxyAPI are not configured, please keep it empty; it will still be securely encrypted when filled in.") : t("When saved, the key is sent securely to the main process and encrypted using OS-protected storage.")}</p></div>
                     </div>
                     {selectedProviderKeyOptional
                       && (!selectedProvider.hasApiKey || clearApiKeyIds.includes(selectedProvider.id))
                       && !(apiKeyInputs[selectedProvider.id] ?? '').trim() && (
                       <div className="cliproxy-network-warning">
                         <Icon name="info" size={17} />
-                        <div><strong>{t("无密钥时必须限制服务端监听地址")}</strong><p>{t('cliproxy.hostWarning')}</p></div>
+                        <div><strong>{t("Restrict the server listen address when no key is configured")}</strong><p>{t("In CLIProxyAPI config.yaml, set host: \"127.0.0.1\". The default host: \"\" may allow access from the local network, and TLS is disabled by default.")}</p></div>
                       </div>
                     )}
                     <div className="provider-actions">
@@ -302,13 +302,13 @@ export function ProvidersTab({
                         disabled={!onTestProvider || testState === 'testing' || selectedProviderNeedsNewKey || ((!selectedProvider.hasApiKey || clearApiKeyIds.includes(selectedProvider.id)) && !selectedProviderKeyOptional && !(apiKeyInputs[selectedProvider.id] ?? '').trim())}
                         onClick={testProvider}
                       >
-                        {testState === 'testing' ? <><span className="button-spinner" />{t("测试中…")}</> :
-                          testState === 'success' ? <><Icon name="check" size={15} />{t("连接成功")}</> :
-                            testState === 'failed' ? <><Icon name="info" size={15} />{t("重试连接")}</> :
-                              <><Icon name="refresh" size={15} />{t("测试当前配置")}</>}
+                        {testState === 'testing' ? <><span className="button-spinner" />{t("Testing…")}</> :
+                          testState === 'success' ? <><Icon name="check" size={15} />{t("Connection successful")}</> :
+                            testState === 'failed' ? <><Icon name="info" size={15} />{t("Retry connection")}</> :
+                              <><Icon name="refresh" size={15} />{t("Test current configuration")}</>}
                       </button>
                       {selectedProvider.id !== 'openrouter' && (
-                        <button className="remove-provider-button" onClick={removeProvider}><Icon name="trash" size={15} />{t("删除")}</button>
+                        <button className="remove-provider-button" onClick={removeProvider}><Icon name="trash" size={15} />{t("Delete")}</button>
                       )}
                     </div>
                   </div>

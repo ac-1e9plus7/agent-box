@@ -112,7 +112,7 @@ export class EncryptedStore<T extends object> {
 
     if (envelopeBuffer && !this.state) {
       throw new EncryptedStoreError(
-        t("无法解密本地数据。系统密钥可能已变化，或数据文件已经损坏。"),
+        t("Unable to decrypt local data. The system key may have changed, or the data file may have become corrupted."),
       )
     }
 
@@ -152,7 +152,7 @@ export class EncryptedStore<T extends object> {
   private assertSecureStorageAvailable(): void {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new EncryptedStoreError(
-        t("操作系统安全存储当前不可用；为避免明文保存，应用不会加载用户数据。"),
+        t("Operating-system secure storage is unavailable. To prevent plaintext storage, AgentBox will not load user data."),
       )
     }
 
@@ -165,7 +165,7 @@ export class EncryptedStore<T extends object> {
         : undefined
     if (process.platform === 'linux' && backend === 'basic_text') {
       throw new EncryptedStoreError(
-        t("当前 Linux 环境没有可用的系统密钥环；已拒绝 Electron 的 basic_text 明文后端。"),
+        t("There is no system keyring available for the current Linux environment; Electron's basic_text plaintext backend has been rejected."),
       )
     }
   }
@@ -182,7 +182,7 @@ export class EncryptedStore<T extends object> {
         }
         return decoded
       } catch (error) {
-        throw new EncryptedStoreError(t("无法使用系统安全存储解锁本地数据密钥。"), {
+        throw new EncryptedStoreError(t("Unable to use system secure storage to unlock local data key."), {
           cause: error,
         })
       }
@@ -337,12 +337,12 @@ export class EncryptedStore<T extends object> {
   }
 
   private requireMasterKey(): Buffer {
-    if (!this.masterKey) throw new EncryptedStoreError(t("EncryptedStore 尚未初始化。"))
+    if (!this.masterKey) throw new EncryptedStoreError(t("EncryptedStore has not been initialized."))
     return this.masterKey
   }
 
   private requireState(): T {
-    if (!this.state) throw new EncryptedStoreError(t("EncryptedStore 尚未初始化。"))
+    if (!this.state) throw new EncryptedStoreError(t("EncryptedStore has not been initialized."))
     return this.state
   }
 }

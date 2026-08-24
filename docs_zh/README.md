@@ -16,7 +16,7 @@
 | 6 | [前端 UI 与交互系统](./ui-and-components.md) | React renderer、消息树、Markdown/KaTeX、附件、用户资料与快捷键 | `src/renderer/src/`, `src/shared/conversation-tree.ts` |
 | 7 | [开发、测试与持续集成](./development-and-testing.md) | pnpm 脚本、Vitest、CommonJS 打包约束、冒烟测试与 GitHub Actions | `package.json`, `tests/`, `.github/workflows/` |
 | 8 | [会话工作目录与开发运行时](./workspaces-and-runtimes.md) | 工作目录边界、集成终端、JDK/Go/PHP/Python、venv 与 Conda | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
-| 9 | [国际化与英文术语](./i18n.md) | 首次语言选择、共享资源包、生成脚本、语境翻译与术语校验 | `src/shared/i18n/`, `scripts/localize-renderer.mjs` |
+| 9 | [国际化与英文术语](./i18n.md) | 首次语言选择、英文为 key 的资源包、生成脚本、check 校验、语义逃生舱与术语 | `src/shared/i18n/`, `scripts/localize-renderer.mjs` |
 
 ## 核心维护原则
 

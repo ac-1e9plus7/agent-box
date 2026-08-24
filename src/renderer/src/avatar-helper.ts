@@ -43,7 +43,7 @@ export function resolveAvatarCropLayout(
     || !Number.isFinite(viewportSize)
     || viewportSize <= 0
   ) {
-    throw new Error(t("头像图片尺寸无效。"))
+    throw new Error(t("Avatar image size is invalid."))
   }
 
   const normalizedZoom = clamp(zoom, MIN_AVATAR_ZOOM, MAX_AVATAR_ZOOM)
@@ -70,10 +70,10 @@ export function resolveAvatarCropLayout(
 
 export function validateAvatarSourceFile(file: Pick<File, 'size' | 'type'>): void {
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') {
-    throw new Error(t("请选择 PNG、JPEG、WebP 等常见位图文件。"))
+    throw new Error(t("Choose a PNG, JPEG, WebP, or another common bitmap format."))
   }
   if (file.size <= 0 || file.size > MAX_AVATAR_SOURCE_BYTES) {
-    throw new Error(t("头像原图不能超过 30 MB。"))
+    throw new Error(t("The source image cannot exceed 30 MB."))
   }
 }
 
@@ -87,12 +87,12 @@ export function validateAvatarSourceDimensions(width: number, height: number): v
     || height > MAX_AVATAR_SOURCE_DIMENSION
     || width * height > MAX_AVATAR_SOURCE_PIXELS
   ) {
-    throw new Error(t("头像原图尺寸过大或无效。"))
+    throw new Error(t("The original avatar image is too large or invalid."))
   }
 }
 
 export function resolveAvatarOutputSize(sourceSize: number): number {
-  if (!Number.isFinite(sourceSize) || sourceSize <= 0) throw new Error(t("头像裁剪尺寸无效。"))
+  if (!Number.isFinite(sourceSize) || sourceSize <= 0) throw new Error(t("Avatar crop size is invalid."))
   return Math.min(MAX_USER_AVATAR_DIMENSION, Math.max(1, Math.round(sourceSize)))
 }
 
@@ -106,7 +106,7 @@ function renderAvatar(
   canvas.width = outputSize
   canvas.height = outputSize
   const context = canvas.getContext('2d')
-  if (!context) throw new Error(t("无法创建头像画布。"))
+  if (!context) throw new Error(t("Unable to create avatar canvas."))
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
   context.drawImage(
@@ -147,5 +147,5 @@ export function cropAvatarImage(
     if (outputSize <= 128) break
     outputSize = Math.max(128, Math.floor(outputSize * 0.8))
   }
-  throw new Error(t("头像压缩后仍然过大，请换一张图片。"))
+  throw new Error(t("The avatar is still too large after compression. Choose another image."))
 }

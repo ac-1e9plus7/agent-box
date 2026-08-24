@@ -4,6 +4,7 @@ import {
   resourceBundle,
   setLanguage,
   t,
+  type MessageKey,
 } from '../src/shared/i18n'
 import { DEFAULT_SKILLS, localizedDefaultSkills } from '../src/electron/storage/default-skills'
 
@@ -18,44 +19,41 @@ describe('application localization', () => {
     expect(languageFromSystemLocale(undefined)).toBe('en-US')
   })
 
-  it('keeps the Chinese and English resource packs structurally aligned', () => {
+  it('uses English source copy as the message key and keeps bundles structurally aligned', () => {
     const chinese = resourceBundle('zh-CN')
     const english = resourceBundle('en-US')
-    expect(Object.keys(english).sort()).toEqual(Object.keys(chinese).sort())
-    expect(Object.values(english).every((value) => !/[\u3400-\u9fff]/u.test(value))).toBe(true)
+    const zhKeys = Object.keys(chinese)
 
-    for (const key of Object.keys(chinese)) {
-      const placeholders = (chinese[key]?.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort()
-      expect((english[key]?.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort()).toEqual(placeholders)
+    // English source copy is the key: keys carry no CJK.
+    expect(zhKeys.every((key) => !/[㐀-鿿]/u.test(key))).toBe(true)
+    // The English bundle holds only the small set of semantic hatch keys.
+    expect(Object.keys(english).every((key) => !/[㐀-鿿]/u.test(key))).toBe(true)
+    // Every English hatch key must also exist in the Chinese bundle.
+    for (const key of Object.keys(english)) expect(chinese).toHaveProperty(key)
+
+    // Placeholder sets must match between an English key and its Chinese value.
+    for (const key of zhKeys) {
+      const keyPlaceholders = (key.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort()
+      expect((chinese[key]?.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort()).toEqual(keyPlaceholders)
+    }
+    for (const key of Object.keys(english)) {
+      const keyPlaceholders = (key.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort()
+      expect((english[key]?.match(/\{[A-Za-z0-9_]+\}/g) ?? []).sort()).toEqual(keyPlaceholders)
     }
   })
 
-  it('uses product terminology consistently in the English bundle', () => {
-    const english = resourceBundle('en-US')
-    const rules: Array<{ source: RegExp; forbidden: RegExp }> = [
-      { source: /服务商|供应商/u, forbidden: /\b(?:supplier|vendor|service provider)s?\b/i },
-      { source: /MCP 服务/u, forbidden: /\bMCP services?\b/i },
-      { source: /会话/u, forbidden: /\bsessions?\b/i },
-      { source: /提示词/u, forbidden: /\bprompt words?\b/i },
-      { source: /明文/u, forbidden: /\b(?:clear text|plain text)\b/i },
-      { source: /压缩包/u, forbidden: /\bcompressed packages?\b/i },
-      { source: /现场/u, forbidden: /\b(?:site|scene)\b/i },
-      { source: /联网搜索|网页搜索/u, forbidden: /\b(?:network|Internet|networking) searches?\b/i },
-      { source: /思考强度/u, forbidden: /\bthinking intensity\b/i },
-      { source: /上下文裁剪/u, forbidden: /\bcontextual cropping\b/i },
-    ]
-    for (const [key, value] of Object.entries(english)) {
-      for (const rule of rules) {
-        if (rule.source.test(key)) expect(value).not.toMatch(rule.forbidden)
-      }
-    }
+  it('uses canonical product terminology in English keys', () => {
+    const chinese = resourceBundle('zh-CN')
+    const keys = Object.keys(chinese)
+    // English keys must never carry the disallowed machine-translation phrasings.
     const globallyForbidden = /\b(?:supplier|vendor|service provider|MCP service|prompt word|contextual cropping|current site|current scene|compressed package|clear text|thinking intensity|smart search|mount all|shortcode|legal JSON|cue word|tool intelligent)\b/i
-    expect(Object.values(english).filter((value) => globallyForbidden.test(value))).toEqual([])
-    expect(english['Chat Completions 仍受支持，但 OpenAI 建议所有新项目使用 Responses。仅当兼容服务商尚未实现 /v1/responses 时选择此格式。']).toContain('Responses API')
-    expect(english['默认思考强度']).toBe('Default reasoning effort')
-    expect(english['Anthropic 思考协议']).toBe('Anthropic thinking mode')
-    expect(english['common.close']).toBe('Close')
-    expect(english['common.off']).toBe('Off')
+    expect(keys.filter((key) => globallyForbidden.test(key))).toEqual([])
+
+    expect(chinese['Close']).toBe('关闭')
+    expect(chinese['Off']).toBe('关闭')
+    expect(chinese['Default reasoning effort']).toBe('默认思考强度')
+    expect(chinese['Anthropic thinking mode']).toBe('Anthropic 思考协议')
+    expect(chinese['Provider']).toBe('服务商')
   })
 
   it('never places executable built-in skill assets in language bundles', () => {
@@ -66,6 +64,18 @@ describe('application localization', () => {
         if (file.kind === 'markdown') continue
         expect(chinese).not.toHaveProperty(file.content)
         expect(english).not.toHaveProperty(file.content)
+      }
+    }
+  })
+
+  it('keeps every localizable built-in skill field in the Chinese catalog', () => {
+    const chinese = resourceBundle('zh-CN')
+    for (const skill of DEFAULT_SKILLS) {
+      expect(chinese).toHaveProperty(skill.name)
+      expect(chinese).toHaveProperty(skill.description)
+      if (skill.systemPrompt) expect(chinese).toHaveProperty(skill.systemPrompt)
+      for (const file of skill.files) {
+        if (file.kind === 'markdown') expect(chinese).toHaveProperty(file.content)
       }
     }
   })
@@ -86,9 +96,29 @@ describe('application localization', () => {
 
   it('switches bundles and interpolates dynamic values', () => {
     setLanguage('zh-CN')
-    expect(t('已获取 {value0} 个模型。', { value0: 3 })).toBe('已获取 3 个模型。')
+    expect(t('Fetched {value0} models.', { value0: 3 })).toBe('已获取 3 个模型。')
 
     setLanguage('en-US')
-    expect(t('已获取 {value0} 个模型。', { value0: 3 })).toBe('Fetched 3 models.')
+    expect(t('Fetched {value0} models.', { value0: 3 })).toBe('Fetched 3 models.')
+  })
+
+  it('renders an English key as itself under English and resolves hatch keys', () => {
+    setLanguage('en-US')
+    // Plain English key: no en-US bundle entry, so the key renders as itself.
+    expect(t('Close')).toBe('Close')
+    // Semantic hatch key: en-US carries the shared English text.
+    expect(t('language.displayName')).toBe('English')
+
+    setLanguage('zh-CN')
+    expect(t('Close')).toBe('关闭')
+    expect(t('language.displayName')).toBe('简体中文')
+  })
+
+  it('degrades an untranslated key to its own English text', () => {
+    setLanguage('zh-CN')
+    // A key absent from the Chinese bundle renders as the English key itself.
+    expect(t('Untranslated brand new copy' as MessageKey)).toBe('Untranslated brand new copy')
+    setLanguage('en-US')
+    expect(t('Untranslated brand new copy' as MessageKey)).toBe('Untranslated brand new copy')
   })
 })

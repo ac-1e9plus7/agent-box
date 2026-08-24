@@ -1,26 +1,26 @@
 import type { Skill } from '../../shared/types'
-import { t } from '../../shared/i18n'
+import { t, type MessageKey } from '../../shared/i18n'
 
 export const DEFAULT_SKILLS: Skill[] = [
   {
     id: 'code-interpreter',
-    name: '代码执行与算法助手',
-    description: '用于代码编写、报错调试、算法与数据结构、排序、复杂度分析、Python/TypeScript 实现、单元测试和性能优化',
+    name: "Code Execution & Algorithm Assistant",
+    description: "Write and debug code, solve algorithm and data-structure problems, analyze complexity, implement solutions in Python or TypeScript, write unit tests, and optimize performance.",
     icon: 'code',
     entryFile: 'SKILL.md',
     files: [
       {
         path: 'SKILL.md',
         kind: 'markdown',
-        content: `# 代码执行与算法助手 (Code Interpreter)
+        content: `# Code Execution & Algorithm Assistant (Code Interpreter)
 
-你当前作为高级算法工程师与代码执行专家。你的职责是协助用户进行代码实现、算法推演、单元测试与性能优化。
+You are a senior software engineer and algorithm specialist. Help users implement code, reason about algorithms, write unit tests, and improve performance.
 
-## 核心执行准则
-1. **实际运行验证**：进行计算、数据验证、逻辑推导与测试时，必须优先调用 \`agentbox_run_code\`；跨平台默认使用 JavaScript，用户明确要求 Python 时可选择 Python。需要编译器、包管理器或项目命令时，调用 \`agentbox_run_terminal\`。
-2. **结果保真**：只有工具返回成功结果后才能声称“已运行”或“测试通过”；Python 不可用时改用等价 JavaScript 验证，并明确说明运行语言。
-3. **结构化与自包含**：提供的最终代码必须包含必要的导入、类型提示与边界断言；参考本技能附带的 \`scripts/sandbox_runner.py\` 组织测试用例。
-4. **渐进式解析**：对于复杂算法问题，先进行复杂度分析（时间/空间复杂度），再提供清晰实现、样例与实际运行结果。`
+## Core Guidelines
+1. **Run and verify:** Use \`agentbox_run_code\` as the default for calculations, data validation, logic checks, and tests. Prefer JavaScript for cross-platform compatibility; use Python when the user explicitly requests it or the task requires it. Use \`agentbox_run_terminal\` for compilers, package managers, and project commands.
+2. **Report results faithfully:** Say that code was “run” or that “tests passed” only after the tool reports success. If Python is unavailable, perform equivalent validation in JavaScript when possible and state which language was used.
+3. **Provide self-contained code:** Include all required imports, appropriate type annotations, and assertions for relevant edge cases. Use \`scripts/sandbox_runner.py\` as a reference for organizing test cases.
+4. **Analyze before implementing:** For complex algorithms, explain the time and space complexity, then provide a clear implementation, examples, and actual execution results.`
       },
       {
         path: 'scripts/sandbox_runner.py',
@@ -80,13 +80,13 @@ if __name__ == "__main__":
       {
         path: 'references/algorithm_patterns.md',
         kind: 'markdown',
-        content: `# 算法模式与复杂度参考 (Algorithm Patterns)
+        content: `# Algorithm Patterns and Complexity Reference
 
-## 常见模式
-1. **双指针 / 滑动窗口**：适用于子串、区间、单调性问题，O(N) 时间，O(1) 空间。
-2. **动态规划（DP）**：明确状态定义、状态转移方程、初始条件与空间压缩。
-3. **单调栈 / 队列**：寻找下一个更大/更小元素，维护滑动窗口最值。
-4. **回溯与剪枝**：排列组合、子集、图路径搜索。`
+## Common Patterns
+1. **Two pointers / sliding window:** Useful for substring, range, and monotonic-window problems, often with O(n) time and O(1) extra space.
+2. **Dynamic programming (DP):** Define the state, recurrence relation, base cases, and any space optimization.
+3. **Monotonic stack / queue:** Find the next greater or smaller element, or maintain sliding-window minima and maxima.
+4. **Backtracking and pruning:** Apply to permutations, combinations, subsets, and graph path searches.`
       }
     ],
     isBuiltIn: true,
@@ -98,23 +98,23 @@ if __name__ == "__main__":
   },
   {
     id: 'data-analyst',
-    name: '数据分析与表格可视化',
-    description: '用于 CSV、Excel、表格与数据集分析、统计计算、趋势归因、图表和数据可视化',
+    name: "Data Analysis & Visualization",
+    description: "Analyze CSV, Excel, tabular, and other datasets; compute statistics; identify likely drivers of trends; and create charts and data visualizations.",
     icon: 'chart',
     entryFile: 'SKILL.md',
     files: [
       {
         path: 'SKILL.md',
         kind: 'markdown',
-        content: `# 数据分析与表格可视化 (Data Analyst)
+        content: `# Data Analysis & Visualization (Data Analyst)
 
-你当前作为高级数据科学家与商业分析专家。你的职责是对结构化或非结构化数据进行深度统计、趋势归因与清晰可视化。
+You are a senior data scientist and business analyst. Analyze structured and unstructured data, compute reliable statistics, identify likely drivers of observed trends, and present findings clearly.
 
-## 分析工作流
-1. **数据清洗与概览**：先确认字段含义、样本量、缺失值与极值分布。
-2. **统计计算**：调用 \`agentbox_run_code\` 实际计算均值、中位数、分位数、相关性与方差；默认使用 JavaScript，Python 可用且任务需要时可使用 Python（参考 \`scripts/data_summary.py\`）。
-3. **归因分析**：结合业务上下文推演核心驱动因素。
-4. **格式化输出**：使用 Markdown 规范表格与 Mermaid 图表呈现最终结论，并区分工具实算结果与推断。`
+## Analysis Workflow
+1. **Data quality and overview:** Clarify field definitions and examine the sample size, missing values, outliers, and distributions.
+2. **Statistical analysis:** Use \`agentbox_run_code\` to calculate means, medians, quantiles, correlations, variance, and other relevant statistics. Prefer JavaScript by default; use Python when it is available and better suited to the task. See \`scripts/data_summary.py\` for a reference implementation.
+3. **Driver analysis:** Use the business context and available evidence to identify plausible drivers. Clearly distinguish established findings from hypotheses or inferences.
+4. **Present the results:** Use well-formatted Markdown tables and Mermaid diagrams to communicate the conclusions. Clearly distinguish tool-computed results from analytical inferences.`
       },
       {
         path: 'scripts/data_summary.py',
@@ -169,15 +169,15 @@ if __name__ == "__main__":
       {
         path: 'references/visualization_formats.md',
         kind: 'markdown',
-        content: `# 可视化格式指南 (Visualization Formats)
+        content: `# Visualization Format Guide
 
-## 表格规范
-- 表头加粗并明确度量单位（如 \`金额 (万元)\`, \`占比 (%)\`）。
-- 数值右对齐，文本左对齐。
+## Tables
+- Use bold column headers and state measurement units clearly, such as \`Amount (CNY ×10,000)\` and \`Share (%)\`.
+- Right-align numeric values and left-align text.
 
-## Mermaid 图表
-- 趋势对比使用 \`graph LR\` 或 \`xychart-beta\`。
-- 流程结构使用 \`flowchart TD\`。`
+## Mermaid Diagrams
+- Use \`xychart-beta\` for quantitative trends and \`graph LR\` for directional comparisons.
+- Use \`flowchart TD\` for process flows.`
       }
     ],
     isBuiltIn: true,
@@ -189,23 +189,23 @@ if __name__ == "__main__":
   },
   {
     id: 'web-extractor',
-    name: '研报萃取与长文精读',
-    description: '用于 PDF、网页、研报、论文和长文的总结、摘要、事实数据提取与精读',
+    name: "Research & Document Analysis",
+    description: "Summarize and closely analyze PDFs, web pages, research reports, academic papers, and other long-form content, and extract key facts and figures.",
     icon: 'search',
     entryFile: 'SKILL.md',
     files: [
       {
         path: 'SKILL.md',
         kind: 'markdown',
-        content: `# 研报萃取与长文精读 (Web & Document Extractor)
+        content: `# Research & Document Analysis (Web & Document Extractor)
 
-你当前作为专业研究员与长文研读专家。你的职责是对长篇资讯、行业研报、学术论文或网页内容进行结构化萃取。
+You are a research analyst specializing in the close reading of long-form material. Extract and organize information from long-form articles, industry reports, academic papers, and web content without changing the source meaning.
 
-## 提炼规范
-1. **执行摘要（Executive Summary）**：用 3 条以内的核心要点概括全局结论。
-2. **核心论据链**：提取关键数据点、支撑事实与量化证据。
-3. **风险与不确定性**：标明前提假设、潜在风险或限制条件。
-4. **文本清洗**：遇到原始 HTML 或杂乱文本时，参考 \`scripts/text_cleaner.py\` 清理无关干扰。`
+## Analysis Guidelines
+1. **Executive summary:** Summarize the overall conclusions in no more than three key points.
+2. **Key arguments and evidence:** Extract important facts, figures, supporting evidence, and quantitative findings.
+3. **Risks and uncertainty:** Identify underlying assumptions, potential risks, limitations, and unresolved questions.
+4. **Text cleanup:** When the source contains raw HTML or noisy text, use \`scripts/text_cleaner.py\` as a reference for removing boilerplate and irrelevant content.`
       },
       {
         path: 'scripts/text_cleaner.py',
@@ -241,10 +241,10 @@ if __name__ == "__main__":
       {
         path: 'references/extraction_rubric.md',
         kind: 'markdown',
-        content: `# 萃取评分标准 (Extraction Rubric)
+        content: `# Extraction Quality Rubric
 
-- **保真度**：严禁篡改原研报中的统计数据。
-- **客观性**：清晰区分作者观点（Opinion）与客观事实（Fact）。`
+- **Fidelity:** Never alter statistics or other data reported in the source.
+- **Objectivity:** Clearly distinguish the author’s opinions or interpretations from verifiable facts.`
       }
     ],
     isBuiltIn: true,
@@ -256,22 +256,22 @@ if __name__ == "__main__":
   },
   {
     id: 'translator-polyglot',
-    name: '专业多语言精翻与本地化',
-    description: '用于中文、英文及多语言翻译、本地化、译文润色、术语一致性与语言转换',
+    name: "Professional Translation & Localization",
+    description: "Translate between Chinese, English, and other languages; localize and polish text; and maintain terminology consistency.",
     icon: 'translate',
     entryFile: 'SKILL.md',
     files: [
       {
         path: 'SKILL.md',
         kind: 'markdown',
-        content: `# 专业多语言精翻与本地化 (Translator Polyglot)
+        content: `# Professional Translation & Localization (Multilingual Translator)
 
-你当前作为母语级资深翻译专家与本地化工程师。你的职责是提供高水准、语境地道、术语严格一致的双语/多语转换。
+You are an experienced translator and localization specialist with native-level command of the target language. Produce accurate, natural translations and keep terminology consistent throughout the document or product.
 
-## 三步翻译法
-1. **初译（Accuracy）**：忠实传达原文全部事实与逻辑细节。
-2. **意译（Fluency）**：摆脱原文句式束缚，符合目标语言母语表达习惯。
-3. **润色（Polishing）**：结合行业领域（技术/法律/商业/文学）调整语气与专业用词（参考 \`scripts/terminology_matcher.py\` 校验术语一致性）。`
+## Three-Pass Translation Workflow
+1. **Accuracy:** Preserve all facts, logical relationships, intent, constraints, and nuances in the source text.
+2. **Fluency:** Restructure sentences where necessary so the translation reads naturally in the target language and avoids source-language calques.
+3. **Polish:** Adapt the register, tone, and domain terminology for technical, legal, business, or literary content. Use \`scripts/terminology_matcher.py\` as a reference when checking terminology consistency.`
       },
       {
         path: 'scripts/terminology_matcher.py',
@@ -306,10 +306,10 @@ if __name__ == "__main__":
       {
         path: 'references/localization_standards.md',
         kind: 'markdown',
-        content: `# 本地化排版规范 (Localization Standards)
+        content: `# Localization Style Guide
 
-- 中英文混排在汉字与英文字符之间自然保留空格。
-- 专有名词及函数名保持原样，不随意汉化。`
+- When Chinese and Latin text are mixed, insert spaces between them where appropriate.
+- Preserve product names, proper nouns, identifiers, and function names unless an official localized form exists.`
       }
     ],
     isBuiltIn: true,
@@ -321,24 +321,24 @@ if __name__ == "__main__":
   },
   {
     id: 'prompt-optimizer',
-    name: '提示词工程专家',
-    description: '用于编写、优化和诊断系统提示词、Prompt、任务指令、角色设定与结构化模板',
+    name: "Prompt Engineering Expert",
+    description: "Write, optimize, and troubleshoot system prompts, task prompts, role definitions, and structured prompt templates.",
     icon: 'sparkles',
     entryFile: 'SKILL.md',
     files: [
       {
         path: 'SKILL.md',
         kind: 'markdown',
-        content: `# 提示词工程专家 (Prompt Optimizer)
+        content: `# Prompt Engineering Expert (Prompt Optimizer)
 
-你当前作为高级提示词工程师与 LLM 系统架构师。你的职责是将模糊、简略的用户意图转化为结构严谨、边界清晰、执行力极高的专业提示词（System Prompt / Task Prompt）。
+You are a senior prompt engineer and LLM systems architect. Turn vague or incomplete user intent into robust system prompts or task prompts with clear goals, boundaries, constraints, and output requirements.
 
-## 提示词黄金架构 (CRISP-E)
-1. **Context（背景语境）**：明确业务场景与系统定位。
-2. **Role（角色设定）**：界定专家身份、专业技能与说话口吻。
-3. **Instruction（具体任务）**：清晰分解核心执行步骤。
-4. **Specification（输出规格）**：定义格式（JSON / Markdown / 代码 / 结构体）。
-5. **Examples（少样本示例）**：提供优质 Input-Output 参照。`
+## CRISP-E Prompt Framework
+1. **Context:** Describe the use case, relevant background, and the system’s purpose.
+2. **Role:** Define the persona, expertise, perspective, and tone.
+3. **Instructions:** Break the core task into explicit, actionable requirements.
+4. **Specifications:** Define constraints, success criteria, and the required output format or schema, such as JSON, Markdown, code, or structured data.
+5. **Examples:** Provide high-quality few-shot input/output examples when they would improve reliability.`
       },
       {
         path: 'scripts/prompt_linter.py',
@@ -374,10 +374,10 @@ if __name__ == "__main__":
       {
         path: 'references/prompt_patterns.md',
         kind: 'markdown',
-        content: `# 常用提示词模式库 (Prompt Patterns)
+        content: `# Common Prompt Patterns
 
-- **CoT 思维链**："请分步骤思考并推导每一步原因..."
-- **结构化输出**："严格输出为合法 JSON，不要包含外层 Markdown 代码块..."`
+- **Chain-of-thought (CoT)**: “Reason through the problem step by step and explain each step...”
+- **Structured output**: “Return valid JSON only, without an outer Markdown code fence...”`
       }
     ],
     isBuiltIn: true,
@@ -391,17 +391,22 @@ if __name__ == "__main__":
 
 /**
  * Materializes built-in skill metadata and Markdown assets from the active
- * language resource bundle. DEFAULT_SKILLS remains the stable Chinese message
- * catalog used by retrieval tests and as the resource-key source.
+ * language resource bundle. DEFAULT_SKILLS is the stable English source catalog:
+ * its name/description/Markdown values are message keys (verified by the i18n
+ * `check` command and the executable-asset exclusion test). Python/shell assets
+ * are never localized and pass through untouched.
  */
 export function localizedDefaultSkills(): Skill[] {
+  // DEFAULT_SKILLS string fields are message keys by construction; the `Skill`
+  // type carries them as plain strings, so narrow at the trust boundary here.
+  const localize = (key: string) => t(key as MessageKey)
   return DEFAULT_SKILLS.map((skill) => ({
     ...skill,
-    name: t(skill.name),
-    description: t(skill.description),
+    name: localize(skill.name),
+    description: localize(skill.description),
     files: skill.files.map((file) => (
-      file.kind === 'markdown' ? { ...file, content: t(file.content) } : { ...file }
+      file.kind === 'markdown' ? { ...file, content: localize(file.content) } : { ...file }
     )),
-    systemPrompt: skill.systemPrompt ? t(skill.systemPrompt) : skill.systemPrompt,
+    systemPrompt: skill.systemPrompt ? localize(skill.systemPrompt) : skill.systemPrompt,
   }))
 }

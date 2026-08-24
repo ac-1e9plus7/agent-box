@@ -83,7 +83,7 @@ export function RuntimesTab({
           ok: false,
           condaExecutable: preferenceDraft.developerRuntimes.python.condaExecutable,
           environments: [],
-          message: error instanceof Error ? error.message : t("读取 Conda 环境失败。"),
+          message: error instanceof Error ? error.message : t("Failed to read Conda environments."),
         })
       }).finally(() => {
         if (!cancelled) setLoadingCondaEnvironments(false)
@@ -120,8 +120,8 @@ export function RuntimesTab({
   return (
               <div className="settings-section-content runtime-settings-panel">
                 <section className="settings-card">
-                  <h3>{t("运行时解析规则")}</h3>
-                  <p className="runtime-intro">{t("自动模式优先使用当前会话工作目录中的环境，再回退到系统环境变量与 PATH。配置会注入 Integrated terminal，并用于代码执行工具。")}</p>
+                  <h3>{t("Runtime resolution")}</h3>
+                  <p className="runtime-intro">{t("Automatic mode first checks the current conversation’s working directory, then falls back to environment variables and PATH. The resolved environment is injected into the integrated terminal and used by code-execution tools.")}</p>
                 </section>
 
                 {(['jdk', 'go', 'php'] as const).map((kind) => {
@@ -131,7 +131,7 @@ export function RuntimesTab({
                   return (
                     <section className="settings-card runtime-card" key={kind}>
                       <div className="runtime-card-header">
-                        <div><h3>{label}</h3><small>{kind === 'jdk' ? t("提供 JAVA_HOME 和 java") : kind === 'go' ? t("提供 go 与可选 GOROOT") : t("提供 php CLI")}</small></div>
+                        <div><h3>{label}</h3><small>{kind === 'jdk' ? t("Provide JAVA_HOME and java") : kind === 'go' ? t("Provides go with optional GOROOT") : t("Provide php CLI")}</small></div>
                         <div className="segmented-control">
                           {(['auto', 'custom'] as const).map((mode) => (
                             <button
@@ -145,7 +145,7 @@ export function RuntimesTab({
                                 }
                               }))}
                             >
-                              {mode === 'auto' ? t("自动") : t("指定")}
+                              {mode === 'auto' ? t("Auto") : t("Specify")}
                             </button>
                           ))}
                         </div>
@@ -153,45 +153,45 @@ export function RuntimesTab({
                       {runtime.mode === 'custom' && (
                         <div className="runtime-fields">
                           {kind === 'jdk' && (
-                            <label><FieldLabel hint={t("JDK 根目录，需包含 bin/java")}>JAVA_HOME</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.jdk.home} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.jdk.home); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
+                            <label><FieldLabel hint={t("JDK root directory, which must contain bin/java")}>JAVA_HOME</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.jdk.home} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.jdk.home); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, jdk: { ...current.developerRuntimes.jdk, home: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
                           )}
                           {kind === 'go' && (
                             <>
-                              <label><FieldLabel hint={t("go 或 go.exe 的路径；留空时使用 GOROOT/bin/go")}>{t("Go 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.go.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, executable: event.target.value } } }))} /></label>
-                              <label><FieldLabel hint={t("可选 Go 安装根目录")}>GOROOT</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.go.root} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.go.root); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
+                              <label><FieldLabel hint={t("Path to go or go.exe; use GOROOT/bin/go when left blank")}>{t("Go executable")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.go.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, executable: event.target.value } } }))} /></label>
+                              <label><FieldLabel hint={t("Optional Go installation root directory")}>GOROOT</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.go.root} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.go.root); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, go: { ...current.developerRuntimes.go, root: path } } })) }}><Icon name="folder" size={13} /></button></div></label>
                             </>
                           )}
                           {kind === 'php' && (
-                            <label><FieldLabel hint={t("php 或 php.exe 的可执行文件路径")}>{t("PHP 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.php.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, php: { ...current.developerRuntimes.php, executable: event.target.value } } }))} /></label>
+                            <label><FieldLabel hint={t("Path to php or php.exe")}>{t("PHP executable")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.php.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, php: { ...current.developerRuntimes.php, executable: event.target.value } } }))} /></label>
                           )}
                         </div>
                       )}
-                      <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === kind} onClick={() => void testRuntime(kind)}>{testingRuntime === kind ? t("检测中…") : t("检测 {value0}", { value0: label })}</button>{result && <span className={result.ok ? 'is-ok' : 'is-error'}>{result.message}</span>}</div>
+                      <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === kind} onClick={() => void testRuntime(kind)}>{testingRuntime === kind ? t("Detecting…") : t("Detect {value0}", { value0: label })}</button>{result && <span className={result.ok ? 'is-ok' : 'is-error'}>{result.message}</span>}</div>
                     </section>
                   )
                 })}
 
                 <section className="settings-card runtime-card">
-                  <div className="runtime-card-header"><div><h3>Python</h3><small>{t("支持项目 .venv、普通 venv、Conda 与自定义解释器")}</small></div></div>
+                  <div className="runtime-card-header"><div><h3>Python</h3><small>{t("Supports project .venv, standard venv, Conda, and custom interpreters")}</small></div></div>
                   <div className="python-runtime-modes">
                     {(['auto', 'system', 'venv', 'conda', 'custom'] as const).map((mode) => (
                       <button className={preferenceDraft.developerRuntimes.python.mode === mode ? 'is-active' : ''} key={mode} onClick={() => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, mode } } }))}>
-                        {mode === 'auto' ? t("自动") : mode === 'system' ? t("系统") : mode === 'venv' ? 'venv' : mode === 'conda' ? 'Conda' : t("指定解释器")}
+                        {mode === 'auto' ? t("Auto") : mode === 'system' ? t("System") : mode === 'venv' ? 'venv' : mode === 'conda' ? 'Conda' : t("Specify interpreter")}
                       </button>
                     ))}
                   </div>
                   <div className="runtime-fields">
-                    {preferenceDraft.developerRuntimes.python.mode === 'auto' && <p className="runtime-mode-hint">{t("依次检测工作目录的 .venv/venv、VIRTUAL_ENV、CONDA_PREFIX，再回退到系统 Python 3。")}</p>}
-                    {preferenceDraft.developerRuntimes.python.mode === 'system' && <label><FieldLabel hint={t("可选；留空时自动尝试 python3/python/py -3")}>{t("系统 Python 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
-                    {preferenceDraft.developerRuntimes.python.mode === 'venv' && <label><FieldLabel hint={t("venv 根目录，Windows 使用 Scripts/python.exe，macOS/Linux 使用 bin/python")}>{t("venv 路径")}</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.python.environment); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: path } } })) }}><Icon name="folder" size={13} /></button></div></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'auto' && <p className="runtime-mode-hint">{t("Checks .venv/venv in the working directory, VIRTUAL_ENV, and CONDA_PREFIX in order, then falls back to system Python 3.")}</p>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'system' && <label><FieldLabel hint={t("Optional; automatically tries python3/python/py -3 when left empty")}>{t("System Python executable")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'venv' && <label><FieldLabel hint={t("venv root directory; Windows uses Scripts/python.exe, while macOS/Linux uses bin/python")}>{t("venv path")}</FieldLabel><div className="runtime-path-input"><input className="mono-input" value={preferenceDraft.developerRuntimes.python.environment} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: event.target.value } } }))} /><button className="secondary-button" onClick={async () => { const path = await chooseDirectory(preferenceDraft.developerRuntimes.python.environment); if (path) setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, environment: path } } })) }}><Icon name="folder" size={13} /></button></div></label>}
                     {preferenceDraft.developerRuntimes.python.mode === 'conda' && (
                       <>
                         <label>
-                          <FieldLabel hint={t("默认 conda；也可粘贴 conda.exe/conda 的完整路径")}>{t("Conda 可执行文件")}</FieldLabel>
+                          <FieldLabel hint={t("Default conda; you can also paste the full path to conda.exe/conda")}>{t("Conda executable")}</FieldLabel>
                           <div className="runtime-path-input">
                             <input
                               className="mono-input"
-                              placeholder={t("conda 或 C:\\\\...\\\\conda.exe")}
+                              placeholder={t("conda or C:\\\\...\\\\conda.exe")}
                               value={preferenceDraft.developerRuntimes.python.condaExecutable}
                               onChange={(event) => setPreferenceDraft((current) => ({
                                 ...current,
@@ -205,11 +205,11 @@ export function RuntimesTab({
                               }))}
                             />
                             <button
-                              aria-label={t("刷新 Conda 环境")}
+                              aria-label={t("Refresh Conda environments")}
                               className="secondary-button"
                               disabled={loadingCondaEnvironments}
                               onClick={() => setCondaEnvironmentRefresh((current) => current + 1)}
-                              title={t("重新读取 Conda 环境")}
+                              title={t("Reload Conda environments")}
                               type="button"
                             >
                               <Icon name="refresh" size={13} />
@@ -217,12 +217,12 @@ export function RuntimesTab({
                           </div>
                           <small className={`runtime-field-status ${condaEnvironmentResult?.ok ? 'is-ok' : condaEnvironmentResult ? 'is-error' : ''}`}>
                             {loadingCondaEnvironments
-                              ? t("正在读取 Conda 环境…")
-                              : condaEnvironmentResult?.message ?? t("输入后将自动检测 Conda。")}
+                              ? t("Loading Conda environments…")
+                              : condaEnvironmentResult?.message ?? t("Enter a path to detect Conda automatically.")}
                           </small>
                         </label>
                         <label>
-                          <FieldLabel hint={t("检测到有效 Conda 后可直接选择；保存实际的环境 prefix 路径")}>{t("Conda 环境")}</FieldLabel>
+                          <FieldLabel hint={t("After Conda is detected, select an environment; its resolved prefix path will be saved")}>{t("Conda environment")}</FieldLabel>
                           {condaEnvironmentResult?.ok && condaEnvironmentResult.environments.length > 0 ? (
                             <select
                               className="mono-input runtime-environment-select"
@@ -242,19 +242,19 @@ export function RuntimesTab({
                                 && !condaEnvironmentResult.environments.some((environment) => (
                                   environment.path === preferenceDraft.developerRuntimes.python.environment
                                 )) && (
-                                  <option value={preferenceDraft.developerRuntimes.python.environment}>{t("当前配置（未在环境列表中）— {value0}", { value0: preferenceDraft.developerRuntimes.python.environment })}
+                                  <option value={preferenceDraft.developerRuntimes.python.environment}>{t("Current configuration (not in environment list) — {value0}", { value0: preferenceDraft.developerRuntimes.python.environment })}
                                   </option>
                                 )}
                               {condaEnvironmentResult.environments.map((environment) => (
                                 <option key={environment.path} value={environment.path}>
-                                  {environment.name}{environment.active ? t("（当前）") : ''} — {environment.path}
+                                  {environment.name}{environment.active ? t("(current)") : ''} — {environment.path}
                                 </option>
                               ))}
                             </select>
                           ) : (
                             <input
                               className="mono-input"
-                              placeholder={t("环境名称或绝对 prefix 路径")}
+                              placeholder={t("Environment name or absolute prefix path")}
                               value={preferenceDraft.developerRuntimes.python.environment}
                               onChange={(event) => setPreferenceDraft((current) => ({
                                 ...current,
@@ -271,9 +271,9 @@ export function RuntimesTab({
                         </label>
                       </>
                     )}
-                    {preferenceDraft.developerRuntimes.python.mode === 'custom' && <label><FieldLabel>{t("Python 可执行文件")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
+                    {preferenceDraft.developerRuntimes.python.mode === 'custom' && <label><FieldLabel>{t("Python executable")}</FieldLabel><input className="mono-input" value={preferenceDraft.developerRuntimes.python.executable} onChange={(event) => setPreferenceDraft((current) => ({ ...current, developerRuntimes: { ...current.developerRuntimes, python: { ...current.developerRuntimes.python, executable: event.target.value } } }))} /></label>}
                   </div>
-                  <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === 'python'} onClick={() => void testRuntime('python')}>{testingRuntime === 'python' ? t("检测中…") : t("检测 Python")}</button>{runtimeTestResults.python && <span className={runtimeTestResults.python.ok ? 'is-ok' : 'is-error'}>{runtimeTestResults.python.message}</span>}</div>
+                  <div className="runtime-test-row"><button className="secondary-button" disabled={testingRuntime === 'python'} onClick={() => void testRuntime('python')}>{testingRuntime === 'python' ? t("Detecting…") : t("Detect Python")}</button>{runtimeTestResults.python && <span className={runtimeTestResults.python.ok ? 'is-ok' : 'is-error'}>{runtimeTestResults.python.message}</span>}</div>
                 </section>
               </div>
   )

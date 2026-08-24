@@ -44,7 +44,7 @@ pnpm package
 | Agent、MCP、Skills 与代码执行 | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor` |
 | renderer 纯逻辑 | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
 | renderer 集成 | `app.integration`, `settings-dialog.integration`：通过 mock preload bridge 验证应用快捷键、流式更新及 Settings 暂存保存/取消语义 |
-| 国际化 | `i18n`：资源结构、占位符、locale 决策、术语规则和内置 Skill 本地化 |
+| 国际化 | `i18n`：英文为 key 的资源结构、占位符一致、逃生舱解析、locale 决策、英文术语规则和内置 Skill 本地化 |
 
 涉及外部数据的测试至少应覆盖正常路径、功能关闭状态、旧字段缺失、非法或超大输入，以及取消/失败路径。协议改动需覆盖所有受影响的 API 格式，不能只验证单一 provider。
 

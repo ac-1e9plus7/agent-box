@@ -28,19 +28,19 @@ function WorkspaceOptionButton({
   onSelect: (path: string) => void
 }): JSX.Element {
   const actionLabel = option.source === 'current'
-    ? t("沿用当前工作目录")
+    ? t("Keep current working directory")
     : option.source === 'default'
-      ? t("使用默认工作目录")
+      ? t("Use default working directory")
       : option.label
   const meta = option.conversationCount > 0
-    ? t("{value0} 个已有对话", { value0: option.conversationCount })
+    ? t("{value0} existing conversations", { value0: option.conversationCount })
     : option.source === 'default'
-      ? t("设置中的默认目录")
-      : t("当前会话目录")
+      ? t("Default directory from Settings")
+      : t("Current conversation directory")
 
   return (
     <button
-      aria-label={`${actionLabel}：${option.path}`}
+      aria-label={t("{value0}: {value1}", { value0: actionLabel, value1: option.path })}
       autoFocus={autoFocus}
       className={`workspace-choice-card is-${option.source}`}
       disabled={busy}
@@ -55,7 +55,7 @@ function WorkspaceOptionButton({
         <small>{option.path}</small>
       </span>
       <span className="workspace-choice-meta">
-        {option.source === 'current' && <em>{t("推荐")}</em>}
+        {option.source === 'current' && <em>{t("Recommended")}</em>}
         <small>{meta}</small>
         <Icon name="chevron-right" size={14} />
       </span>
@@ -104,10 +104,10 @@ export function NewConversationDialog({
         <header className="new-conversation-header">
           <span className="new-conversation-mark"><Icon name="message" size={20} /></span>
           <span>
-            <h2 id="new-conversation-title">{t("新建对话")}</h2>
-            <p>{t("选择工作目录后开始，终端和项目操作都将以该目录为边界。")}</p>
+            <h2 id="new-conversation-title">{t("New conversation")}</h2>
+            <p>{t("Starting after selecting a working directory, terminal and project operations will be bounded by that directory.")}</p>
           </span>
-          <button aria-label={t("取消新建对话")} className="icon-button" disabled={busy} onClick={onCancel} type="button">
+          <button aria-label={t("Cancel new conversation")} className="icon-button" disabled={busy} onClick={onCancel} type="button">
             <Icon name="close" size={17} />
           </button>
         </header>
@@ -129,7 +129,7 @@ export function NewConversationDialog({
 
           {recentOptions.length > 0 && (
             <section className="recent-workspaces">
-              <h3>{t("最近使用")}</h3>
+              <h3>{t("Recently used")}</h3>
               <div className="workspace-choice-list">
                 {recentOptions.map((option) => (
                   <WorkspaceOptionButton
@@ -146,17 +146,17 @@ export function NewConversationDialog({
           {options.length === 0 && (
             <div className="new-conversation-empty">
               <span><Icon name="folder" size={22} /></span>
-              <strong>{t("先选择一个项目目录")}</strong>
-              <p>{t("此设备上还没有可复用的工作目录。")}</p>
+              <strong>{t("First select a project directory")}</strong>
+              <p>{t("There is no reusable working directory on this device yet.")}</p>
             </div>
           )}
         </div>
 
         <footer className="new-conversation-footer">
-          <span><Icon name="shield" size={13} />{t("只保存目录路径，不复制项目文件")}</span>
+          <span><Icon name="shield" size={13} />{t("Only the directory path is saved; project files are not copied")}</span>
           <button autoFocus={options.length === 0} className="primary-button" disabled={busy} onClick={onChooseDirectory} type="button">
             <Icon name="folder" size={15} />
-            {busy ? t("正在创建…") : t("选择其他目录")}
+            {busy ? t("Creating…") : t("Choose another directory")}
           </button>
         </footer>
       </section>

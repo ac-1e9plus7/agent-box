@@ -65,7 +65,7 @@ export function ModelsTab({
       ...current,
       {
         id,
-        name: t("新模型"),
+        name: t("New model"),
         remoteId: '',
         providerId: providerDrafts[0]?.id ?? '',
         apiFormat: 'openai-chat-completions',
@@ -99,7 +99,7 @@ export function ModelsTab({
     try {
       setRemoteModels(await onDiscoverModels(providerId))
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : t("无法获取远程模型列表。"))
+      setActionError(error instanceof Error ? error.message : t("Could not retrieve the remote model list."))
     } finally {
       setDiscovering(false)
     }
@@ -144,16 +144,16 @@ export function ModelsTab({
               <div className="settings-split-view">
                 <aside className="settings-list-panel">
                   <div className="settings-list-toolbar">
-                    <span>{t("{value0} 个模型", { value0: modelDrafts.length })}</span>
+                    <span>{t("{value0} models", { value0: modelDrafts.length })}</span>
                     <div>
                       <button disabled={!onDiscoverModels || discovering} onClick={() => void discoverModels()}>
-                        {discovering ? <span className="button-spinner" /> : <Icon name="refresh" size={14} />}{t("获取")}</button>
-                      <button onClick={addModel}><Icon name="plus" size={15} />{t("添加")}</button>
+                        {discovering ? <span className="button-spinner" /> : <Icon name="refresh" size={14} />}{t("Fetch")}</button>
+                      <button onClick={addModel}><Icon name="plus" size={15} />{t("Add")}</button>
                     </div>
                   </div>
                   {remoteModels && (
                     <div className="remote-model-picker">
-                      <header><strong>{t("选择远程模型")}</strong><button aria-label={t("关闭模型列表")} onClick={() => setRemoteModels(null)}><Icon name="close" size={14} /></button></header>
+                      <header><strong>{t("Select remote model")}</strong><button aria-label={t("Close model list")} onClick={() => setRemoteModels(null)}><Icon name="close" size={14} /></button></header>
                       <div>
                         {remoteModels.slice(0, 100).map((remoteModel) => (
                           <button key={remoteModel.id} onClick={() => addDiscoveredModel(remoteModel)}>
@@ -161,7 +161,7 @@ export function ModelsTab({
                             <Icon name="plus" size={14} />
                           </button>
                         ))}
-                        {remoteModels.length === 0 && <p>{t("服务商没有返回可用模型。")}</p>}
+                        {remoteModels.length === 0 && <p>{t("The provider returned no available models.")}</p>}
                       </div>
                     </div>
                   )}
@@ -175,7 +175,7 @@ export function ModelsTab({
                           onClick={() => setSelectedModelId(model.id)}
                         >
                           <span className="entity-icon"><Icon name="sparkles" size={16} /></span>
-                          <span><strong>{model.name || t("未命名模型")}</strong><small>{provider?.name ?? t("未选择服务商")}</small></span>
+                          <span><strong>{model.name || t("Unnamed model")}</strong><small>{provider?.name ?? t("No provider selected")}</small></span>
                         </button>
                       )
                     })}
@@ -186,18 +186,18 @@ export function ModelsTab({
                     <div className="editor-title-row">
                       <div>
                         <span className="entity-icon large"><Icon name="sparkles" size={18} /></span>
-                        <div><h3>{selectedModel.name || t("未命名模型")}</h3><small>{selectedModel.remoteId || t("填写模型标识")}</small></div>
+                        <div><h3>{selectedModel.name || t("Unnamed model")}</h3><small>{selectedModel.remoteId || t("Fill in the model ID")}</small></div>
                       </div>
-                      <span className="settings-value-note">{t("已配置")}</span>
+                      <span className="settings-value-note">{t("Configured")}</span>
                     </div>
 
                     <div className="editor-form-grid">
                       <label>
-                        <FieldLabel>{t("显示名称")}</FieldLabel>
+                        <FieldLabel>{t("Display name")}</FieldLabel>
                         <input value={selectedModel.name} onChange={(event) => updateModel({ name: event.target.value })} />
                       </label>
                       <label>
-                        <FieldLabel hint={t("OpenRouter 模型 slug")}>{t("模型 ID")}</FieldLabel>
+                        <FieldLabel hint={t("OpenRouter model slug")}>{t("Model ID")}</FieldLabel>
                         <input
                           className="mono-input"
                           placeholder="anthropic/claude-sonnet-4"
@@ -206,7 +206,7 @@ export function ModelsTab({
                         />
                       </label>
                       <label>
-                        <FieldLabel>{t("服务商")}</FieldLabel>
+                        <FieldLabel>{t("Provider")}</FieldLabel>
                         <select value={selectedModel.providerId} onChange={(event) => {
                           const providerId = event.target.value
                           const nextProvider = providerDrafts.find((provider) => provider.id === providerId)
@@ -219,7 +219,7 @@ export function ModelsTab({
                         </select>
                       </label>
                       <label>
-                        <FieldLabel hint={t("按模型或端点指定")}>{t("API 格式")}</FieldLabel>
+                        <FieldLabel hint={t("Specify by model or endpoint")}>{t("API format")}</FieldLabel>
                         <select
                           value={selectedModel.apiFormat ?? providerDrafts.find((provider) => provider.id === selectedModel.providerId)?.apiFormat ?? 'openai-chat-completions'}
                           onChange={(event) => updateModel({ apiFormat: event.target.value as ApiFormat })}
@@ -230,9 +230,9 @@ export function ModelsTab({
                         </select>
                       </label>
                       <div className="token-field">
-                        <FieldLabel hint={t("± 按钮以 64K 为步长")}>{t("上下文窗口")}</FieldLabel>
+                        <FieldLabel hint={t("± buttons adjust in 64K increments")}>{t("Context window")}</FieldLabel>
                         <TokenStepper
-                          ariaLabel={t("上下文窗口")}
+                          ariaLabel={t("Context window")}
                           maximum={100_000_000}
                           minimum={1_024}
                           value={selectedModel.contextWindow}
@@ -240,9 +240,9 @@ export function ModelsTab({
                         />
                       </div>
                       <div className="token-field">
-                        <FieldLabel hint={t("± 按钮以 64K 为步长")}>{t("最大输出 Token")}</FieldLabel>
+                        <FieldLabel hint={t("± buttons adjust in 64K increments")}>{t("Maximum output tokens")}</FieldLabel>
                         <TokenStepper
-                          ariaLabel={t("最大输出 Token")}
+                          ariaLabel={t("Maximum output tokens")}
                           maximum={10_000_000}
                           minimum={256}
                           value={selectedModel.maxOutputTokens}
@@ -254,8 +254,8 @@ export function ModelsTab({
                     {modelsNeedingCalibration.includes(selectedModel.id) && (
                       <div className="model-calibration-warning">
                         <Icon name="info" size={16} />
-                        <span><strong>{t("远程接口未返回完整模型能力")}</strong><small>{t("当前缺失项使用通用默认值。保存前请手工校准上下文窗口、最大输出 Token 和思考支持。")}</small></span>
-                        <button onClick={() => setModelsNeedingCalibration((current) => current.filter((id) => id !== selectedModel.id))}>{t("知道了")}</button>
+                        <span><strong>{t("Remote interface does not return full model capabilities")}</strong><small>{t("Missing capabilities use general defaults. Before saving, verify the context window, maximum output tokens, and reasoning support.")}</small></span>
+                        <button onClick={() => setModelsNeedingCalibration((current) => current.filter((id) => id !== selectedModel.id))}>{t("Got it")}</button>
                       </div>
                     )}
 
@@ -264,12 +264,12 @@ export function ModelsTab({
                         <div className="routing-heading">
                           <span className="entity-icon provider-icon"><Icon name="globe" size={16} /></span>
                           <div>
-                            <strong>{t("OpenRouter 上游供应商")}</strong>
-                            <small>{t("限定该模型实际由哪些 provider 提供推理")}</small>
+                            <strong>{t("OpenRouter providers")}</strong>
+                            <small>{t("Choose which OpenRouter providers may serve this model")}</small>
                           </div>
                         </div>
                         <label className="routing-only-field">
-                          <FieldLabel hint={t("逗号分隔；留空为自动选择")}>{t("指定供应商 slug")}</FieldLabel>
+                          <FieldLabel hint={t("Comma-separated; leave blank to let OpenRouter choose")}>{t("Allowed provider slugs")}</FieldLabel>
                           <input
                             className="mono-input"
                             placeholder="anthropic, openai"
@@ -287,7 +287,7 @@ export function ModelsTab({
                         </label>
                         <div className="routing-grid">
                           <label>
-                            <FieldLabel>{t("排序偏好")}</FieldLabel>
+                            <FieldLabel>{t("Sort providers by")}</FieldLabel>
                             <select
                               value={selectedModel.providerRouting?.sort ?? ''}
                               onChange={(event) => updateModel({
@@ -297,14 +297,14 @@ export function ModelsTab({
                                 }
                               })}
                             >
-                              <option value="">{t("OpenRouter 自动")}</option>
-                              <option value="price">{t("价格优先")}</option>
-                              <option value="latency">{t("低延迟优先")}</option>
-                              <option value="throughput">{t("吞吐优先")}</option>
+                              <option value="">{t("OpenRouter default")}</option>
+                              <option value="price">{t("Lowest price")}</option>
+                              <option value="latency">{t("Lowest latency")}</option>
+                              <option value="throughput">{t("Highest throughput")}</option>
                             </select>
                           </label>
                           <label>
-                            <FieldLabel>{t("数据收集策略")}</FieldLabel>
+                            <FieldLabel>{t("Data collection policy")}</FieldLabel>
                             <select
                               value={selectedModel.providerRouting?.dataCollection ?? 'deny'}
                               onChange={(event) => updateModel({
@@ -314,22 +314,22 @@ export function ModelsTab({
                                 }
                               })}
                             >
-                              <option value="allow">{t("允许")}</option>
-                              <option value="deny">{t("禁止")}</option>
+                              <option value="allow">{t("Allow")}</option>
+                              <option value="deny">{t("modelPermissions.denyOption")}</option>
                             </select>
                           </label>
                         </div>
                         <div className="routing-toggles">
-                          <div><span><strong>{t("允许回退")}</strong><small>{t("首选供应商不可用时切换到其他供应商")}</small></span><SettingsToggle
+                          <div><span><strong>{t("Allow fallbacks")}</strong><small>{t("Switch to another provider when your preferred provider is unavailable")}</small></span><SettingsToggle
                             checked={selectedModel.providerRouting?.allowFallbacks ?? true}
-                            label={t("允许供应商回退")}
+                            label={t("Allow provider fallbacks")}
                             onChange={(allowFallbacks) => updateModel({
                               providerRouting: { ...selectedModel.providerRouting, allowFallbacks }
                             })}
                           /></div>
-                          <div><span><strong>{t("仅使用零数据保留端点")}</strong><small>{t("要求上游声明 ZDR 支持")}</small></span><SettingsToggle
+                          <div><span><strong>{t("Zero Data Retention (ZDR) endpoints only")}</strong><small>{t("Require Zero Data Retention (ZDR) support")}</small></span><SettingsToggle
                             checked={selectedModel.providerRouting?.zdr ?? true}
-                            label={t("仅使用 ZDR 端点")}
+                            label={t("Use ZDR endpoints only")}
                             onChange={(zdr) => updateModel({
                               providerRouting: { ...selectedModel.providerRouting, zdr }
                             })}
@@ -340,13 +340,13 @@ export function ModelsTab({
 
                     {selectedModelApiFormat === 'anthropic-messages' && (
                       <div className="anthropic-thinking-card">
-                        <div><Icon name="brain" size={18} /><span><strong>{t("Anthropic 思考协议")}</strong><small>{t("根据 Claude 版本选择兼容模式")}</small></span></div>
+                        <div><Icon name="brain" size={18} /><span><strong>{t("Anthropic thinking mode")}</strong><small>{t("Choose the mode supported by this Claude model")}</small></span></div>
                         <select
                           value={selectedModel.anthropicThinkingMode ?? 'adaptive'}
                           onChange={(event) => updateModel({ anthropicThinkingMode: event.target.value as 'adaptive' | 'manual' })}
                         >
-                          <option value="adaptive">{t('anthropic.thinking.adaptive')}</option>
-                          <option value="manual">{t("固定预算（Claude 4.5 及更早）")}</option>
+                          <option value="adaptive">{t("Adaptive thinking (Claude 4.6+)")}</option>
+                          <option value="manual">{t("Manual extended thinking (Claude 4.5 and earlier; deprecated on 4.6)")}</option>
                         </select>
                       </div>
                     )}
@@ -356,12 +356,12 @@ export function ModelsTab({
                         <div>
                           <Icon name="globe" size={18} />
                           <span>
-                            <strong>{t("新会话默认联网模式")}</strong>
-                            <small>{t("仅 OpenRouter 连接可用；旧会话保持关闭")}</small>
+                            <strong>{t("Default web search mode for new conversations")}</strong>
+                            <small>{t("Available only for OpenRouter connections; existing conversations remain off")}</small>
                           </span>
                         </div>
                         <select
-                          aria-label={t("新会话默认联网模式")}
+                          aria-label={t("Default web search mode for new conversations")}
                           value={selectedModel.defaultWebSearchMode ?? 'off'}
                           onChange={(event) => updateModel({ defaultWebSearchMode: event.target.value as WebSearchMode })}
                         >
@@ -373,10 +373,10 @@ export function ModelsTab({
                     )}
 
                     <div className="model-capability-card">
-                      <div><Icon name="brain" size={18} /><span><strong>{t("思考模式")}</strong><small>{t("允许在聊天时开启或关闭模型推理")}</small></span></div>
+                      <div><Icon name="brain" size={18} /><span><strong>{t("Reasoning")}</strong><small>{t("Allow reasoning to be toggled for this model")}</small></span></div>
                       <SettingsToggle
                         checked={selectedModel.supportsReasoning}
-                        label={t("支持思考模式")}
+                        label={t("Supports reasoning")}
                         onChange={(supportsReasoning) => updateModel({
                           supportsReasoning,
                           defaultReasoningEnabled: supportsReasoning ? selectedModel.defaultReasoningEnabled : false
@@ -384,35 +384,35 @@ export function ModelsTab({
                       />
                     </div>
                     <div className="model-capability-card nested-capability">
-                      <div><span><strong>{t("仅新会话默认开启")}</strong><small>{t("只影响之后新建的会话，不会修改已有会话")}</small></span></div>
+                      <div><span><strong>{t("Enable by default only for new conversations")}</strong><small>{t("Affects only newly created conversations; existing conversations are unchanged")}</small></span></div>
                       <SettingsToggle
                         checked={selectedModel.defaultReasoningEnabled}
                         disabled={!selectedModel.supportsReasoning}
-                        label={t("新会话默认开启思考")}
+                        label={t("Enable reasoning by default for new conversations")}
                         onChange={(defaultReasoningEnabled) => updateModel({ defaultReasoningEnabled })}
                       />
                     </div>
                     <div className="model-capability-card nested-capability">
-                      <div><span><strong>{t("默认思考强度")}</strong><small>{t("该模型开启思考时使用的 effort")}</small></span></div>
+                      <div><span><strong>{t("Default reasoning effort")}</strong><small>{t("Reasoning effort used when reasoning is enabled for this model")}</small></span></div>
                       <select
-                        aria-label={t("模型默认思考强度")}
+                        aria-label={t("Default model reasoning effort")}
                         disabled={!selectedModel.supportsReasoning}
                         value={selectedModel.defaultReasoningEffort}
                         onChange={(event) => updateModel({
                           defaultReasoningEffort: event.target.value as ModelConfig['defaultReasoningEffort']
                         })}
                       >
-                        <option value="minimal">{t("极简")}</option>
-                        <option value="low">{t("低")}</option>
-                        <option value="medium">{t("中")}</option>
-                        <option value="high">{t("高")}</option>
-                        <option value="xhigh">{t("很高")}</option>
-                        <option value="max">{t("最高")}</option>
+                        <option value="minimal">{t("Minimal")}</option>
+                        <option value="low">{t("Low")}</option>
+                        <option value="medium">{t("Medium")}</option>
+                        <option value="high">{t("High")}</option>
+                        <option value="xhigh">{t("Extra high (xhigh)")}</option>
+                        <option value="max">{t("Maximum (max)")}</option>
                       </select>
                     </div>
 
                     <div className="danger-row">
-                      <button disabled={modelDrafts.length <= 1} onClick={removeModel}><Icon name="trash" size={15} />{t("删除模型")}</button>
+                      <button disabled={modelDrafts.length <= 1} onClick={removeModel}><Icon name="trash" size={15} />{t("Delete model")}</button>
                     </div>
                   </div>
                 )}

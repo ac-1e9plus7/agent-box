@@ -44,16 +44,16 @@ export function prepareMessagesForContext(
   mode: ContextManagementMode = 'manual',
 ): ContextPreparationResult {
   if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-    throw new Error(t("模型上下文窗口配置无效。"))
+    throw new Error(t("The model context window configuration is invalid."))
   }
   if (!Number.isInteger(maxOutputTokens) || maxOutputTokens <= 0) {
-    throw new Error(t("模型最大输出长度配置无效。"))
+    throw new Error(t("The model maximum output length configuration is invalid."))
   }
 
   const inputBudget = contextWindow - maxOutputTokens - RESERVED_SAFETY_TOKENS
   if (inputBudget <= REQUEST_OVERHEAD) {
     throw new ContextWindowError(
-      t("上下文窗口不足以为模型输出预留空间。请降低最大输出 Token 或增大模型上下文窗口。"),
+      t("The context window cannot reserve enough room for model output. Reduce the maximum output tokens or increase the model context window."),
     )
   }
 
@@ -61,7 +61,7 @@ export function prepareMessagesForContext(
   const turns = groupConversationTurns(messages)
   const latestTurn = turns.at(-1)
   if (!latestTurn?.some((message) => message.role === 'user')) {
-    throw new Error(t("发送内容必须包含用户消息。"))
+    throw new Error(t("The content sent must contain user messages."))
   }
   const fullInputEstimate =
     REQUEST_OVERHEAD +
@@ -70,9 +70,9 @@ export function prepareMessagesForContext(
   if (mode === 'manual') {
     if (fullInputEstimate > inputBudget) {
       throw new ContextWindowError(
-        t("当前对话估算需要 {value0} 个输入 token，但模型仅有约 {value1} 个可用输入 token。", { value0: fullInputEstimate, value1: inputBudget }) +
-          t("请新建会话、缩短系统提示词或最后一个问题、降低最大输出 Token，") +
-          t("或选择“本次自动裁剪”/在设置中启用“自动裁剪”。"),
+        t("This conversation is estimated to require {value0} input tokens, but only about {value1} are available for this model.", { value0: fullInputEstimate, value1: inputBudget }) +
+          t("Create a new conversation, shorten the system prompt or latest user request, or reduce the maximum output tokens,") +
+          t("Choose “Trim this request automatically” or enable “Automatic trimming” in Settings."),
       )
     }
     return {
@@ -82,14 +82,14 @@ export function prepareMessagesForContext(
     }
   }
 
-  if (mode !== 'auto') throw new Error(t("上下文管理模式无效。"))
+  if (mode !== 'auto') throw new Error(t("Invalid context management mode."))
   let used = REQUEST_OVERHEAD
   used += systemMessages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
   used += latestTurn.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
   if (used > inputBudget) {
     throw new ContextWindowError(
-      t("系统提示词与最后一条用户消息已超过模型可用上下文。") +
-        t("请缩短系统提示词或最后一条消息，或降低最大输出 Token。"),
+      t("The system prompt and final user message exceed the model’s available context.") +
+        t("Shorten the system prompt or final message, or reduce the maximum output tokens."),
     )
   }
 

@@ -20,7 +20,7 @@ interface UseConversationOptions {
 }
 
 function normalizeError(error: unknown): string {
-  return error instanceof Error ? error.message : t("发生未知错误，请稍后重试。")
+  return error instanceof Error ? error.message : t("An unknown error occurred. Try again later.")
 }
 
 export function toUiConversation(conversation: StoredConversation): Conversation {
@@ -96,7 +96,7 @@ export function useConversation({
       )))
       return true
     } catch (error) {
-      showToast(t("保存会话失败：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Failed to save the conversation: {value0}", { value0: normalizeError(error) }))
       return false
     }
   }, [replaceConversations, showToast])
@@ -108,7 +108,7 @@ export function useConversation({
   }: CreateConversationOptions): Promise<Conversation | undefined> => {
     const resolvedWorkingDirectory = workingDirectory.trim()
     if (!resolvedWorkingDirectory) {
-      showToast(t("新建对话前必须指定工作目录。"))
+      showToast(t("Choose a working directory before creating a conversation."))
       return undefined
     }
     if (creatingConversationRef.current) return undefined
@@ -127,7 +127,7 @@ export function useConversation({
     const resolvedProvider = providers.find((provider) => provider.id === resolvedModel.providerId)
     const conversation: Conversation = {
       id: `conversation-${crypto.randomUUID()}`,
-      title: t("新对话"),
+      title: t("conversation.newPlaceholder"),
       modelId: resolvedModel.id,
       reasoningEnabled: resolvedModel.supportsReasoning && (
         modeOverrides?.reasoningEnabled ?? (
@@ -152,7 +152,7 @@ export function useConversation({
       setActiveConversationId(saved.id)
       return saved
     } catch (error) {
-      showToast(t("无法新建会话：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Could not create the conversation: {value0}", { value0: normalizeError(error) }))
       return undefined
     } finally {
       creatingConversationRef.current = false

@@ -42,9 +42,9 @@ export async function readWorkspaceFile(
     throwIfAborted(signal)
     const target = await resolveWorkspaceFilePath(workingDirectory, input.path)
     const stat = await lstat(target.absolutePath)
-    if (!stat.isFile()) throw new Error(t("目标不是普通文件。"))
+    if (!stat.isFile()) throw new Error(t("The target is not a regular file."))
     if (stat.size > MAX_READ_BYTES) {
-      throw new Error(t("文件超过 {value0} 读取上限，请使用终端工具按需处理。", { value0: formatBytes(MAX_READ_BYTES) }))
+      throw new Error(t("The file exceeds the {value0} read limit. Use the terminal tool to process only the portions you need.", { value0: formatBytes(MAX_READ_BYTES) }))
     }
 
     const buffer = await readFile(target.absolutePath)
@@ -53,14 +53,14 @@ export async function readWorkspaceFile(
     try {
       content = new TextDecoder('utf-8', { fatal: true }).decode(buffer)
     } catch {
-      throw new Error(t("文件不是有效的 UTF-8 文本。"))
+      throw new Error(t("The file is not valid UTF-8."))
     }
 
     const startLine = normalizeInteger(input.startLine, 1, Number.MAX_SAFE_INTEGER, 1, 'start_line')
     const maxLines = normalizeInteger(input.maxLines, 1, MAX_READ_LINES, DEFAULT_READ_LINES, 'max_lines')
     const lines = content.split(/\r?\n/)
     if (startLine > lines.length) {
-      throw new Error(t("start_line 超出文件范围；文件共 {value0} 行。", { value0: lines.length }))
+      throw new Error(t("start_line is outside the file; the file has {value0} lines.", { value0: lines.length }))
     }
     const endLine = Math.min(lines.length, startLine + maxLines - 1)
     const rawSelected = lines.slice(startLine - 1, endLine).join('\n')
@@ -69,10 +69,10 @@ export async function readWorkspaceFile(
     const truncated = endLine < lines.length || characterTruncated
     return {
       result: [
-        t("[文件: {value0} · 行 {value1}-{value2}/{value3}]", { value0: target.relativePath, value1: startLine, value2: endLine, value3: lines.length }),
+        t("[File: {value0} · Lines {value1}–{value2} of {value3}]", { value0: target.relativePath, value1: startLine, value2: endLine, value3: lines.length }),
         selected,
-        endLine < lines.length ? t("[尚有 {value0} 行未读取；请从 start_line={value1} 继续。]", { value0: lines.length - endLine, value1: endLine + 1 }) : '',
-        characterTruncated ? t("[本段包含超长文本，已按工具结果大小上限截断；请缩小读取行数或使用终端按需处理。]") : '',
+        endLine < lines.length ? t("[There are {value0} unread lines; continue with start_line={value1}.]", { value0: lines.length - endLine, value1: endLine + 1 }) : '',
+        characterTruncated ? t("[This section contains very long text and was truncated at the tool-result size limit. Read a smaller range or process it with the terminal as needed.]") : '',
       ].filter(Boolean).join('\n'),
       truncated,
     }
@@ -89,13 +89,13 @@ export async function writeWorkspaceFile(
 ): Promise<WorkspaceFileResult> {
   try {
     throwIfAborted(signal)
-    if (typeof input.content !== 'string') throw new Error(t("content 必须是字符串。"))
+    if (typeof input.content !== 'string') throw new Error(t("content must be a string."))
     const contentBytes = Buffer.byteLength(input.content, 'utf8')
     if (contentBytes > MAX_WRITE_BYTES) {
-      throw new Error(t("写入内容超过 {value0} 上限，请拆分后重试。", { value0: formatBytes(MAX_WRITE_BYTES) }))
+      throw new Error(t("Content exceeds the {value0} write limit. Split it and try again.", { value0: formatBytes(MAX_WRITE_BYTES) }))
     }
     const mode = input.mode ?? 'overwrite'
-    if (!['create', 'overwrite', 'append'].includes(mode)) throw new Error(t("不支持的写入模式。"))
+    if (!['create', 'overwrite', 'append'].includes(mode)) throw new Error(t("Unsupported write mode."))
 
     const target = await resolveWorkspaceFilePath(workingDirectory, input.path)
     const createParents = input.createParentDirectories !== false
@@ -114,10 +114,10 @@ export async function writeWorkspaceFile(
     return {
       result: t(
         mode === 'append'
-          ? 'workspace.write.appended'
+          ? "Appended to {path} ({size}, UTF-8)."
           : mode === 'create'
-            ? 'workspace.write.created'
-            : 'workspace.write.written',
+            ? "Created {path} ({size}, UTF-8)."
+            : "Wrote {path} ({size}, UTF-8).",
         { path: target.relativePath, size: formatBytes(contentBytes) },
       ),
     }
@@ -131,26 +131,26 @@ async function resolveWorkspaceFilePath(
   workingDirectory: string | undefined,
   requestedPath: string,
 ): Promise<{ absolutePath: string; relativePath: string; rootPath: string; segments: string[] }> {
-  if (!workingDirectory || !isAbsolute(workingDirectory)) throw new Error(t("当前会话没有有效工作目录。"))
+  if (!workingDirectory || !isAbsolute(workingDirectory)) throw new Error(t("The current conversation has no valid working directory."))
   if (typeof requestedPath !== 'string' || !requestedPath.trim() || requestedPath.length > 4_096 || /[\r\n\0]/.test(requestedPath)) {
-    throw new Error(t("文件路径无效。"))
+    throw new Error(t("The file path is invalid."))
   }
   const trimmed = requestedPath.trim()
   if (isAbsolute(trimmed) || /^[A-Za-z]:[\\/]/.test(trimmed) || /^[/\\]{2}/.test(trimmed)) {
-    throw new Error(t("文件路径必须是相对于工作目录的路径。"))
+    throw new Error(t("The file path must be relative to the working directory."))
   }
   const segments = trimmed.split(/[\\/]+/).filter((segment) => segment && segment !== '.')
   if (segments.length === 0 || segments.some((segment) => segment === '..')) {
-    throw new Error(t("文件路径不能离开工作目录。"))
+    throw new Error(t("The file path must stay within the working directory."))
   }
 
   const rootPath = await realpath(workingDirectory)
   const rootStat = await lstat(rootPath)
-  if (!rootStat.isDirectory()) throw new Error(t("当前工作目录不可用。"))
+  if (!rootStat.isDirectory()) throw new Error(t("The current working directory is unavailable."))
   const absolutePath = resolve(rootPath, segments.join(sep))
   const relativePath = relative(rootPath, absolutePath)
   if (!relativePath || relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) {
-    throw new Error(t("文件路径不能离开工作目录。"))
+    throw new Error(t("The file path must stay within the working directory."))
   }
   await assertPathHasNoSymlinks(rootPath, segments)
   return { absolutePath, relativePath, rootPath, segments }
@@ -162,8 +162,8 @@ async function assertPathHasNoSymlinks(rootPath: string, segments: string[]): Pr
     current = resolve(current, segments[index]!)
     try {
       const stat = await lstat(current)
-      if (stat.isSymbolicLink()) throw new Error(t("为防止越过工作目录，不允许通过符号链接读写文件。"))
-      if (index < segments.length - 1 && !stat.isDirectory()) throw new Error(t("文件路径中的父级不是目录。"))
+      if (stat.isSymbolicLink()) throw new Error(t("To prevent access outside the working directory, file operations through symbolic links are not allowed."))
+      if (index < segments.length - 1 && !stat.isDirectory()) throw new Error(t("A parent path component is not a directory."))
     } catch (error) {
       if (isMissingPathError(error)) return
       throw error
@@ -180,16 +180,16 @@ function normalizeInteger(
 ): number {
   if (value === undefined) return fallback
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
-    throw new Error(t("{value0} 必须是 {value1}-{value2} 之间的整数。", { value0: label, value1: minimum, value2: maximum }))
+    throw new Error(t("{value0} must be an integer between {value1}-{value2}.", { value0: label, value1: minimum, value2: maximum }))
   }
   return value
 }
 
 function workspaceFileError(error: unknown): string {
-  if (isNodeError(error) && error.code === 'ENOENT') return t("文件或父目录不存在。")
-  if (isNodeError(error) && error.code === 'EEXIST') return t("文件已存在；如需替换，请使用 overwrite 模式。")
-  if (isNodeError(error) && (error.code === 'EACCES' || error.code === 'EPERM')) return t("没有权限读写该文件。")
-  return error instanceof Error ? error.message : t("文件操作失败。")
+  if (isNodeError(error) && error.code === 'ENOENT') return t("The file or its parent directory does not exist.")
+  if (isNodeError(error) && error.code === 'EEXIST') return t("The file already exists; use overwrite mode to replace it.")
+  if (isNodeError(error) && (error.code === 'EACCES' || error.code === 'EPERM')) return t("You do not have permission to read or write this file.")
+  return error instanceof Error ? error.message : t("File operation failed.")
 }
 
 function isMissingPathError(error: unknown): boolean {

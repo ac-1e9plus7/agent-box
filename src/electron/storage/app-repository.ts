@@ -198,7 +198,7 @@ export class AppRepository {
   async removeProvider(id: string): Promise<void> {
     return this.store.mutate((draft) => {
       if (draft.models.some((model) => model.providerId === id)) {
-        throw new Error(t("该供应商仍被模型使用，请先删除或迁移相关模型。"))
+        throw new Error(t("This provider is still used by one or more models. Remove or migrate those models first."))
       }
       draft.providers = draft.providers.filter((provider) => provider.id !== id)
     })
@@ -215,7 +215,7 @@ export class AppRepository {
   async upsertModel(input: ModelInput): Promise<ModelConfig> {
     return this.store.mutate((draft) => {
       if (!draft.providers.some((provider) => provider.id === input.providerId)) {
-        throw new Error(t("模型引用的供应商不存在。"))
+        throw new Error(t("The provider referenced by this model no longer exists."))
       }
 
       const existing = input.id
@@ -258,7 +258,7 @@ export class AppRepository {
   async removeModel(id: string): Promise<void> {
     return this.store.mutate((draft) => {
       if (draft.conversations.some((conversation) => conversation.modelId === id)) {
-        throw new Error(t("该模型仍被会话使用，请先删除会话或切换模型。"))
+        throw new Error(t("This model is still used by one or more conversations. Delete those conversations or switch their model first."))
       }
       draft.models = draft.models.filter((model) => model.id !== id)
       if (draft.settings.defaultModelId === id) {
@@ -341,7 +341,7 @@ export class AppRepository {
       if (existing) {
         draft.skills = skills.map((item) => (item.id === validated.id ? validated : item))
       } else {
-        if (skills.length >= MAX_SKILLS) throw new Error(t("Skill 数量已达上限。"))
+        if (skills.length >= MAX_SKILLS) throw new Error(t("The Skill limit has been reached."))
         draft.skills = [...skills, validated]
       }
       return structuredClone(validated)
@@ -354,7 +354,7 @@ export class AppRepository {
       const target = skills.find((skill) => skill.id === id)
       if (!target) return
       if (target.isBuiltIn) {
-        throw new Error(t("系统预置技能不可删除，可以选择将其停用。"))
+        throw new Error(t("System preset skills cannot be deleted and you can choose to deactivate them."))
       }
       draft.skills = skills.filter((skill) => skill.id !== id)
     })
@@ -364,7 +364,7 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const skills = draft.skills ?? localizedDefaultSkills()
       const target = skills.find((skill) => skill.id === id)
-      if (!target) throw new Error(t("技能不存在。"))
+      if (!target) throw new Error(t("Skill not found."))
       const updated: Skill = {
         ...target,
         enabled,
@@ -425,7 +425,7 @@ export class AppRepository {
       if (existing) {
         draft.mcpServers = servers.map((s) => (s.id === validated.id ? validated : s))
       } else {
-        if (servers.length >= MAX_MCP_SERVERS) throw new Error(t("MCP Server 数量已达上限。"))
+        if (servers.length >= MAX_MCP_SERVERS) throw new Error(t("The MCP server limit has been reached."))
         draft.mcpServers = [...servers, validated]
       }
       return structuredClone(validated)
@@ -448,7 +448,7 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const servers = draft.mcpServers ?? []
       const target = servers.find((s) => s.id === id)
-      if (!target) throw new Error(t("MCP 服务不存在。"))
+      if (!target) throw new Error(t("MCP server not found."))
       const updated: McpServerConfig = {
         ...target,
         enabled,
@@ -517,7 +517,7 @@ function buildStoredProvider(
     input.apiKey !== undefined &&
     (typeof input.apiKey !== 'string' || input.apiKey.length > 16_384)
   ) {
-    throw new Error(t("API Key 无效或超过长度限制。"))
+    throw new Error(t("The API key is invalid or exceeds the length limit."))
   }
   const timestamp = new Date().toISOString()
   const normalizedBaseUrl = normalizeBaseUrl(input.baseUrl)
@@ -726,7 +726,7 @@ function validateSkill(value: unknown): Skill {
 
   let files: SkillFile[] = []
   if (Array.isArray(value.files) && value.files.length > 0) {
-    if (value.files.length > MAX_SKILL_FILES) throw new Error(t("Skill 包含的文件数量超过限制"))
+    if (value.files.length > MAX_SKILL_FILES) throw new Error(t("Skill contains more files than the limit"))
     files = value.files.map(validateSkillFile)
   } else if (typeof value.systemPrompt === 'string' && value.systemPrompt.trim()) {
     files = [
@@ -1261,10 +1261,10 @@ function toProviderView(provider: StoredProvider): ProviderView {
 function normalizeBaseUrl(value: string): string {
   const url = new URL(value.trim())
   if (!['https:', 'http:'].includes(url.protocol)) {
-    throw new Error(t("供应商地址必须使用 http 或 https。"))
+    throw new Error(t("The provider URL must use HTTP or HTTPS."))
   }
   if (url.protocol === 'http:' && !isLoopbackUrl(url.toString())) {
-    throw new Error(t("远程供应商地址必须使用 HTTPS；HTTP 仅允许本机回环地址。"))
+    throw new Error(t("Remote provider URLs must use HTTPS; HTTP is allowed only for local loopback addresses."))
   }
   url.username = ''
   url.password = ''
@@ -1290,10 +1290,10 @@ function sanitizeHeaders(value: Record<string, string>): Record<string, string> 
   for (const [rawName, rawValue] of entries) {
     const name = rawName.trim()
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
-      throw new Error(t("不允许使用请求头：{value0}", { value0: name }))
+      throw new Error(t("Request header not allowed: {value0}", { value0: name }))
     }
     if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 4_096) {
-      throw new Error(t("请求头 {value0} 的值无效。", { value0: name }))
+      throw new Error(t("The value of the request header {value0} is invalid.", { value0: name }))
     }
     output[name] = rawValue
   }
@@ -1316,10 +1316,10 @@ function sanitizeMcpHeaders(value: Record<string, string>): Record<string, strin
   for (const [rawName, rawValue] of entries) {
     const name = rawName.trim()
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
-      throw new Error(t("不允许使用 MCP 请求头：{value0}", { value0: name }))
+      throw new Error(t("MCP request header not allowed: {value0}", { value0: name }))
     }
     if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 8_192) {
-      throw new Error(t("MCP 请求头 {value0} 的值无效。", { value0: name }))
+      throw new Error(t("The MCP request header {value0} has an invalid value.", { value0: name }))
     }
     output[name] = rawValue
   }

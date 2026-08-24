@@ -43,7 +43,7 @@ export function SkillsTab({
       const updated = await onToggleSkill(id, enabled)
       setSkillsList((prev) => prev.map((s) => (s.id === id ? updated : s)))
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : t("切换技能状态失败"))
+      setSkillActionError(err instanceof Error ? err.message : t("Failed to switch skill status"))
     }
   }
 
@@ -58,7 +58,7 @@ export function SkillsTab({
       })
       setEditingSkill(null)
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : t("保存技能失败"))
+      setSkillActionError(err instanceof Error ? err.message : t("Failed to save the skill"))
     }
   }
 
@@ -69,7 +69,7 @@ export function SkillsTab({
       await onRemoveSkill(id)
       setSkillsList((prev) => prev.filter((s) => s.id !== id))
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : t("删除技能失败"))
+      setSkillActionError(err instanceof Error ? err.message : t("Failed to delete skill"))
     }
   }
 
@@ -80,7 +80,7 @@ export function SkillsTab({
       const reset = await onResetDefaultSkills()
       setSkillsList(reset)
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : t("恢复默认技能失败"))
+      setSkillActionError(err instanceof Error ? err.message : t("Failed to restore default skills"))
     }
   }
 
@@ -98,7 +98,7 @@ export function SkillsTab({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      setSkillActionError(err instanceof Error ? err.message : t("导出 Zip 技能包失败"))
+      setSkillActionError(err instanceof Error ? err.message : t("Failed to export the skill archive."))
     }
   }
 
@@ -117,7 +117,7 @@ export function SkillsTab({
       setInstallingSkill(false)
       setSkillImportText('')
     } catch (err) {
-      setSkillImportError(err instanceof Error ? err.message : t("解析或导入 Zip 技能包失败，请检查压缩包内容。"))
+      setSkillImportError(err instanceof Error ? err.message : t("Could not parse or import the skill archive. Check the archive contents."))
     }
   }
 
@@ -131,23 +131,23 @@ export function SkillsTab({
       const text = await file.text()
       setSkillImportText(text)
     } catch {
-      setSkillImportError(t("读取文件失败，请重试。"))
+      setSkillImportError(t("Could not read the file. Try again."))
     }
   }
 
   const handleImportSkillText = async (): Promise<void> => {
     setSkillImportError('')
     if (!skillImportText.trim()) {
-      setSkillImportError(t("请输入或粘贴技能 JSON 配置。"))
+      setSkillImportError(t("Please enter or paste the skill JSON configuration."))
       return
     }
     try {
       const parsed = JSON.parse(skillImportText.trim())
       const items = Array.isArray(parsed) ? parsed : [parsed]
       for (const item of items) {
-        if (!item || typeof item !== 'object') throw new Error(t("无效的技能配置格式"))
-        if (typeof item.name !== 'string' || !item.name.trim()) throw new Error(t("技能缺少有效名称"))
-        if (typeof item.systemPrompt !== 'string' || !item.systemPrompt.trim()) throw new Error(t("技能缺少有效系统指令 (systemPrompt)"))
+        if (!item || typeof item !== 'object') throw new Error(t("Invalid skill configuration format"))
+        if (typeof item.name !== 'string' || !item.name.trim()) throw new Error(t("Skill is missing a valid name"))
+        if (typeof item.systemPrompt !== 'string' || !item.systemPrompt.trim()) throw new Error(t("Skill is missing a valid system prompt (systemPrompt)"))
 
         const candidate: SkillInput = {
           id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined,
@@ -172,7 +172,7 @@ export function SkillsTab({
       setInstallingSkill(false)
       setSkillImportText('')
     } catch (err) {
-      setSkillImportError(err instanceof Error ? err.message : t("解析或导入失败，请检查配置格式。"))
+      setSkillImportError(err instanceof Error ? err.message : t("Could not parse or import the configuration. Check its format."))
     }
   }
 
@@ -215,12 +215,12 @@ export function SkillsTab({
                     <div className="skills-search-box">
                       <Icon name="search" size={15} />
                       <input
-                        placeholder={t("搜索技能名称、描述或作者…")}
+                        placeholder={t("Search for skill name, description or author…")}
                         value={skillSearch}
                         onChange={(e) => setSkillSearch(e.target.value)}
                       />
                       {skillSearch && (
-                        <button className="icon-button" onClick={() => setSkillSearch('')} aria-label={t("清空搜索")}>
+                        <button className="icon-button" onClick={() => setSkillSearch('')} aria-label={t("Clear search")}>
                           <Icon name="close" size={13} />
                         </button>
                       )}
@@ -233,10 +233,10 @@ export function SkillsTab({
                           onClick={() => setSkillFilter(filter)}
                         >
                           {filter === 'all'
-                            ? t("全部 ({value0})", { value0: skillsList.length })
+                            ? t("All ({value0})", { value0: skillsList.length })
                             : filter === 'builtin'
-                              ? t("预置 ({value0})", { value0: skillsList.filter((s) => s.isBuiltIn).length })
-                              : t("自定义 ({value0})", { value0: skillsList.filter((s) => !s.isBuiltIn).length })}
+                              ? t("Preset ({value0})", { value0: skillsList.filter((s) => s.isBuiltIn).length })
+                              : t("Custom ({value0})", { value0: skillsList.filter((s) => !s.isBuiltIn).length })}
                         </button>
                       ))}
                     </div>
@@ -253,7 +253,7 @@ export function SkillsTab({
                           files: [
                             {
                               path: 'SKILL.md',
-                              content: t("# 新技能\n\n请在此处编写技能规范与说明。"),
+                              content: t("# New Skill\n\nWrite the skill’s instructions and usage guidance here."),
                               kind: 'markdown'
                             }
                           ],
@@ -265,7 +265,7 @@ export function SkillsTab({
                       }}
                     >
                       <Icon name="plus" size={14} />
-                      <span>{t("新建技能")}</span>
+                      <span>{t("New skill")}</span>
                     </button>
                     <button
                       className="skills-action-btn"
@@ -276,15 +276,15 @@ export function SkillsTab({
                       }}
                     >
                       <Icon name="upload" size={14} />
-                      <span>{t("导入技能")}</span>
+                      <span>{t("Import skill")}</span>
                     </button>
                     <button
                       className="skills-action-btn"
                       onClick={() => void handleResetSkills()}
-                      title={t("重置系统预置技能并保留自定义技能")}
+                      title={t("Reset system preset skills and retain custom skills")}
                     >
                       <Icon name="refresh" size={14} />
-                      <span>{t("恢复预置")}</span>
+                      <span>{t("Restore preset")}</span>
                     </button>
                   </div>
                 </div>
@@ -301,8 +301,8 @@ export function SkillsTab({
                   {filteredSkills.length === 0 ? (
                     <div className="skills-empty">
                       <Icon name="bot" size={32} />
-                      <p>{t("未找到匹配的技能")}</p>
-                      <small>{t("可点击上方「新建技能」或「导入技能」添加新能力（支持 .zip 压缩包）")}</small>
+                      <p>{t("No matching skills found")}</p>
+                      <small>{t("Select “New skill” or “Import skill” above to add capabilities; `.zip` skill archives are supported.")}</small>
                     </div>
                   ) : (
                     filteredSkills.map((skill) => {
@@ -327,7 +327,7 @@ export function SkillsTab({
                               <div className="skill-title-row">
                                 <h4>{skill.name}</h4>
                                 <span className={`skill-badge ${skill.isBuiltIn ? 'is-builtin' : 'is-custom'}`}>
-                                  {skill.isBuiltIn ? t("预置") : t("自定义")}
+                                  {skill.isBuiltIn ? t("Preset") : t("Custom")}
                                 </span>
                               </div>
                               <div className="skill-meta-row">
@@ -338,7 +338,7 @@ export function SkillsTab({
                             <div className="skill-toggle-wrapper">
                               <SettingsToggle
                                 checked={skill.enabled}
-                                label={skill.enabled ? t("已启用") : t("已停用")}
+                                label={skill.enabled ? t("Enabled") : t("Deactivated")}
                                 onChange={(enabled) => void handleToggleSkill(skill.id, enabled)}
                               />
                             </div>
@@ -348,19 +348,19 @@ export function SkillsTab({
 
                           <div className="skill-file-tags">
                             {mdCount > 0 && (
-                              <span className="skill-tag skill-tag-md" title={t("{value0} 个 Markdown 文档", { value0: mdCount })}>
+                              <span className="skill-tag skill-tag-md" title={t("{value0} Markdown documents", { value0: mdCount })}>
                                 <Icon name="file" size={11} />
                                 {mdCount} Markdown
                               </span>
                             )}
                             {pyCount > 0 && (
-                              <span className="skill-tag skill-tag-py" title={t("{value0} 个 Python 3 脚本", { value0: pyCount })}>
+                              <span className="skill-tag skill-tag-py" title={t("{value0} Python 3 scripts", { value0: pyCount })}>
                                 <Icon name="code" size={11} />
                                 {pyCount} Python 3
                               </span>
                             )}
                             {shCount > 0 && (
-                              <span className="skill-tag skill-tag-sh" title={t("{value0} 个 Shell 脚本", { value0: shCount })}>
+                              <span className="skill-tag skill-tag-sh" title={t("{value0} Shell scripts", { value0: shCount })}>
                                 <Icon name="tool" size={11} />
                                 {shCount} Shell
                               </span>
@@ -373,7 +373,7 @@ export function SkillsTab({
                               type="button"
                               onClick={() => togglePromptExpanded(skill.id)}
                             >
-                              <span>{t("查看技能文件与规范 ({value0} 个文件)", { value0: files.length })}</span>
+                              <span>{t("View skill files and specifications ({value0} files)", { value0: files.length })}</span>
                               <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={14} />
                             </button>
                             {isExpanded && (
@@ -420,24 +420,24 @@ export function SkillsTab({
                               }}
                             >
                               <Icon name="edit" size={13} />
-                              <span>{t("编辑")}</span>
+                              <span>{t("Edit")}</span>
                             </button>
                             <button
                               className="skill-footer-btn"
                               onClick={() => void handleExportSkill(skill)}
-                              title={t("导出为 Zip 技能压缩包 (.zip)")}
+                              title={t("Export this skill as a ZIP archive (.zip)")}
                             >
                               <Icon name="download" size={13} />
-                              <span>{t("导出 .zip")}</span>
+                              <span>{t("Export ZIP")}</span>
                             </button>
                             {!skill.isBuiltIn && (
                               <button
                                 className="skill-footer-btn is-danger"
                                 onClick={() => void handleRemoveSkill(skill.id)}
-                                title={t("删除此自定义技能")}
+                                title={t("Delete this custom skill")}
                               >
                                 <Icon name="trash" size={13} />
-                                <span>{t("删除")}</span>
+                                <span>{t("Delete")}</span>
                               </button>
                             )}
                           </div>
@@ -452,53 +452,53 @@ export function SkillsTab({
                   <div className="skill-modal-backdrop" onClick={() => setEditingSkill(null)}>
                     <div className="skill-modal" onClick={(e) => e.stopPropagation()}>
                       <header className="skill-modal-header">
-                        <h3>{editingSkill.id ? t("编辑技能") : t("新建自定义技能")}</h3>
+                        <h3>{editingSkill.id ? t("Edit skill") : t("New custom skill")}</h3>
                         <button className="icon-button" onClick={() => setEditingSkill(null)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
                         <div className="skill-form-row">
                           <label className="skill-form-field" style={{ flex: 2 }}>
-                            <span>{t("技能名称 *")}</span>
+                            <span>{t("Skill name *")}</span>
                             <input
                               autoFocus
-                              placeholder={t("例如：数据分析师")}
+                              placeholder={t("For example: data analyst")}
                               value={editingSkill.name}
                               onChange={(e) => setEditingSkill({ ...editingSkill, name: e.target.value })}
                             />
                           </label>
                           <label className="skill-form-field" style={{ flex: 1 }}>
-                            <span>{t("图标")}</span>
+                            <span>{t("Icon")}</span>
                             <select
                               value={editingSkill.icon ?? 'bot'}
                               onChange={(e) => setEditingSkill({ ...editingSkill, icon: e.target.value })}
                             >
-                              <option value="bot">{t("智能体 (bot)")}</option>
-                              <option value="code">{t("代码 (code)")}</option>
-                              <option value="chart">{t("图表 (chart)")}</option>
-                              <option value="translate">{t("翻译 (translate)")}</option>
-                              <option value="sparkles">{t("智能 (sparkles)")}</option>
-                              <option value="tool">{t("工具 (tool)")}</option>
-                              <option value="search">{t("搜索 (search)")}</option>
-                              <option value="file">{t("文档 (file)")}</option>
-                              <option value="globe">{t("网络 (globe)")}</option>
-                              <option value="zap">{t("极速 (zap)")}</option>
+                              <option value="bot">{t("Agent (bot)")}</option>
+                              <option value="code">{t("Code (code)")}</option>
+                              <option value="chart">{t("Chart (chart)")}</option>
+                              <option value="translate">{t("Translate (translate)")}</option>
+                              <option value="sparkles">{t("Sparkles (sparkles)")}</option>
+                              <option value="tool">{t("Tool (tool)")}</option>
+                              <option value="search">{t("Search (search)")}</option>
+                              <option value="file">{t("File (file)")}</option>
+                              <option value="globe">{t("Globe (globe)")}</option>
+                              <option value="zap">{t("Lightning (zap)")}</option>
                             </select>
                           </label>
                         </div>
 
                         <div className="skill-form-row">
                           <label className="skill-form-field" style={{ flex: 1 }}>
-                            <span>{t("作者")}</span>
+                            <span>{t("Author")}</span>
                             <input
-                              placeholder={t("例如：Community / User")}
+                              placeholder={t("For example: Community/User")}
                               value={editingSkill.author ?? ''}
                               onChange={(e) => setEditingSkill({ ...editingSkill, author: e.target.value })}
                             />
                           </label>
                           <label className="skill-form-field" style={{ flex: 1 }}>
-                            <span>{t("版本号")}</span>
+                            <span>{t("Version")}</span>
                             <input
-                              placeholder={t("例如：1.0.0")}
+                              placeholder={t("For example: 1.0.0")}
                               value={editingSkill.version ?? '1.0.0'}
                               onChange={(e) => setEditingSkill({ ...editingSkill, version: e.target.value })}
                             />
@@ -506,18 +506,18 @@ export function SkillsTab({
                         </div>
 
                         <label className="skill-form-field">
-                          <span>{t("技能简述")}</span>
+                          <span>{t("Skill description")}</span>
                           <input
-                            placeholder={t("简明描述此技能适用的场景与擅长的任务…")}
+                            placeholder={t("Briefly describe when to use this skill and what it does well…")}
                             value={editingSkill.description}
                             onChange={(e) => setEditingSkill({ ...editingSkill, description: e.target.value })}
                           />
                         </label>
 
                         <label className="skill-form-field">
-                          <span>{t("主指令 Markdown 文件 (SKILL.md) *")}</span>
+                          <span>{t("Primary instruction file (SKILL.md) *")}</span>
                           <textarea
-                            placeholder={t("定义 Agent 激活此技能时的专业执行规范、思考准则与输出格式…")}
+                            placeholder={t("Define the execution guidelines, reasoning guidance, and output format the Agent should follow when this Skill is active…")}
                             rows={8}
                             value={editingSkill.systemPrompt ?? ''}
                             onChange={(e) => setEditingSkill({ ...editingSkill, systemPrompt: e.target.value })}
@@ -525,12 +525,12 @@ export function SkillsTab({
                         </label>
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setEditingSkill(null)}>{t("取消")}</button>
+                        <button className="secondary-button" onClick={() => setEditingSkill(null)}>{t("Cancel")}</button>
                         <button
                           className="primary-button"
                           disabled={!editingSkill.name.trim() || !(editingSkill.systemPrompt || editingSkill.files?.length)}
                           onClick={() => void handleSaveSkill(editingSkill)}
-                        >{t("保存技能")}</button>
+                        >{t("Save skill")}</button>
                       </footer>
                     </div>
                   </div>
@@ -541,15 +541,15 @@ export function SkillsTab({
                   <div className="skill-modal-backdrop" onClick={() => setInstallingSkill(false)}>
                     <div className="skill-modal" onClick={(e) => e.stopPropagation()}>
                       <header className="skill-modal-header">
-                        <h3>{t("导入外部技能 (Import Skill)")}</h3>
+                        <h3>{t("Import external skill")}</h3>
                         <button className="icon-button" onClick={() => setInstallingSkill(false)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
-                        <p className="skill-modal-hint">{t('skill.importRecommendation')}</p>
+                        <p className="skill-modal-hint">{t("Recommended: import a ZIP skill archive (.zip) containing SKILL.md, any Python 3 or shell scripts, and reference documents.")}</p>
                         <div className="skill-import-dropzone">
                           <label className="skill-file-upload-btn">
                             <Icon name="upload" size={16} />
-                            <span>{t("选择技能压缩包 (.zip) 或 JSON 文件")}</span>
+                            <span>{t("Select a `.zip` skill archive or JSON file")}</span>
                             <input
                               type="file"
                               accept=".zip,.json,application/zip,application/json"
@@ -562,10 +562,10 @@ export function SkillsTab({
                           </label>
                         </div>
                         <label className="skill-form-field" style={{ marginTop: '12px' }}>
-                          <span>{t("或者粘贴 JSON 文本配置：")}</span>
+                          <span>{t("Or paste a JSON configuration:")}</span>
                           <textarea
                             className="mono-input"
-                            placeholder={t("{\n  \"name\": \"数学推演专家\",\n  \"description\": \"...\",\n  \"systemPrompt\": \"...\"\n}")}
+                            placeholder={t("{\n  \"name\": \"Mathematical deduction expert\",\n  \"description\": \"...\",\n  \"systemPrompt\": \"...\"\n}")}
                             rows={6}
                             value={skillImportText}
                             onChange={(e) => setSkillImportText(e.target.value)}
@@ -578,12 +578,12 @@ export function SkillsTab({
                         )}
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setInstallingSkill(false)}>{t("取消")}</button>
+                        <button className="secondary-button" onClick={() => setInstallingSkill(false)}>{t("Cancel")}</button>
                         <button
                           className="primary-button"
                           disabled={!skillImportText.trim()}
                           onClick={() => void handleImportSkillText()}
-                        >{t("导入文本配置")}</button>
+                        >{t("Import JSON")}</button>
                       </footer>
                     </div>
                   </div>

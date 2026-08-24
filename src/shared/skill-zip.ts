@@ -107,7 +107,7 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
   })
 
   if (pathList.length === 0) {
-    throw new Error(t("压缩包为空或不包含有效文件"))
+    throw new Error(t("The archive is empty or contains no valid files."))
   }
 
   // Check if all paths share a common root directory (e.g. "my-skill/SKILL.md")
@@ -193,10 +193,10 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
   }
 
   if (!parsedName) {
-    parsedName = rootDir ? rootDir.replace(/\/$/, '') : t("自定义技能")
+    parsedName = rootDir ? rootDir.replace(/\/$/, '') : t("Custom skills")
   }
   if (!parsedDesc) {
-    parsedDesc = t("由外部 Zip 压缩包导入的技能扩展。")
+    parsedDesc = t("A skill imported from an external ZIP archive.")
   }
 
   // Auto assign icon based on python / markdown composition

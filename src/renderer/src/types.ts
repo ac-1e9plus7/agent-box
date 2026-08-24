@@ -107,7 +107,7 @@ export type IconName =
   | 'zap'
 
 export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
-  'openai-chat-completions': t('apiFormat.openaiChatCompletions'),
-  'openai-responses': t('apiFormat.openaiResponses'),
-  'anthropic-messages': t('apiFormat.anthropicMessages')
+  'openai-chat-completions': t("OpenAI Chat Completions API"),
+  'openai-responses': t("OpenAI Responses API"),
+  'anthropic-messages': t("Anthropic Messages API")
 }

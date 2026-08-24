@@ -71,7 +71,7 @@ export function McpTab({
         setMcpServersList((curr) => curr.map((s) => (s.id === id ? updated : s)))
       }
     } catch (err) {
-      setMcpActionError(err instanceof Error ? err.message : t("操作失败"))
+      setMcpActionError(err instanceof Error ? err.message : t("Operation failed"))
     }
   }
 
@@ -82,7 +82,7 @@ export function McpTab({
         setMcpServersList((curr) => curr.filter((s) => s.id !== id))
       }
     } catch (err) {
-      setMcpActionError(err instanceof Error ? err.message : t("删除失败"))
+      setMcpActionError(err instanceof Error ? err.message : t("Delete failed"))
     }
   }
 
@@ -163,7 +163,7 @@ export function McpTab({
         setEditingMcpServer(null)
       }
     } catch (err) {
-      setMcpActionError(err instanceof Error ? err.message : t("保存失败"))
+      setMcpActionError(err instanceof Error ? err.message : t("Save failed"))
     }
   }
 
@@ -198,7 +198,7 @@ export function McpTab({
         ok: false,
         latencyMs: 0,
         toolsCount: 0,
-        message: err instanceof Error ? err.message : t("连接异常"),
+        message: err instanceof Error ? err.message : t("Connection error"),
       })
     } finally {
       setModalTesting(false)
@@ -223,7 +223,7 @@ export function McpTab({
     } catch (err) {
       setServerTestResults((curr) => ({
         ...curr,
-        [server.id]: { ok: false, latencyMs: 0, toolsCount: 0, message: err instanceof Error ? err.message : t("测试异常") },
+        [server.id]: { ok: false, latencyMs: 0, toolsCount: 0, message: err instanceof Error ? err.message : t("Connection test failed") },
       }))
     } finally {
       setTestingServerId(null)
@@ -281,7 +281,7 @@ export function McpTab({
         (tool.modelName && tool.modelName.toLowerCase().includes(q)) ||
         (tool.description && tool.description.toLowerCase().includes(q)) ||
         tool.serverName.toLowerCase().includes(q) ||
-        (tool.source === 'builtin' && t("系统内置").includes(q))
+        (tool.source === 'builtin' && t("Built-in").includes(q))
       )
     })
   }, [allExploredTools, toolExplorerServerFilter, toolExplorerSearch])
@@ -291,76 +291,76 @@ export function McpTab({
   return (
               <div className="settings-section-content mcp-settings">
                 <section className="settings-card mcp-global-card">
-                  <h3>{t("MCP 协议全局设置")}</h3>
+                  <h3>{t("Global MCP settings")}</h3>
                   <div className="settings-row">
                     <div>
-                      <strong>{t("启用 MCP 外部工具协议")}</strong>
-                      <small>{t("开启后，Agent 模式将允许检索并执行连接的 MCP 工具")}</small>
+                      <strong>{t("Enable MCP integration")}</strong>
+                      <small>{t("When enabled, Agent mode can discover and call tools from connected MCP servers")}</small>
                     </div>
                     <SettingsToggle
                       checked={preferenceDraft.mcpEnabled ?? true}
-                      label={preferenceDraft.mcpEnabled ?? true ? t("已启用") : t("已停用")}
+                      label={preferenceDraft.mcpEnabled ?? true ? t("Enabled") : t("Deactivated")}
                       onChange={(enabled) => setPreferenceDraft((curr) => ({ ...curr, mcpEnabled: enabled }))}
                     />
                   </div>
                   <div className="settings-row">
                     <div>
-                      <strong>{t("工具智能检索模式")}</strong>
-                      <small>{t("智能检索 (auto) 动态匹配最相关的工具；全部挂载 (all) 加载全部可用工具")}</small>
+                      <strong>{t("Tool retrieval mode")}</strong>
+                      <small>{t("Automatic tool retrieval (auto) selects the most relevant tools dynamically; Load all tools (all) exposes every available tool.")}</small>
                     </div>
                     <div className="segmented-control">
                       <button
                         className={(preferenceDraft.mcpToolRetrievalMode ?? 'auto') === 'auto' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolRetrievalMode: 'auto' }))}
-                      >{t("智能检索 (auto)")}</button>
+                      >{t("Automatic tool retrieval (auto)")}</button>
                       <button
                         className={preferenceDraft.mcpToolRetrievalMode === 'all' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolRetrievalMode: 'all' }))}
-                      >{t("全部挂载 (all)")}</button>
+                      >{t("Load all tools (all)")}</button>
                     </div>
                   </div>
                   <div className="settings-row">
                     <div>
-                      <strong>{t("工具调用审批策略")}</strong>
-                      <small>{t("Full Access 会跳过代码、终端和 MCP 工具的全部审批")}</small>
+                      <strong>{t("Tool approval policy")}</strong>
+                      <small>{t("Full Access skips all approval prompts for code execution, terminal commands, and MCP tools")}</small>
                     </div>
                     <div className="segmented-control">
                       <button
                         className={preferenceDraft.mcpToolApprovalPolicy === 'always' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'always' }))}
-                      >{t("每次确认")}</button>
+                      >{t("Always ask")}</button>
                       <button
                         className={(preferenceDraft.mcpToolApprovalPolicy ?? 'sensitive') === 'sensitive' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'sensitive' }))}
-                      >{t("智能确认")}</button>
+                      >{t("Smart approval")}</button>
                       <button
                         className={preferenceDraft.mcpToolApprovalPolicy === 'full-access' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, mcpToolApprovalPolicy: 'full-access' }))}
                       >
-                        {t('fullAccess.label')}
+                        {t("Full Access")}
                       </button>
                     </div>
                   </div>
                   {preferenceDraft.mcpToolApprovalPolicy === 'full-access' && (
                     <div className="full-access-warning" role="alert">
                       <Icon name="shield" size={15} />
-                      <span><strong>{t("Full Access 已开启")}</strong><small>{t("模型可直接执行终端命令、代码及有副作用的 MCP 工具。仅在你信任当前模型、服务和任务时使用。")}</small></span>
+                      <span><strong>{t("Full Access is enabled")}</strong><small>{t("The model can run terminal commands and code, and call MCP tools with side effects. Use this only when you trust the model, connected MCP servers, and task.")}</small></span>
                     </div>
                   )}
                   <div className="settings-row">
                     <div>
-                      <strong>{t("审批等待时限")}</strong>
-                      <small>{t("永不超时仍可通过拒绝、停止生成、关闭会话或退出应用结束等待")}</small>
+                      <strong>{t("Approval timeout")}</strong>
+                      <small>{t("Even with no timeout, you can end the wait by denying the request, stopping generation, closing the conversation, or quitting the app.")}</small>
                     </div>
                     <div className="segmented-control">
                       <button
                         className={(preferenceDraft.toolApprovalTimeoutMode ?? 'five-minutes') === 'five-minutes' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, toolApprovalTimeoutMode: 'five-minutes' }))}
-                      >{t("5 分钟")}</button>
+                      >{t("5 minutes")}</button>
                       <button
                         className={preferenceDraft.toolApprovalTimeoutMode === 'never' ? 'is-active' : ''}
                         onClick={() => setPreferenceDraft((curr) => ({ ...curr, toolApprovalTimeoutMode: 'never' }))}
-                      >{t("永不超时")}</button>
+                      >{t("No timeout")}</button>
                     </div>
                   </div>
                 </section>
@@ -370,12 +370,12 @@ export function McpTab({
                     <div className="mcp-search-box">
                       <Icon name="search" size={15} />
                       <input
-                        placeholder={t("搜索服务名称或描述…")}
+                        placeholder={t("Search MCP server names or descriptions…")}
                         value={mcpSearch}
                         onChange={(e) => setMcpSearch(e.target.value)}
                       />
                       {mcpSearch && (
-                        <button className="icon-button" onClick={() => setMcpSearch('')} aria-label={t("清空搜索")}>
+                        <button className="icon-button" onClick={() => setMcpSearch('')} aria-label={t("Clear search")}>
                           <Icon name="close" size={13} />
                         </button>
                       )}
@@ -384,11 +384,11 @@ export function McpTab({
                   <div className="mcp-toolbar-right">
                     <button className="mcp-action-btn" onClick={() => void openToolExplorerModal()}>
                       <Icon name="tool" size={14} />
-                      <span>{t("工具总览 (Tool Explorer)")}</span>
+                      <span>{t("Tool Explorer")}</span>
                     </button>
                     <button className="mcp-action-btn is-primary" onClick={() => startEditMcpServer()}>
                       <Icon name="plus" size={14} />
-                      <span>{t("添加 MCP 服务")}</span>
+                      <span>{t("Add MCP server")}</span>
                     </button>
                   </div>
                 </div>
@@ -405,8 +405,8 @@ export function McpTab({
                   {filteredMcpServers.length === 0 ? (
                     <div className="mcp-empty">
                       <Icon name="tool" size={32} />
-                      <p>{t("未配置 MCP 服务")}</p>
-                      <small>{t("点击上方「添加 MCP 服务」可接入本地命令行子进程或远程 Streamable HTTP 工具服务")}</small>
+                      <p>{t("No MCP servers configured")}</p>
+                      <small>{t("Select “Add MCP server” above to connect a local command-line process or a remote Streamable HTTP server.")}</small>
                     </div>
                   ) : (
                     filteredMcpServers.map((server) => {
@@ -431,7 +431,7 @@ export function McpTab({
                             <div className="mcp-toggle-wrapper">
                               <SettingsToggle
                                 checked={server.enabled}
-                                label={server.enabled ? t("已启用") : t("已停用")}
+                                label={server.enabled ? t("Enabled") : t("Deactivated")}
                                 onChange={(enabled) => void handleToggleMcpServer(server.id, enabled)}
                               />
                             </div>
@@ -440,12 +440,12 @@ export function McpTab({
                           <div className="mcp-server-details">
                             {server.transport === 'stdio' ? (
                               <div className="mcp-detail-row">
-                                <span className="mcp-detail-label">{t("命令:")}</span>
+                                <span className="mcp-detail-label">{t("Command:")}</span>
                                 <code>{server.command} {(server.args || []).join(' ')}</code>
                               </div>
                             ) : (
                               <div className="mcp-detail-row">
-                                <span className="mcp-detail-label">{t("端点:")}</span>
+                                <span className="mcp-detail-label">{t("Endpoint:")}</span>
                                 <code>{server.url}</code>
                               </div>
                             )}
@@ -465,15 +465,15 @@ export function McpTab({
                               onClick={() => void handleTestServerInList(server)}
                             >
                               {isTesting ? <span className="button-spinner" /> : <Icon name="refresh" size={13} />}
-                              <span>{isTesting ? t("测试中…") : t("测试连接")}</span>
+                              <span>{isTesting ? t("Testing…") : t("Test connection")}</span>
                             </button>
                             <button className="mcp-footer-btn" onClick={() => startEditMcpServer(server)}>
                               <Icon name="edit" size={13} />
-                              <span>{t("编辑")}</span>
+                              <span>{t("Edit")}</span>
                             </button>
                             <button className="mcp-footer-btn is-danger" onClick={() => void handleRemoveMcpServer(server.id)}>
                               <Icon name="trash" size={13} />
-                              <span>{t("删除")}</span>
+                              <span>{t("Delete")}</span>
                             </button>
                           </div>
                         </div>
@@ -487,59 +487,59 @@ export function McpTab({
                   <div className="skill-modal-backdrop" onClick={() => setEditingMcpServer(null)}>
                     <div className="skill-modal mcp-edit-modal" onClick={(e) => e.stopPropagation()}>
                       <header className="skill-modal-header">
-                        <h3>{editingMcpServer.id ? t("编辑 MCP 服务") : t("新建 MCP 外部服务")}</h3>
+                        <h3>{editingMcpServer.id ? t("Edit MCP server") : t("mcp.addServerHeading")}</h3>
                         <button className="icon-button" onClick={() => setEditingMcpServer(null)}><Icon name="close" size={16} /></button>
                       </header>
                       <div className="skill-modal-body">
                         <label className="skill-form-field">
-                          <span>{t("服务名称 (必填)")}</span>
+                          <span>{t("Server name (required)")}</span>
                           <input
-                            placeholder={t("例如：文件系统服务 (Filesystem)")}
+                            placeholder={t("For example: Filesystem server")}
                             value={editingMcpServer.name}
                             onChange={(e) => setEditingMcpServer({ ...editingMcpServer, name: e.target.value })}
                           />
                         </label>
                         <label className="skill-form-field">
-                          <span>{t("描述说明 (可选)")}</span>
+                          <span>{t("Description (optional)")}</span>
                           <input
-                            placeholder={t("例如：提供本地工作区文件的读取与写入能力")}
+                            placeholder={t("For example: Provide reading and writing capabilities for local workspace files")}
                             value={editingMcpServer.description || ''}
                             onChange={(e) => setEditingMcpServer({ ...editingMcpServer, description: e.target.value })}
                           />
                         </label>
                         <div className="skill-form-field">
-                          <span>{t("传输协议类型")}</span>
+                          <span>{t("Transport protocol type")}</span>
                           <div className="segmented-control" style={{ width: '100%' }}>
                             <button
                               type="button"
                               className={editingMcpServer.transport === 'stdio' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'stdio' })}
-                            >{t("本地命令行子进程 (stdio)")}</button>
+                            >{t("Local command-line subprocess (stdio)")}</button>
                             <button
                               type="button"
                               className={editingMcpServer.transport === 'http' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'http' })}
-                            >{t("远程 HTTP（自动兼容）")}</button>
+                            >{t("Remote HTTP (Streamable HTTP with legacy SSE fallback)")}</button>
                             <button
                               type="button"
                               className={editingMcpServer.transport === 'sse' ? 'is-active' : ''}
                               onClick={() => setEditingMcpServer({ ...editingMcpServer, transport: 'sse' })}
-                            >{t("旧版 SSE")}</button>
+                            >{t("Legacy HTTP+SSE")}</button>
                           </div>
                         </div>
 
                         {editingMcpServer.transport === 'stdio' ? (
                           <>
                             <label className="skill-form-field">
-                              <span>{t("执行命令 (Command)")}</span>
+                              <span>{t("Execute command (Command)")}</span>
                               <input
-                                placeholder={t("例如：npx, uvx, node, python")}
+                                placeholder={t("For example: npx, uvx, node, python")}
                                 value={editingMcpServer.command || ''}
                                 onChange={(e) => setEditingMcpServer({ ...editingMcpServer, command: e.target.value })}
                               />
                             </label>
                             <label className="skill-form-field">
-                              <span>{t("启动参数 (每行一个参数，换行分隔)")}</span>
+                              <span>{t("Startup parameters (one parameter per line, separated by newlines)")}</span>
                               <textarea
                                 className="mono-input"
                                 placeholder={"-y\n@modelcontextprotocol/server-filesystem\nC:\\Projects"}
@@ -550,13 +550,13 @@ export function McpTab({
                             </label>
                             <div className="skill-form-field">
                               <div className="mcp-keyvalue-head">
-                                <span>{t("环境变量 (Environment Variables)")}</span>
+                                <span>{t("Environment Variables")}</span>
                                 <button
                                   type="button"
                                   className="mcp-add-kv-btn"
                                   onClick={() => setEditingMcpEnvRows([...editingMcpEnvRows, { key: '', value: '' }])}
                                 >
-                                  <Icon name="plus" size={12} />{t("添加变量")}</button>
+                                  <Icon name="plus" size={12} />{t("Add variables")}</button>
                               </div>
                               {editingMcpEnvRows.map((row, idx) => (
                                 <div key={idx} className="mcp-kv-row">
@@ -592,22 +592,22 @@ export function McpTab({
                         ) : (
                           <>
                             <label className="skill-form-field">
-                              <span>{editingMcpServer.transport === 'sse' ? t("旧版 SSE 端点 URL") : t("MCP HTTP 端点 URL")}</span>
+                              <span>{editingMcpServer.transport === 'sse' ? t("Legacy HTTP+SSE endpoint URL") : t("MCP HTTP endpoint URL")}</span>
                               <input
-                                placeholder={editingMcpServer.transport === 'sse' ? 'http://127.0.0.1:3000/sse' : t("http://127.0.0.1:3000/mcp 或 https://.../mcp")}
+                                placeholder={editingMcpServer.transport === 'sse' ? 'http://127.0.0.1:3000/sse' : t("http://127.0.0.1:3000/mcp or https://.../mcp")}
                                 value={editingMcpServer.url || ''}
                                 onChange={(e) => setEditingMcpServer({ ...editingMcpServer, url: e.target.value })}
                               />
                             </label>
                             <div className="skill-form-field">
                               <div className="mcp-keyvalue-head">
-                                <span>{t("自定义请求头 (HTTP Headers)")}</span>
+                                <span>{t("Custom request headers (HTTP Headers)")}</span>
                                 <button
                                   type="button"
                                   className="mcp-add-kv-btn"
                                   onClick={() => setEditingMcpHeadersRows([...editingMcpHeadersRows, { key: '', value: '' }])}
                                 >
-                                  <Icon name="plus" size={12} />{t("添加请求头")}</button>
+                                  <Icon name="plus" size={12} />{t("Add request header")}</button>
                               </div>
                               {editingMcpHeadersRows.map((row, idx) => (
                                 <div key={idx} className="mcp-kv-row">
@@ -656,14 +656,14 @@ export function McpTab({
                           disabled={modalTesting || !editingMcpServer.name.trim()}
                           onClick={() => void handleTestMcpModal()}
                         >
-                          {modalTesting ? <><span className="button-spinner" />{t("测试中…")}</> : <><Icon name="refresh" size={14} />{t("测试连接")}</>}
+                          {modalTesting ? <><span className="button-spinner" />{t("Testing…")}</> : <><Icon name="refresh" size={14} />{t("Test connection")}</>}
                         </button>
-                        <button className="secondary-button" onClick={() => setEditingMcpServer(null)}>{t("取消")}</button>
+                        <button className="secondary-button" onClick={() => setEditingMcpServer(null)}>{t("Cancel")}</button>
                         <button
                           className="primary-button"
                           disabled={!editingMcpServer.name.trim() || (editingMcpServer.transport === 'stdio' ? !editingMcpServer.command?.trim() : !editingMcpServer.url?.trim())}
                           onClick={() => void handleSaveMcpModal()}
-                        >{t("保存服务")}</button>
+                        >{t("Save server")}</button>
                       </footer>
                     </div>
                   </div>
@@ -676,8 +676,8 @@ export function McpTab({
                       <header className="skill-modal-header">
                         <div className="mcp-explorer-header-title">
                           <Icon name="tool" size={18} />
-                          <h3>{t("工具总览 (Tool Explorer)")}</h3>
-                          <span className="tool-count-pill">{t("{value0} 个工具", { value0: allExploredTools.length })}</span>
+                          <h3>{t("Tool Explorer")}</h3>
+                          <span className="tool-count-pill">{t("{value0} tools", { value0: allExploredTools.length })}</span>
                         </div>
                         <button className="icon-button" onClick={() => setToolExplorerOpen(false)}><Icon name="close" size={16} /></button>
                       </header>
@@ -686,7 +686,7 @@ export function McpTab({
                           <div className="mcp-search-box">
                             <Icon name="search" size={14} />
                             <input
-                              placeholder={t("搜索工具名称或描述…")}
+                              placeholder={t("Search tool name or description…")}
                               value={toolExplorerSearch}
                               onChange={(e) => setToolExplorerSearch(e.target.value)}
                             />
@@ -696,10 +696,10 @@ export function McpTab({
                             value={toolExplorerServerFilter}
                             onChange={(e) => setToolExplorerServerFilter(e.target.value)}
                           >
-                            <option value="all">{t("全部来源 ({value0})", { value0: allExploredTools.length })}</option>
-                            <option value={BUILTIN_TOOL_FILTER}>{t("系统内置 ({value0})", { value0: builtinExploredTools.length })}</option>
+                            <option value="all">{t("All sources ({value0})", { value0: allExploredTools.length })}</option>
+                            <option value={BUILTIN_TOOL_FILTER}>{t("Built-in ({value0})", { value0: builtinExploredTools.length })}</option>
                             {mcpServersList.length > 0 && (
-                              <optgroup label={t("MCP 外部服务")}>
+                              <optgroup label={t("MCP servers")}>
                                 {mcpServersList.map((s) => (
                                   <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
@@ -711,12 +711,12 @@ export function McpTab({
                         {loadingTools ? (
                           <div className="mcp-loading-tools">
                             <span className="button-spinner large" />
-                            <p>{t("正在检索 MCP 外部工具列表…")}</p>
+                            <p>{t("Loading the MCP tool list…")}</p>
                           </div>
                         ) : filteredExploredTools.length === 0 ? (
                           <div className="mcp-empty">
-                            <p>{t("未发现匹配的工具")}</p>
-                            <small>{t("可调整搜索或来源筛选，并确保 MCP 服务处于启用状态")}</small>
+                            <p>{t("No matching tool found")}</p>
+                            <small>{t("Adjust the search or source filter and make sure the MCP server is enabled.")}</small>
                           </div>
                         ) : (
                           <div className="mcp-tools-list">
@@ -732,15 +732,15 @@ export function McpTab({
                                   <span className="mcp-tool-item-badges">
                                     {tool.source === 'builtin' && (
                                       <span className="mcp-tool-source-badge is-builtin">
-                                        <Icon name="sparkles" size={10} />{t("系统内置")}</span>
+                                        <Icon name="sparkles" size={10} />{t("Built-in")}</span>
                                     )}
                                     <span className="mcp-tool-item-server">{tool.serverName}</span>
                                   </span>
                                 </div>
-                                <p className="mcp-tool-item-desc">{tool.description || t("无描述说明")}</p>
+                                <p className="mcp-tool-item-desc">{tool.description || t("No description")}</p>
                                 {tool.inputSchema?.properties && Object.keys(tool.inputSchema.properties).length > 0 && (
                                   <details className="mcp-tool-schema-details">
-                                    <summary>{t("参数定义 ({value0})", { value0: Object.keys(tool.inputSchema.properties).length })}</summary>
+                                    <summary>{t("Parameter definition ({value0})", { value0: Object.keys(tool.inputSchema.properties).length })}</summary>
                                     <pre><code>{JSON.stringify(tool.inputSchema, null, 2)}</code></pre>
                                   </details>
                                 )}
@@ -750,7 +750,7 @@ export function McpTab({
                         )}
                       </div>
                       <footer className="skill-modal-footer">
-                        <button className="secondary-button" onClick={() => setToolExplorerOpen(false)}>{t('common.close')}</button>
+                        <button className="secondary-button" onClick={() => setToolExplorerOpen(false)}>{t("Close")}</button>
                       </footer>
                     </div>
                   </div>

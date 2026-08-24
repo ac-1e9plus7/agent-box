@@ -457,7 +457,7 @@ function payloadError(
   const metadata = isRecord(value.metadata) ? value.metadata : undefined
   return removeUndefined({
     message:
-      typeof value.message === 'string' ? value.message : t("模型供应商返回了错误。"),
+      typeof value.message === 'string' ? value.message : t("The model provider returned an error."),
     code:
       typeof value.error_type === 'string'
         ? value.error_type

@@ -99,11 +99,11 @@ function createId(prefix: string): string {
 
 function makeTitle(content: string): string {
   const normalized = content.replace(/\s+/g, ' ').trim()
-  return normalized.length > 24 ? `${normalized.slice(0, 24)}…` : normalized || t("新对话")
+  return normalized.length > 24 ? `${normalized.slice(0, 24)}…` : normalized || t("conversation.newPlaceholder")
 }
 
 function normalizeError(error: unknown): string {
-  return error instanceof Error ? error.message : t("发生未知错误，请稍后重试。")
+  return error instanceof Error ? error.message : t("An unknown error occurred. Try again later.")
 }
 
 
@@ -152,7 +152,7 @@ export default function App(): JSX.Element {
       setNewConversationOpen(false)
       setSettingsSection('models')
       setSettingsOpen(true)
-      showToast(t("请先添加一个模型。"))
+      showToast(t("Please add a model first."))
   }, [showToast])
 
   const {
@@ -222,7 +222,7 @@ export default function App(): JSX.Element {
       )
       if (selected) await handleNewConversationInWorkspace(selected)
     } catch (error) {
-      showToast(t("无法选择工作目录：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Could not select a working directory: {value0}", { value0: normalizeError(error) }))
     }
   }, [activeConversation?.workingDirectory, handleNewConversationInWorkspace, settings.defaultWorkingDirectory, showToast])
 
@@ -230,7 +230,7 @@ export default function App(): JSX.Element {
     setLoading(true)
     setBootstrapError('')
     try {
-      if (!window.agentbox) throw new Error(t("安全桥接未加载，请重新启动应用。"))
+      if (!window.agentbox) throw new Error(t("The secure bridge failed to load. Restart the app."))
       const [
         nextSettings,
         providerViews,
@@ -443,7 +443,7 @@ export default function App(): JSX.Element {
         ))
       }
     } catch (error) {
-      showToast(t("删除失败：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Could not delete: {value0}", { value0: normalizeError(error) }))
     }
   }
 
@@ -522,7 +522,7 @@ export default function App(): JSX.Element {
       replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
       return await persistConversation(nextConversation) ? nextConversation : undefined
     } catch (error) {
-      showToast(t("无法选择工作目录：{value0}", { value0: normalizeError(error) }))
+      showToast(t("Could not select a working directory: {value0}", { value0: normalizeError(error) }))
       return undefined
     }
   }, [activeConversation, persistConversation, replaceConversations, settings.defaultWorkingDirectory, showToast])
@@ -629,7 +629,7 @@ export default function App(): JSX.Element {
 
   const handleWebSearchModeChange = (mode: WebSearchMode): void => {
     if (mode !== 'off' && !webSearchAvailable) {
-      showToast(t("联网搜索仅支持 OpenRouter 连接。"))
+      showToast(t("Web search is available only with OpenRouter connections."))
       return
     }
     setWebSearchMode(mode)
@@ -652,7 +652,7 @@ export default function App(): JSX.Element {
       replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
       void persistConversation(nextConversation)
     }
-    showToast(t("当前模型或 API 格式不支持联网搜索，已切换为关闭。"))
+    showToast(t("The current model or API format does not support web search, so web search was turned off."))
     return false
   }, [activeConversation, persistConversation, replaceConversations, showToast, webSearchAvailable, webSearchMode])
 
@@ -660,7 +660,7 @@ export default function App(): JSX.Element {
     if (!activeProvider || (!activeProvider.hasApiKey && !activeProvider.apiKeyOptional)) {
       setSettingsSection('providers')
       setSettingsOpen(true)
-      showToast(t("请先为当前服务商配置 API 密钥。"))
+      showToast(t("Configure an API key for the current provider first."))
       return false
     }
     return true
@@ -671,7 +671,7 @@ export default function App(): JSX.Element {
     messages: Message[],
     options?: Pick<ChatRequest, 'allowContextTrimming' | 'resumeFromMessageId'>,
   ): ChatRequest => {
-    if (!activeModel) throw new Error(t("当前模型不可用。"))
+    if (!activeModel) throw new Error(t("The current model is unavailable."))
     return {
       conversationId: conversation.id,
       modelId: activeModel.id,
@@ -698,12 +698,12 @@ export default function App(): JSX.Element {
     if (activeConversation && streamingConversationIds.has(activeConversation.id)) return
     if (!activeConversation) {
       openNewConversationDialog()
-      showToast(t("请先为新对话选择工作目录。"))
+      showToast(t("Please select a working directory for the new conversation first."))
       return
     }
     if (!activeConversation.workingDirectory) {
       const assignedConversation = await handleChangeWorkingDirectory()
-      if (assignedConversation) showToast(t("工作目录已设置，请再次发送。"))
+      if (assignedConversation) showToast(t("The working directory is set. Send again."))
       return
     }
 
@@ -721,7 +721,7 @@ export default function App(): JSX.Element {
         : undefined
       : undefined
     if (options?.resumeFromMessageId && !explicitResumeMessage) {
-      showToast(t("只能从当前分支最后一条中断的 Agent 回复继续。"))
+      showToast(t("Only the last interrupted Agent response on the current branch can be resumed."))
       return
     }
     const resumeFromMessageId = explicitResumeMessage?.id
@@ -757,7 +757,7 @@ export default function App(): JSX.Element {
       modelId: activeModel.id,
       status: 'streaming'
     }
-    const fallbackTitle = content || (currentAttachments[0] ? t("[文件] {value0}", { value0: currentAttachments[0].name }) : t("新对话"))
+    const fallbackTitle = content || (currentAttachments[0] ? t("[File] {value0}", { value0: currentAttachments[0].name }) : t("conversation.newPlaceholder"))
     const nextConversation: Conversation = {
       ...conversation,
       title: conversation.messages.length === 0 ? makeTitle(fallbackTitle) : conversation.title,
@@ -814,7 +814,7 @@ export default function App(): JSX.Element {
 
   const handleResumeAgentExecution = async (assistantMessageId: string): Promise<void> => {
     await handleSend(false, {
-      content: t("继续之前中断的工作"),
+      content: t("Continue where you left off"),
       preserveComposer: true,
       resumeFromMessageId: assistantMessageId,
     })
@@ -1129,7 +1129,7 @@ export default function App(): JSX.Element {
       nextActiveProvider,
       nextActiveConversation ? nextActiveConversation.webSearchMode ?? 'off' : nextActiveModelConfig?.defaultWebSearchMode
     ))
-    showToast(t("设置已保存。"))
+    showToast(t("Settings saved."))
     if (languageChanged) window.setTimeout(() => window.location.reload(), 150)
   }
 
@@ -1178,14 +1178,14 @@ export default function App(): JSX.Element {
       fallbackModel?.defaultWebSearchMode,
     ))
     setDraft('')
-    showToast(t("已清除全部会话数据。"))
+    showToast(t("All conversation data was cleared."))
   }
 
   const handleExportBackup = async (input: ExportBackupInput): Promise<ExportBackupResult> => {
     const result = await window.agentbox.data.exportBackup(input)
     if (!result.canceled) {
       showToast(t(
-        result.mode === 'deep' ? 'backup.exported.deep' : 'backup.exported.shallow',
+        result.mode === 'deep' ? "Exported a deep backup of {count} conversations." : "Exported a shallow backup of {count} conversations.",
         { count: result.conversationCount },
       ))
     }
@@ -1195,7 +1195,7 @@ export default function App(): JSX.Element {
   const discoverModels = async (providerId: string) => {
     try {
       const discovered = await window.agentbox.models.discover(providerId)
-      showToast(t("已获取 {value0} 个模型。", { value0: discovered.length }))
+      showToast(t("Fetched {value0} models.", { value0: discovered.length }))
       return discovered
     } catch (error) {
       const message = normalizeError(error)
@@ -1210,7 +1210,7 @@ export default function App(): JSX.Element {
         <span className="loading-mark"><Icon name="app" size={34} /></span>
         <h1>AgentBox</h1>
         <div className="loading-line"><i /></div>
-        <p>{t("正在解锁本地数据…")}</p>
+        <p>{t("Unlocking local data…")}</p>
       </main>
     )
   }
@@ -1219,9 +1219,9 @@ export default function App(): JSX.Element {
     return (
       <main className="fatal-state">
         <span><Icon name="lock" size={30} /></span>
-        <h1>{t("无法打开本地数据")}</h1>
+        <h1>{t("Unable to open local data")}</h1>
         <p>{bootstrapError}</p>
-        <button onClick={() => void bootstrap()}><Icon name="refresh" size={16} />{t("重试")}</button>
+        <button onClick={() => void bootstrap()}><Icon name="refresh" size={16} />{t("Try again")}</button>
       </main>
     )
   }
@@ -1250,7 +1250,7 @@ export default function App(): JSX.Element {
       <main className="chat-workspace">
         <Topbar
           activeModel={activeModel}
-          activeTitle={activeConversation?.title ?? t("新对话")}
+          activeTitle={activeConversation?.title ?? t("conversation.newPlaceholder")}
           agentMode={agentMode}
           enabledSkillsCount={skills.filter((skill) => skill.enabled).length}
           selectedSkillsCount={activeConversation?.skillIds?.length ?? 0}

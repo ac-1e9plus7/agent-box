@@ -9,7 +9,7 @@ export function validateToolArguments(
   tool: McpToolDefinition,
   args: unknown,
 ): { ok: true; args: Record<string, unknown> } | { ok: false; message: string } {
-  if (!isRecord(args)) return { ok: false, message: t("工具参数必须是 JSON 对象。") }
+  if (!isRecord(args)) return { ok: false, message: t("Tool parameters must be JSON objects.") }
   try {
     const key = `${tool.serverId}:${tool.name}:${JSON.stringify(tool.inputSchema)}`
     let validator = validatorCache.get(key)
@@ -23,7 +23,7 @@ export function validateToolArguments(
   } catch (error) {
     return {
       ok: false,
-      message: t("工具参数 Schema 无法验证：{value0}", { value0: error instanceof Error ? error.message : String(error) }),
+      message: t("The tool parameter schema could not be validated: {value0}", { value0: error instanceof Error ? error.message : String(error) }),
     }
   }
 }
@@ -38,16 +38,16 @@ export function evaluateToolApproval(
     && annotations.openWorldHint === false
   const riskLevel = explicitlyLowRisk ? 'low' : 'sensitive'
   const reason = explicitlyLowRisk
-    ? t("服务声明该工具只读、非破坏性且不访问开放外部环境。")
-    : t("该工具可能写入数据、访问外部系统，或未提供完整的只读安全声明。")
+    ? t("The MCP server declares this tool read-only, non-destructive, and unable to interact with external systems.")
+    : t("This tool may modify data or interact with external systems, or the MCP server did not provide all low-risk annotations.")
   if (policy === 'full-access') return { required: false, riskLevel, reason }
   if (policy === 'always') return { required: true, riskLevel, reason }
   return { required: !explicitlyLowRisk, riskLevel, reason }
 }
 
 function formatValidationErrors(errors?: ErrorObject[] | null): string {
-  if (!errors?.length) return t("工具参数不符合 JSON Schema。")
-  return t("工具参数不符合 JSON Schema：{value0}", { value0: errors.slice(0, 5).map((error) => `${error.instancePath || '/'} ${error.message || '无效'}`).join('；') })
+  if (!errors?.length) return t("Tool parameters do not conform to the JSON Schema.")
+  return t("Tool parameters do not conform to the JSON Schema: {value0}", { value0: errors.slice(0, 5).map((error) => `${error.instancePath || '/'} ${error.message || t('invalid')}`).join(t('; ')) })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
