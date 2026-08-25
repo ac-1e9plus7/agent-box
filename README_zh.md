@@ -43,7 +43,7 @@
 
 ### 环境要求
 
-- Node.js 20.19+、22.13+ 或 24+
+- Node.js 24 或更高版本
 - pnpm 11.24.0（通过 `packageManager` 固定）
 - 操作系统凭据后端：Windows 凭据保护、macOS Keychain 或 Linux Secret Service
 

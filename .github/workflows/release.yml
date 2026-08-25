@@ -31,18 +31,15 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v3
+      - name: Setup Node.js and pnpm
+        uses: pnpm/setup@v2
         with:
           version: 11.24.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'pnpm'
+          runtime: node@24
+          cache: true
+          install: false
 
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
@@ -59,7 +56,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: agentbox-${{ runner.os }}-${{ matrix.arch }}
           path: |

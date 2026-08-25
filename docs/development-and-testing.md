@@ -6,7 +6,7 @@ This document reflects the current `package.json`, Vitest, electron-vite, electr
 
 ## Development commands
 
-CI currently uses Node.js 20 and pnpm 11.24.0 as its baseline. The repository pins pnpm through `packageManager`; matching that version is the first step when investigating environment-specific behavior.
+CI currently uses Node.js 24 and pnpm 11.24.0 as its baseline. The repository requires Node.js 24 or later through `engines` and pins pnpm through `packageManager`; matching those versions is the first step when investigating environment-specific behavior.
 
 | Command             | Current behavior                                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -72,6 +72,6 @@ The [quality workflow](../.github/workflows/quality.yml) runs `pnpm check` for b
 - macOS on the runner's native architecture;
 - Ubuntu x64 and arm64.
 
-Each release job installs pnpm 11.24.0 and Node.js 20, installs dependencies with the frozen lockfile, runs `pnpm check` and `pnpm build`, invokes `electron-builder --publish never`, and uploads `release/*.exe`, `release/*.dmg`, and `release/*.AppImage` as GitHub Actions artifacts.
+Each release job installs pnpm 11.24.0 and Node.js 24, installs dependencies with the frozen lockfile, runs `pnpm check` and `pnpm build`, invokes `electron-builder --publish never`, and uploads `release/*.exe`, `release/*.dmg`, and `release/*.AppImage` as GitHub Actions artifacts.
 
 The release workflow still does not create or publish a GitHub Release. If the product workflow is expected to publish releases automatically, release-publishing steps must be added explicitly; artifact upload alone is not a release.

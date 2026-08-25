@@ -33,7 +33,7 @@ Core invariants:
 
 ## Tooling and commands
 
-The CI baseline is Node.js 20 and pnpm 11.24.0. `package.json#packageManager` pins the pnpm version; use Corepack or the exact pinned version when installing dependencies or diagnosing environment-specific issues. Local tooling requires Node.js 20.19+, 22.13+, or 24+.
+The CI baseline is Node.js 24 and pnpm 11.24.0. `package.json#engines` requires Node.js 24 or later, while `package.json#packageManager` pins pnpm; use Corepack or the exact pinned versions when installing dependencies or diagnosing environment-specific issues.
 
 Use pnpm for repository dependency and script operations. Do not use npm or Yarn to rewrite `pnpm-lock.yaml`; prefer `pnpm exec` over `npx` for project-local binaries.
 
@@ -67,7 +67,7 @@ pnpm dist
 
 For ordinary code changes, run focused tests while iterating and finish with `pnpm check` and `pnpm build`. Packaging, preload, entry-point, dependency-externalization, or Electron lifecycle changes also require `pnpm package` and an actual unpacked-application smoke test.
 
-The GitHub quality workflow runs `pnpm check` for branch pushes and pull requests. The release workflow installs Node.js 20 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and uploads artifacts. It does not publish a GitHub Release; do not describe artifact upload as a release publication.
+The GitHub quality workflow runs `pnpm check` for branch pushes and pull requests. The release workflow installs Node.js 24 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and uploads artifacts. It does not publish a GitHub Release; do not describe artifact upload as a release publication.
 
 ## Documentation contract
 

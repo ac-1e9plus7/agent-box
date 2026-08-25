@@ -43,7 +43,7 @@ The English documentation is in [`docs/`](./docs/README.md). The corresponding C
 
 ### Requirements
 
-- Node.js 20.19+, 22.13+, or 24+
+- Node.js 24 or later
 - pnpm 11.24.0 (pinned by `packageManager`)
 - An OS credential backend: Windows credential protection, macOS Keychain, or Linux Secret Service
 
