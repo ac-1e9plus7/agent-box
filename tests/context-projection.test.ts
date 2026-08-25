@@ -47,11 +47,16 @@ describe('projectContext system prompt accounting', () => {
   it('does not count display-only nickname or avatar as prompt content', () => {
     const messages = [msg('u1', 'user', 'hello')]
     const withoutProfile = projectContext(messages, '', baseSettings, model())
-    const withProfile = projectContext(messages, '', {
-      ...baseSettings,
-      userNickname: '只用于展示的昵称',
-      userAvatar: 'data:image/webp;base64,UklGRg==',
-    }, model())
+    const withProfile = projectContext(
+      messages,
+      '',
+      {
+        ...baseSettings,
+        userNickname: '只用于展示的昵称',
+        userAvatar: 'data:image/webp;base64,UklGRg==',
+      },
+      model(),
+    )
     expect(withProfile.estimatedInputTokens).toBe(withoutProfile.estimatedInputTokens)
   })
 
@@ -70,10 +75,15 @@ describe('projectContext system prompt accounting', () => {
     )
     expect(withPrompt.estimatedInputTokens).toBeGreaterThan(withoutPrompt.estimatedInputTokens)
     // Adds exactly one message-worth (overhead 8 + prompt tokens), never double.
-    const promptOnly = projectContext([], '', {
-      ...baseSettings,
-      systemPrompt: 'You are a helpful assistant.',
-    }, model())
+    const promptOnly = projectContext(
+      [],
+      '',
+      {
+        ...baseSettings,
+        systemPrompt: 'You are a helpful assistant.',
+      },
+      model(),
+    )
     const empty = projectContext([], '', baseSettings, model())
     expect(promptOnly.estimatedInputTokens - empty.estimatedInputTokens).toBe(
       withPrompt.estimatedInputTokens - withoutPrompt.estimatedInputTokens,

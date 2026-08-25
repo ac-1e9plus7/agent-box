@@ -64,29 +64,21 @@ export function assertConversationMutationAllowed(
   )
 }
 
-export function measureConversationCollection(
-  conversations: Conversation[],
-): ConversationCollectionUsage {
+export function measureConversationCollection(conversations: Conversation[]): ConversationCollectionUsage {
   let serializedBytes = 2 // []
   let messages = 0
   let citations = 0
 
   for (const conversation of conversations) {
     messages += conversation.messages.length
-    citations += conversation.messages.reduce(
-      (total, message) => total + (message.citations?.length ?? 0),
-      0,
-    )
+    citations += conversation.messages.reduce((total, message) => total + (message.citations?.length ?? 0), 0)
     const serialized = JSON.stringify(conversation)
     serializedBytes += Buffer.byteLength(serialized, 'utf8') + 1
   }
   return { serializedBytes, messages, citations }
 }
 
-function assertUsageWithinLimits(
-  usage: ConversationCollectionUsage,
-  limits: ConversationCollectionLimits,
-): void {
+function assertUsageWithinLimits(usage: ConversationCollectionUsage, limits: ConversationCollectionLimits): void {
   if (usage.messages > limits.maxMessages) {
     throw new Error('Vault contains too many messages')
   }
@@ -98,11 +90,6 @@ function assertUsageWithinLimits(
   }
 }
 
-function assertDimensionMutationAllowed(
-  before: number,
-  after: number,
-  limit: number,
-  message: string,
-): void {
+function assertDimensionMutationAllowed(before: number, after: number, limit: number, message: string): void {
   if (after > limit && after > before) throw new Error(message)
 }

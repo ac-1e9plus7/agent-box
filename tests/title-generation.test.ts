@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  cleanGeneratedTitle,
-  cleanManualTitle,
-  firstUserQuestion,
-  MAX_TITLE_LENGTH,
-} from '../src/renderer/src/title'
+import { cleanGeneratedTitle, cleanManualTitle, firstUserQuestion, MAX_TITLE_LENGTH } from '../src/renderer/src/title'
 
 describe('cleanGeneratedTitle', () => {
   it('returns a trimmed plain title', () => {

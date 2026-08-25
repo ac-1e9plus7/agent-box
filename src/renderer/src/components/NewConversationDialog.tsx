@@ -4,7 +4,7 @@ import type { Conversation } from '../types'
 import { getNewConversationWorkspaceOptions } from '../workspace-groups'
 import type { NewConversationWorkspaceOption } from '../workspace-groups'
 import { Icon } from './Icon'
-import { t } from "../../../shared/i18n"
+import { t } from '../../../shared/i18n'
 
 interface NewConversationDialogProps {
   busy?: boolean
@@ -27,20 +27,22 @@ function WorkspaceOptionButton({
   option: NewConversationWorkspaceOption
   onSelect: (path: string) => void
 }): JSX.Element {
-  const actionLabel = option.source === 'current'
-    ? t("Keep current working directory")
-    : option.source === 'default'
-      ? t("Use default working directory")
-      : option.label
-  const meta = option.conversationCount > 0
-    ? t("{value0} existing conversations", { value0: option.conversationCount })
-    : option.source === 'default'
-      ? t("Default directory from Settings")
-      : t("Current conversation directory")
+  const actionLabel =
+    option.source === 'current'
+      ? t('Keep current working directory')
+      : option.source === 'default'
+        ? t('Use default working directory')
+        : option.label
+  const meta =
+    option.conversationCount > 0
+      ? t('{value0} existing conversations', { value0: option.conversationCount })
+      : option.source === 'default'
+        ? t('Default directory from Settings')
+        : t('Current conversation directory')
 
   return (
     <button
-      aria-label={t("{value0}: {value1}", { value0: actionLabel, value1: option.path })}
+      aria-label={t('{value0}: {value1}', { value0: actionLabel, value1: option.path })}
       autoFocus={autoFocus}
       className={`workspace-choice-card is-${option.source}`}
       disabled={busy}
@@ -48,14 +50,16 @@ function WorkspaceOptionButton({
       title={option.path}
       type="button"
     >
-      <span className="workspace-choice-icon"><Icon name="folder" size={17} /></span>
+      <span className="workspace-choice-icon">
+        <Icon name="folder" size={17} />
+      </span>
       <span className="workspace-choice-copy">
         <strong>{actionLabel}</strong>
         {option.source !== 'recent' && <span>{option.label}</span>}
         <small>{option.path}</small>
       </span>
       <span className="workspace-choice-meta">
-        {option.source === 'current' && <em>{t("Recommended")}</em>}
+        {option.source === 'current' && <em>{t('Recommended')}</em>}
         <small>{meta}</small>
         <Icon name="chevron-right" size={14} />
       </span>
@@ -72,11 +76,10 @@ export function NewConversationDialog({
   onChooseDirectory,
   onSelectWorkspace,
 }: NewConversationDialogProps): JSX.Element {
-  const options = useMemo(() => getNewConversationWorkspaceOptions(
-    conversations,
-    currentDirectory,
-    defaultDirectory,
-  ), [conversations, currentDirectory, defaultDirectory])
+  const options = useMemo(
+    () => getNewConversationWorkspaceOptions(conversations, currentDirectory, defaultDirectory),
+    [conversations, currentDirectory, defaultDirectory],
+  )
   const featuredOptions = options.filter((option) => option.source !== 'recent')
   const recentOptions = options.filter((option) => option.source === 'recent').slice(0, 6)
 
@@ -102,12 +105,24 @@ export function NewConversationDialog({
         role="dialog"
       >
         <header className="new-conversation-header">
-          <span className="new-conversation-mark"><Icon name="message" size={20} /></span>
-          <span>
-            <h2 id="new-conversation-title">{t("New conversation")}</h2>
-            <p>{t("Starting after selecting a working directory, terminal and project operations will be bounded by that directory.")}</p>
+          <span className="new-conversation-mark">
+            <Icon name="message" size={20} />
           </span>
-          <button aria-label={t("Cancel new conversation")} className="icon-button" disabled={busy} onClick={onCancel} type="button">
+          <span>
+            <h2 id="new-conversation-title">{t('New conversation')}</h2>
+            <p>
+              {t(
+                'Starting after selecting a working directory, terminal and project operations will be bounded by that directory.',
+              )}
+            </p>
+          </span>
+          <button
+            aria-label={t('Cancel new conversation')}
+            className="icon-button"
+            disabled={busy}
+            onClick={onCancel}
+            type="button"
+          >
             <Icon name="close" size={17} />
           </button>
         </header>
@@ -129,15 +144,10 @@ export function NewConversationDialog({
 
           {recentOptions.length > 0 && (
             <section className="recent-workspaces">
-              <h3>{t("Recently used")}</h3>
+              <h3>{t('Recently used')}</h3>
               <div className="workspace-choice-list">
                 {recentOptions.map((option) => (
-                  <WorkspaceOptionButton
-                    busy={busy}
-                    key={option.path}
-                    onSelect={onSelectWorkspace}
-                    option={option}
-                  />
+                  <WorkspaceOptionButton busy={busy} key={option.path} onSelect={onSelectWorkspace} option={option} />
                 ))}
               </div>
             </section>
@@ -145,18 +155,29 @@ export function NewConversationDialog({
 
           {options.length === 0 && (
             <div className="new-conversation-empty">
-              <span><Icon name="folder" size={22} /></span>
-              <strong>{t("First select a project directory")}</strong>
-              <p>{t("There is no reusable working directory on this device yet.")}</p>
+              <span>
+                <Icon name="folder" size={22} />
+              </span>
+              <strong>{t('First select a project directory')}</strong>
+              <p>{t('There is no reusable working directory on this device yet.')}</p>
             </div>
           )}
         </div>
 
         <footer className="new-conversation-footer">
-          <span><Icon name="shield" size={13} />{t("Only the directory path is saved; project files are not copied")}</span>
-          <button autoFocus={options.length === 0} className="primary-button" disabled={busy} onClick={onChooseDirectory} type="button">
+          <span>
+            <Icon name="shield" size={13} />
+            {t('Only the directory path is saved; project files are not copied')}
+          </span>
+          <button
+            autoFocus={options.length === 0}
+            className="primary-button"
+            disabled={busy}
+            onClick={onChooseDirectory}
+            type="button"
+          >
             <Icon name="folder" size={15} />
-            {busy ? t("Creating…") : t("Choose another directory")}
+            {busy ? t('Creating…') : t('Choose another directory')}
           </button>
         </footer>
       </section>

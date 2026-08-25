@@ -12,6 +12,7 @@ export const RESERVED_SAFETY_TOKENS = 128
 
 // Characters in the basic Latin + Latin Extended block (U+0000..U+024F) pool at
 // ~4 chars/token; everything else (notably CJK) counts as ~1 token each.
+// eslint-disable-next-line no-control-regex -- the range intentionally includes ASCII control characters
 const NARROW_CHARACTER = new RegExp('[\\u0000-\\u024f]', 'u')
 
 /** A dependency-free, deliberately conservative token estimate. */

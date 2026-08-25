@@ -39,9 +39,16 @@ export function retrieveRelevantTools(
       query,
     ),
   }))
-  scored.sort((left, right) => right.score - left.score || (left.tool.modelName || left.tool.name).localeCompare(right.tool.modelName || right.tool.name))
+  scored.sort(
+    (left, right) =>
+      right.score - left.score ||
+      (left.tool.modelName || left.tool.name).localeCompare(right.tool.modelName || right.tool.name),
+  )
   const minScore = options.minScore ?? 0.75
-  return scored.filter((item) => item.score >= minScore).slice(0, maxTools).map((item) => item.tool)
+  return scored
+    .filter((item) => item.score >= minScore)
+    .slice(0, maxTools)
+    .map((item) => item.tool)
 }
 
 export function tokenize(text: string): string[] {
@@ -58,12 +65,15 @@ export function tokenize(text: string): string[] {
 
 function toolDocument(tool: McpToolDefinition): string[] {
   const properties = tool.inputSchema.properties || {}
-  const propertyText = Object.entries(properties).map(([name, schema]) => {
-    const description = typeof schema === 'object' && schema !== null && 'description' in schema
-      ? String((schema as Record<string, unknown>).description)
-      : ''
-    return `${name} ${description}`
-  }).join(' ')
+  const propertyText = Object.entries(properties)
+    .map(([name, schema]) => {
+      const description =
+        typeof schema === 'object' && schema !== null && 'description' in schema
+          ? String((schema as Record<string, unknown>).description)
+          : ''
+      return `${name} ${description}`
+    })
+    .join(' ')
   return tokenize(`${tool.name} ${tool.name} ${tool.serverName} ${tool.description || ''} ${propertyText}`)
 }
 
@@ -91,7 +101,10 @@ function bm25Score(
   }
   const normalizedQuery = rawQuery.toLowerCase()
   if (normalizedQuery.includes(tool.name.toLowerCase())) score += 8
-  for (const part of tool.name.toLowerCase().split(/[-_.]/).filter((item) => item.length >= 2)) {
+  for (const part of tool.name
+    .toLowerCase()
+    .split(/[-_.]/)
+    .filter((item) => item.length >= 2)) {
     if (normalizedQuery.includes(part)) score += 1.5
   }
   return score

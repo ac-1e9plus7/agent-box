@@ -58,8 +58,7 @@ pnpm install
 pnpm dev
 
 # Validate the project
-pnpm typecheck
-pnpm test
+pnpm check
 
 # Build production bundles
 pnpm build

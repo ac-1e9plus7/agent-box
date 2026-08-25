@@ -4,11 +4,7 @@ import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SettingsDialog } from '../src/renderer/src/components/SettingsDialog'
-import {
-  rendererModel,
-  rendererProvider,
-  rendererSettings,
-} from './renderer-test-fixtures'
+import { rendererModel, rendererProvider, rendererSettings } from './renderer-test-fixtures'
 
 describe('SettingsDialog renderer integration', () => {
   afterEach(() => {
@@ -50,11 +46,13 @@ describe('SettingsDialog renderer integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
-      preferences: expect.objectContaining({ userNickname: '本地用户' }),
-      models: [expect.objectContaining({ id: rendererModel.id, name: '重命名模型' })],
-      providers: [expect.objectContaining({ id: rendererProvider.id, name: '重命名服务商' })],
-    }))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferences: expect.objectContaining({ userNickname: '本地用户' }),
+        models: [expect.objectContaining({ id: rendererModel.id, name: '重命名模型' })],
+        providers: [expect.objectContaining({ id: rendererProvider.id, name: '重命名服务商' })],
+      }),
+    )
     expect(onClose).toHaveBeenCalledOnce()
   })
 

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  isTrustedMainPage,
-  maskProxyUrl,
-  unmaskProxyUrl,
-} from '../src/electron/ipc/register-ipc'
+import { isTrustedMainPage, maskProxyUrl, unmaskProxyUrl } from '../src/electron/ipc/register-ipc'
 
 describe('IPC proxy URL masking (maskProxyUrl & unmaskProxyUrl)', () => {
   it('masks username and password in proxy URLs before exposing to renderer', () => {
@@ -23,9 +19,7 @@ describe('IPC proxy URL masking (maskProxyUrl & unmaskProxyUrl)', () => {
 
   it('leaves proxy URLs without credentials unchanged', () => {
     expect(maskProxyUrl('http://127.0.0.1:7890')).toBe('http://127.0.0.1:7890')
-    expect(maskProxyUrl('https://proxy.example.com:443')).toBe(
-      'https://proxy.example.com:443',
-    )
+    expect(maskProxyUrl('https://proxy.example.com:443')).toBe('https://proxy.example.com:443')
   })
 
   it('handles empty string and invalid URLs gracefully without throwing', () => {

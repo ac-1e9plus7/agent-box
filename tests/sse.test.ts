@@ -47,10 +47,7 @@ describe('SSE stream parser (parseSse)', () => {
   })
 
   it('ignores comment lines starting with colon', async () => {
-    const stream = createChunkStream([
-      ': keepalive\n\n',
-      ': ping\ndata: real data\n: comment\n\n',
-    ])
+    const stream = createChunkStream([': keepalive\n\n', ': ping\ndata: real data\n: comment\n\n'])
     const events = await collectEvents(stream)
     expect(events).toEqual([{ event: undefined, data: 'real data' }])
   })
@@ -62,22 +59,13 @@ describe('SSE stream parser (parseSse)', () => {
   })
 
   it('assembles events split across multiple chunk boundaries', async () => {
-    const stream = createChunkStream([
-      'da',
-      'ta: first ',
-      'part\n',
-      'da',
-      'ta: second part',
-      '\n\n',
-    ])
+    const stream = createChunkStream(['da', 'ta: first ', 'part\n', 'da', 'ta: second part', '\n\n'])
     const events = await collectEvents(stream)
     expect(events).toEqual([{ event: undefined, data: 'first part\nsecond part' }])
   })
 
   it('parses multiple events delivered in a single chunk', async () => {
-    const stream = createChunkStream([
-      'data: event1\n\ndata: event2\n\nevent: custom\ndata: event3\n\n',
-    ])
+    const stream = createChunkStream(['data: event1\n\ndata: event2\n\nevent: custom\ndata: event3\n\n'])
     const events = await collectEvents(stream)
     expect(events).toEqual([
       { event: undefined, data: 'event1' },
@@ -101,16 +89,12 @@ describe('SSE stream parser (parseSse)', () => {
   it('rejects an individual SSE event exceeding 5 MiB character limit', async () => {
     const largeLine = `data: ${'a'.repeat(5 * 1024 * 1024 + 10)}\n\n`
     const stream = createChunkStream([largeLine])
-    await expect(collectEvents(stream)).rejects.toThrow(
-      '供应商返回的单个流事件超过大小限制。',
-    )
+    await expect(collectEvents(stream)).rejects.toThrow('供应商返回的单个流事件超过大小限制。')
   })
 
   it('rejects a buffer exceeding 5 MiB without newlines', async () => {
     const largeChunk = 'x'.repeat(5 * 1024 * 1024 + 10)
     const stream = createChunkStream([largeChunk])
-    await expect(collectEvents(stream)).rejects.toThrow(
-      '供应商返回的流数据行超过大小限制。',
-    )
+    await expect(collectEvents(stream)).rejects.toThrow('供应商返回的流数据行超过大小限制。')
   })
 })

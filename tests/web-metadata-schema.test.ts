@@ -15,9 +15,7 @@ describe('web-search storage schema', () => {
     expect(parseOptionalWebSearchMode('off')).toBe('off')
     expect(parseOptionalWebSearchMode('auto')).toBe('auto')
     expect(parseOptionalWebSearchMode('native')).toBe('native')
-    expect(() => parseOptionalWebSearchMode('always')).toThrow(
-      'Invalid web search mode',
-    )
+    expect(() => parseOptionalWebSearchMode('always')).toThrow('Invalid web search mode')
   })
 
   it('whitelists citation fields, normalizes URLs, and accounts for stored text', () => {
@@ -63,26 +61,18 @@ describe('web-search storage schema', () => {
         })),
       ),
     ).toThrow('Invalid message citations')
-    expect(() =>
-      parseStoredCitations([
-        { url: 'https://example.com', content: 'x'.repeat(100_001) },
-      ]),
-    ).toThrow('Invalid citation content')
-    expect(() =>
-      parseStoredCitations([
-        { url: 'https://example.com', title: 'x'.repeat(2_001) },
-      ]),
-    ).toThrow('Invalid citation title')
-    expect(() =>
-      parseStoredCitations([
-        { url: `https://example.com/${'x'.repeat(4_096)}` },
-      ]),
-    ).toThrow('Invalid citation URL')
-    expect(() =>
-      parseStoredCitations([
-        { url: 'https://example.com', startIndex: 10, endIndex: 9 },
-      ]),
-    ).toThrow('Invalid citation range')
+    expect(() => parseStoredCitations([{ url: 'https://example.com', content: 'x'.repeat(100_001) }])).toThrow(
+      'Invalid citation content',
+    )
+    expect(() => parseStoredCitations([{ url: 'https://example.com', title: 'x'.repeat(2_001) }])).toThrow(
+      'Invalid citation title',
+    )
+    expect(() => parseStoredCitations([{ url: `https://example.com/${'x'.repeat(4_096)}` }])).toThrow(
+      'Invalid citation URL',
+    )
+    expect(() => parseStoredCitations([{ url: 'https://example.com', startIndex: 10, endIndex: 9 }])).toThrow(
+      'Invalid citation range',
+    )
   })
 
   it('validates and whitelists persisted token usage including web searches', () => {
@@ -103,12 +93,10 @@ describe('web-search storage schema', () => {
       totalTokens: 17,
     })
     expect(parseStoredTokenUsage(undefined)).toBeUndefined()
-    expect(() => parseStoredTokenUsage({ webSearchRequests: -1 })).toThrow(
+    expect(() => parseStoredTokenUsage({ webSearchRequests: -1 })).toThrow('Invalid web search request usage')
+    expect(() => parseStoredTokenUsage({ webSearchRequests: 1_000_000_000_001 })).toThrow(
       'Invalid web search request usage',
     )
-    expect(() =>
-      parseStoredTokenUsage({ webSearchRequests: 1_000_000_000_001 }),
-    ).toThrow('Invalid web search request usage')
   })
 
   it('deduplicates stream citations by normalized URL and drops unsafe values', () => {
@@ -127,12 +115,7 @@ describe('web-search storage schema', () => {
       { url: 'https://example.com/result', title: 'First' },
       { url: 'https://example.com/other', title: 'Other' },
     ])
-    expect(
-      takeChangedWebCitations(
-        [{ url: 'https://example.com/result', title: 'First' }],
-        state,
-      ),
-    ).toEqual([])
+    expect(takeChangedWebCitations([{ url: 'https://example.com/result', title: 'First' }], state)).toEqual([])
     expect(
       takeChangedWebCitations(
         [
@@ -151,9 +134,7 @@ describe('web-search storage schema', () => {
         content: 'Later terminal excerpt',
       },
     ])
-    expect(
-      takeChangedWebCitations([{ url: 'https://example.com/result' }], state),
-    ).toEqual([])
+    expect(takeChangedWebCitations([{ url: 'https://example.com/result' }], state)).toEqual([])
   })
 
   it('bounds unique citations accepted from one untrusted stream', () => {

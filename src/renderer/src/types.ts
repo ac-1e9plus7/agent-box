@@ -5,7 +5,7 @@ import type {
   Message as StoredMessage,
   ModelConfig as StoredModelConfig,
   ProviderView,
-  WebSearchMode as SharedWebSearchMode
+  WebSearchMode as SharedWebSearchMode,
 } from '../../shared/types'
 import { t } from '../../shared/i18n'
 
@@ -107,7 +107,7 @@ export type IconName =
   | 'zap'
 
 export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
-  'openai-chat-completions': t("OpenAI Chat Completions API"),
-  'openai-responses': t("OpenAI Responses API"),
-  'anthropic-messages': t("Anthropic Messages API")
+  'openai-chat-completions': t('OpenAI Chat Completions API'),
+  'openai-responses': t('OpenAI Responses API'),
+  'anthropic-messages': t('Anthropic Messages API'),
 }

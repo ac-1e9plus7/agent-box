@@ -24,9 +24,7 @@ export function ensureMessageTree<T extends Message>(messages: T[]): T[] {
  * If `currentLeafId` is specified and exists, traces backwards from that node to root.
  * Otherwise, walks down the tree following the latest child at each branch point.
  */
-export function getActiveMessageChain<T extends Message>(
-  conversation: { messages: T[]; currentLeafId?: string }
-): T[] {
+export function getActiveMessageChain<T extends Message>(conversation: { messages: T[]; currentLeafId?: string }): T[] {
   if (!conversation.messages || conversation.messages.length === 0) return []
 
   const normalized = ensureMessageTree(conversation.messages)
@@ -87,7 +85,7 @@ export function getActiveMessageChain<T extends Message>(
  */
 export function getMessageSiblings<T extends Message>(
   allMessages: T[],
-  messageId: string
+  messageId: string,
 ): { siblings: T[]; currentIndex: number; total: number } {
   if (!allMessages || allMessages.length === 0) {
     return { siblings: [], currentIndex: 0, total: 1 }
@@ -100,9 +98,7 @@ export function getMessageSiblings<T extends Message>(
   }
 
   const targetParent = target.parentMessageId ?? null
-  const siblings = normalized.filter(
-    (m) => (m.parentMessageId ?? null) === targetParent && m.role === target.role
-  )
+  const siblings = normalized.filter((m) => (m.parentMessageId ?? null) === targetParent && m.role === target.role)
 
   if (siblings.length === 0) {
     return { siblings: [target], currentIndex: 0, total: 1 }
@@ -120,10 +116,7 @@ export function getMessageSiblings<T extends Message>(
  * Finds the deepest descendant leaf node starting from `startNodeId`
  * (preferring the latest child at each branch point).
  */
-export function findDeepestLeaf<T extends Message>(
-  allMessages: T[],
-  startNodeId: string
-): T | undefined {
+export function findDeepestLeaf<T extends Message>(allMessages: T[], startNodeId: string): T | undefined {
   if (!allMessages || allMessages.length === 0) return undefined
 
   const normalized = ensureMessageTree(allMessages)
@@ -157,10 +150,7 @@ export function findDeepestLeaf<T extends Message>(
  * Switches the conversation's active branch to point to `targetMessageId`.
  * Sets `currentLeafId` to the deepest descendant of `targetMessageId`.
  */
-export function switchBranch<C extends Conversation>(
-  conversation: C,
-  targetMessageId: string
-): C {
+export function switchBranch<C extends Conversation>(conversation: C, targetMessageId: string): C {
   const leaf = findDeepestLeaf(conversation.messages, targetMessageId)
   return {
     ...conversation,
@@ -175,7 +165,7 @@ export function switchBranch<C extends Conversation>(
  */
 export function getAncestorsForRegeneration<T extends Message>(
   allMessages: T[],
-  targetAssistantMessageId: string
+  targetAssistantMessageId: string,
 ): { ancestors: T[]; parentUserMessage?: T } {
   const normalized = ensureMessageTree(allMessages)
   const byId = new Map<string, T>()
@@ -211,10 +201,7 @@ export function getAncestorsForRegeneration<T extends Message>(
  * If the deleted node had sibling versions, switches the active branch to an adjacent sibling.
  * If it had no siblings, falls back to the deepest leaf of its parent node.
  */
-export function deleteMessageNode<C extends Conversation>(
-  conversation: C,
-  targetMessageId: string
-): C {
+export function deleteMessageNode<C extends Conversation>(conversation: C, targetMessageId: string): C {
   const normalized = ensureMessageTree(conversation.messages)
   const byId = new Map<string, (typeof normalized)[0]>()
   const childrenMap = new Map<string, string[]>()
@@ -262,9 +249,7 @@ export function deleteMessageNode<C extends Conversation>(
 
   if (!newCurrentLeafId || toDelete.has(newCurrentLeafId)) {
     const targetParent = target.parentMessageId ?? null
-    const allSiblings = normalized.filter(
-      (m) => (m.parentMessageId ?? null) === targetParent && m.role === target.role
-    )
+    const allSiblings = normalized.filter((m) => (m.parentMessageId ?? null) === targetParent && m.role === target.role)
     const targetIndex = allSiblings.findIndex((m) => m.id === targetMessageId)
     const remainingSiblings = allSiblings.filter((m) => !toDelete.has(m.id))
 

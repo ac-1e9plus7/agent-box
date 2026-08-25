@@ -9,6 +9,7 @@
   },
   "include": [
     "electron.vite.config.ts",
+    "vitest.config.ts",
     "src/electron/**/*.ts",
     "src/renderer/src/**/*.ts",
     "src/renderer/src/**/*.tsx",

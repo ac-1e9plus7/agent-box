@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   deleteMessageNode,
   ensureMessageTree,
-  findDeepestLeaf,
   getActiveMessageChain,
   getAncestorsForRegeneration,
   getMessageSiblings,
@@ -32,9 +31,27 @@ describe('Conversation Tree and Multi-Version Branching', () => {
   it('correctly computes message siblings and pagination count', () => {
     const messages: Message[] = [
       { id: 'u1', role: 'user', content: 'Explain AI', parentMessageId: null, createdAt: '2026-01-01T00:00:00Z' },
-      { id: 'a1_v1', role: 'assistant', content: 'Version 1', parentMessageId: 'u1', createdAt: '2026-01-01T00:01:00Z' },
-      { id: 'a1_v2', role: 'assistant', content: 'Version 2', parentMessageId: 'u1', createdAt: '2026-01-01T00:02:00Z' },
-      { id: 'a1_v3', role: 'assistant', content: 'Version 3', parentMessageId: 'u1', createdAt: '2026-01-01T00:03:00Z' },
+      {
+        id: 'a1_v1',
+        role: 'assistant',
+        content: 'Version 1',
+        parentMessageId: 'u1',
+        createdAt: '2026-01-01T00:01:00Z',
+      },
+      {
+        id: 'a1_v2',
+        role: 'assistant',
+        content: 'Version 2',
+        parentMessageId: 'u1',
+        createdAt: '2026-01-01T00:02:00Z',
+      },
+      {
+        id: 'a1_v3',
+        role: 'assistant',
+        content: 'Version 3',
+        parentMessageId: 'u1',
+        createdAt: '2026-01-01T00:03:00Z',
+      },
     ]
 
     const info1 = getMessageSiblings(messages, 'a1_v1')
@@ -78,9 +95,21 @@ describe('Conversation Tree and Multi-Version Branching', () => {
       modelId: 'test-model',
       messages: [
         { id: 'u1', role: 'user', content: 'Tell me a joke', parentMessageId: null, createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'a1_v1', role: 'assistant', content: 'Why did the chicken cross the road?', parentMessageId: 'u1', createdAt: '2026-01-01T00:01:00Z' },
+        {
+          id: 'a1_v1',
+          role: 'assistant',
+          content: 'Why did the chicken cross the road?',
+          parentMessageId: 'u1',
+          createdAt: '2026-01-01T00:01:00Z',
+        },
         { id: 'u2', role: 'user', content: 'Explain it', parentMessageId: 'a1_v1', createdAt: '2026-01-01T00:02:00Z' },
-        { id: 'a2_v1', role: 'assistant', content: 'To get to the other side.', parentMessageId: 'u2', createdAt: '2026-01-01T00:03:00Z' },
+        {
+          id: 'a2_v1',
+          role: 'assistant',
+          content: 'To get to the other side.',
+          parentMessageId: 'u2',
+          createdAt: '2026-01-01T00:03:00Z',
+        },
       ],
       currentLeafId: 'a2_v1',
       createdAt: '2026-01-01T00:00:00Z',
@@ -169,7 +198,12 @@ describe('Conversation Tree and Multi-Version Branching', () => {
       modelId: 'legacy-model',
       messages: [
         { id: 'old_u1', role: 'user', content: 'What is Python?', createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'old_a1', role: 'assistant', content: 'Python is a programming language.', createdAt: '2026-01-01T00:01:00Z' },
+        {
+          id: 'old_a1',
+          role: 'assistant',
+          content: 'Python is a programming language.',
+          createdAt: '2026-01-01T00:01:00Z',
+        },
         { id: 'old_u2', role: 'user', content: 'Give an example', createdAt: '2026-01-01T00:02:00Z' },
         { id: 'old_a2', role: 'assistant', content: 'print("hello")', createdAt: '2026-01-01T00:03:00Z' },
       ],
@@ -224,10 +258,22 @@ describe('Conversation Tree and Multi-Version Branching', () => {
       modelId: 'test-model',
       messages: [
         { id: 'u1', role: 'user', content: 'Start', parentMessageId: null, createdAt: '2026-01-01T00:00:00Z' },
-        { id: 'a1_v1', role: 'assistant', content: 'Answer V1', parentMessageId: 'u1', createdAt: '2026-01-01T00:01:00Z' },
+        {
+          id: 'a1_v1',
+          role: 'assistant',
+          content: 'Answer V1',
+          parentMessageId: 'u1',
+          createdAt: '2026-01-01T00:01:00Z',
+        },
         { id: 'u2', role: 'user', content: 'Follow up 1', parentMessageId: 'a1_v1', createdAt: '2026-01-01T00:02:00Z' },
         { id: 'a2', role: 'assistant', content: 'Answer 2', parentMessageId: 'u2', createdAt: '2026-01-01T00:03:00Z' },
-        { id: 'a1_v2', role: 'assistant', content: 'Answer V2', parentMessageId: 'u1', createdAt: '2026-01-01T00:04:00Z' },
+        {
+          id: 'a1_v2',
+          role: 'assistant',
+          content: 'Answer V2',
+          parentMessageId: 'u1',
+          createdAt: '2026-01-01T00:04:00Z',
+        },
         { id: 'u3', role: 'user', content: 'Follow up 2', parentMessageId: 'a1_v2', createdAt: '2026-01-01T00:05:00Z' },
         { id: 'a3', role: 'assistant', content: 'Answer 3', parentMessageId: 'u3', createdAt: '2026-01-01T00:06:00Z' },
       ],

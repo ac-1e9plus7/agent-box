@@ -209,9 +209,7 @@ icon: "code"
     })
 
     it('prevents deleting built-in skills', async () => {
-      await expect(repository.removeSkill('code-interpreter')).rejects.toThrow(
-        '系统预置技能不可删除',
-      )
+      await expect(repository.removeSkill('code-interpreter')).rejects.toThrow('系统预置技能不可删除')
     })
 
     it('allows deleting custom skills', async () => {

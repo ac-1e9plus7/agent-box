@@ -9,10 +9,13 @@ import type {
   ReasoningEffort,
   WebSearchMode,
 } from '../../shared/types'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 export class RequestAdapterError extends Error {
-  constructor(message: string, readonly code: string) {
+  constructor(
+    message: string,
+    readonly code: string,
+  ) {
     super(message)
     this.name = 'RequestAdapterError'
   }
@@ -28,8 +31,7 @@ export function buildRequestBody(
   mcpTools?: McpToolDefinition[],
 ): Record<string, unknown> {
   const effort = request.reasoningEffort ?? model.defaultReasoningEffort
-  const routing =
-    provider.kind === 'openrouter' ? toWireRouting(model.providerRouting) : undefined
+  const routing = provider.kind === 'openrouter' ? toWireRouting(model.providerRouting) : undefined
   const webSearchMode = resolveWebSearchMode(request, model)
 
   if (format === 'openai-chat-completions') {
@@ -59,12 +61,8 @@ export function buildRequestBody(
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (routing) body.provider = routing
     if (request.reasoningEnabled) {
-      body.reasoning =
-        provider.kind === 'openrouter'
-          ? { enabled: true, effort, exclude: false }
-          : { effort }
-    }
-    else if (provider.kind === 'openrouter' || provider.kind === 'cliproxy') {
+      body.reasoning = provider.kind === 'openrouter' ? { enabled: true, effort, exclude: false } : { effort }
+    } else if (provider.kind === 'openrouter' || provider.kind === 'cliproxy') {
       body.reasoning = { effort: 'none' }
     }
     applyResponsesTools(body, provider.kind, webSearchMode, mcpTools)
@@ -201,42 +199,40 @@ export function toResponsesInput(messages: Message[]): {
       }
       continue
     }
-      const contentList: Array<Record<string, unknown>> = []
-      if (message.content) {
-        contentList.push({ type: 'input_text', text: message.content })
-      }
-      if (message.attachments?.length) {
-        for (const att of message.attachments) {
-          if (att.type === 'image') {
-            contentList.push({ type: 'input_image', image_url: att.data })
-          } else if (att.type === 'text') {
-            contentList.push({
-              type: 'input_text',
-              text: `\n[Attached File: ${att.name}]\n\`\`\`\n${att.data}\n\`\`\``,
-            })
-          } else if (att.type === 'document') {
-            contentList.push({
-              type: 'input_text',
-              text: `\n[Attached Document: ${att.name}]`,
-            })
-          }
+    const contentList: Array<Record<string, unknown>> = []
+    if (message.content) {
+      contentList.push({ type: 'input_text', text: message.content })
+    }
+    if (message.attachments?.length) {
+      for (const att of message.attachments) {
+        if (att.type === 'image') {
+          contentList.push({ type: 'input_image', image_url: att.data })
+        } else if (att.type === 'text') {
+          contentList.push({
+            type: 'input_text',
+            text: `\n[Attached File: ${att.name}]\n\`\`\`\n${att.data}\n\`\`\``,
+          })
+        } else if (att.type === 'document') {
+          contentList.push({
+            type: 'input_text',
+            text: `\n[Attached Document: ${att.name}]`,
+          })
         }
       }
-      if (contentList.length === 0) {
-        contentList.push({ type: 'input_text', text: message.content })
-      }
-      input.push({
-        type: 'message',
-        role: 'user',
-        content: contentList,
-      })
+    }
+    if (contentList.length === 0) {
+      contentList.push({ type: 'input_text', text: message.content })
+    }
+    input.push({
+      type: 'message',
+      role: 'user',
+      content: contentList,
+    })
   }
   return { instructions, input }
 }
 
-export function toWireRouting(
-  routing?: ProviderRouting,
-): Record<string, unknown> | undefined {
+export function toWireRouting(routing?: ProviderRouting): Record<string, unknown> | undefined {
   if (!routing) return undefined
   return removeUndefined({
     order: routing.order,
@@ -256,9 +252,7 @@ function applyOpenAiReasoning(
   effort: Exclude<ReasoningEffort, 'none'>,
 ): void {
   if (providerKind === 'openrouter') {
-    body.reasoning = enabled
-      ? { enabled: true, effort, exclude: false }
-      : { effort: 'none' }
+    body.reasoning = enabled ? { enabled: true, effort, exclude: false } : { effort: 'none' }
   } else if (providerKind === 'cliproxy') {
     body.reasoning_effort = enabled ? effort : 'none'
   } else if (enabled) {
@@ -276,7 +270,7 @@ function applyOpenAiTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        t("Web search is available only with OpenRouter connections. Turn it off or switch providers."),
+        t('Web search is available only with OpenRouter connections. Turn it off or switch providers.'),
         'web_search_not_supported',
       )
     }
@@ -318,7 +312,7 @@ function applyResponsesTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        t("Web search is available only with OpenRouter connections. Turn it off or switch providers."),
+        t('Web search is available only with OpenRouter connections. Turn it off or switch providers.'),
         'web_search_not_supported',
       )
     }
@@ -358,7 +352,7 @@ function applyAnthropicTools(
   if (webSearchMode !== 'off') {
     if (providerKind !== 'openrouter') {
       throw new RequestAdapterError(
-        t("Web search is available only with OpenRouter connections. Turn it off or switch providers."),
+        t('Web search is available only with OpenRouter connections. Turn it off or switch providers.'),
         'web_search_not_supported',
       )
     }
@@ -387,13 +381,10 @@ function applyAnthropicTools(
   }
 }
 
-function reasoningBudget(
-  effort: Exclude<ReasoningEffort, 'none'>,
-  maxOutputTokens: number,
-): number {
+function reasoningBudget(effort: Exclude<ReasoningEffort, 'none'>, maxOutputTokens: number): number {
   if (maxOutputTokens <= 1_024) {
     throw new RequestAdapterError(
-      t("Manual extended thinking requires maximum output tokens greater than 1,024."),
+      t('Manual extended thinking requires maximum output tokens greater than 1,024.'),
       'invalid_reasoning_budget',
     )
   }
@@ -405,10 +396,7 @@ function reasoningBudget(
     xhigh: 0.95,
     max: 0.95,
   }
-  return Math.min(
-    maxOutputTokens - 1,
-    Math.max(1_024, Math.floor(maxOutputTokens * ratios[effort])),
-  )
+  return Math.min(maxOutputTokens - 1, Math.max(1_024, Math.floor(maxOutputTokens * ratios[effort])))
 }
 
 export function toAnthropicContentBlocks(message: Message): string | Array<Record<string, unknown>> {
@@ -505,12 +493,10 @@ export function toAnthropicMessages(messages: Message[]): {
       if (typeof previous.content === 'string' && typeof formattedContent === 'string') {
         previous.content += `\n\n${formattedContent}`
       } else {
-        const prevBlocks: Array<Record<string, unknown>> = typeof previous.content === 'string'
-          ? [{ type: 'text', text: previous.content }]
-          : previous.content
-        const nextBlocks: Array<Record<string, unknown>> = typeof formattedContent === 'string'
-          ? [{ type: 'text', text: formattedContent }]
-          : formattedContent
+        const prevBlocks: Array<Record<string, unknown>> =
+          typeof previous.content === 'string' ? [{ type: 'text', text: previous.content }] : previous.content
+        const nextBlocks: Array<Record<string, unknown>> =
+          typeof formattedContent === 'string' ? [{ type: 'text', text: formattedContent }] : formattedContent
         previous.content = [...prevBlocks, ...nextBlocks]
       }
     } else {
@@ -664,7 +650,5 @@ function toAnthropicToolResultContent(result?: AgentTurnResult): string | Array<
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as Partial<T>
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
 }

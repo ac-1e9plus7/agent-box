@@ -1,6 +1,10 @@
 import { spawn } from 'node:child_process'
 import { basename } from 'node:path'
-import type { DeveloperRuntimeSettings, IntegratedTerminalShellConfig, TerminalShellTestResult } from '../../shared/types'
+import type {
+  DeveloperRuntimeSettings,
+  IntegratedTerminalShellConfig,
+  TerminalShellTestResult,
+} from '../../shared/types'
 import { buildDeveloperEnvironment } from './runtime-environments'
 import { getLanguage, t } from '../../shared/i18n'
 
@@ -28,21 +32,29 @@ const MAX_TIMEOUT_MS = 60_000
 let automaticShellPromise: Promise<ResolvedTerminalShell | undefined> | undefined
 
 export function terminalTruncationSuffix(truncated: boolean): string {
-  return truncated ? `\n${t("[Output truncated]")}` : ''
+  return truncated ? `\n${t('[Output truncated]')}` : ''
 }
 
-export function automaticShellCandidates(
-  platform: NodeJS.Platform,
-  env: NodeJS.ProcessEnv,
-): ResolvedTerminalShell[] {
+export function automaticShellCandidates(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): ResolvedTerminalShell[] {
   const candidates: ResolvedTerminalShell[] = []
   if (platform === 'win32') {
     candidates.push(
-      { executable: 'pwsh.exe', launchArgs: ['-NoLogo', '-NoProfile'], kind: 'powershell', displayName: 'PowerShell 7' },
-      { executable: 'powershell.exe', launchArgs: ['-NoLogo', '-NoProfile'], kind: 'powershell', displayName: 'Windows PowerShell' },
+      {
+        executable: 'pwsh.exe',
+        launchArgs: ['-NoLogo', '-NoProfile'],
+        kind: 'powershell',
+        displayName: 'PowerShell 7',
+      },
+      {
+        executable: 'powershell.exe',
+        launchArgs: ['-NoLogo', '-NoProfile'],
+        kind: 'powershell',
+        displayName: 'Windows PowerShell',
+      },
     )
     const comSpec = env.ComSpec || env.COMSPEC
-    if (comSpec) candidates.push({ executable: comSpec, launchArgs: ['/d', '/q'], kind: 'cmd', displayName: 'Command Prompt' })
+    if (comSpec)
+      candidates.push({ executable: comSpec, launchArgs: ['/d', '/q'], kind: 'cmd', displayName: 'Command Prompt' })
     candidates.push({ executable: 'cmd.exe', launchArgs: ['/d', '/q'], kind: 'cmd', displayName: 'Command Prompt' })
     return uniqueCandidates(candidates, platform)
   }
@@ -82,7 +94,7 @@ export async function resolveIntegratedTerminalShell(
 ): Promise<ResolvedTerminalShell | undefined> {
   if (config.mode === 'custom') {
     const shell = shellFromExecutable(config.executable.trim(), config.args, 'Custom shell')
-    return await probeShell(shell) ? shell : undefined
+    return (await probeShell(shell)) ? shell : undefined
   }
   automaticShellPromise ??= (async () => {
     for (const shell of automaticShellCandidates(process.platform, process.env)) {
@@ -96,24 +108,41 @@ export async function resolveIntegratedTerminalShell(
 export async function executeTerminalCommand(
   config: IntegratedTerminalShellConfig,
   command: string,
-  options: { cwd?: string; timeoutMs?: number; signal?: AbortSignal; developerRuntimes?: DeveloperRuntimeSettings } = {},
+  options: {
+    cwd?: string
+    timeoutMs?: number
+    signal?: AbortSignal
+    developerRuntimes?: DeveloperRuntimeSettings
+  } = {},
 ): Promise<TerminalCommandResult> {
   const shell = await resolveIntegratedTerminalShell(config)
-  const fallbackShell = config.mode === 'custom'
-    ? shellFromExecutable(config.executable.trim() || t("(not configured)"), config.args, 'Custom shell')
-    : { executable: t("(not found)"), launchArgs: [], kind: 'custom' as const, displayName: 'Auto shell' }
+  const fallbackShell =
+    config.mode === 'custom'
+      ? shellFromExecutable(config.executable.trim() || t('(not configured)'), config.args, 'Custom shell')
+      : { executable: t('(not found)'), launchArgs: [], kind: 'custom' as const, displayName: 'Auto shell' }
   if (!shell) {
     return {
-      result: config.mode === 'custom'
-        ? t("Unable to start specified shell: {value0}. Please check the executable path and startup parameters.", { value0: config.executable || t('(empty)') })
-        : t("No usable integrated terminal shell was found. On Windows, install PowerShell or make sure cmd.exe is available. On macOS/Linux, configure the SHELL environment variable or install bash, zsh, or sh."),
+      result:
+        config.mode === 'custom'
+          ? t('Unable to start specified shell: {value0}. Please check the executable path and startup parameters.', {
+              value0: config.executable || t('(empty)'),
+            })
+          : t(
+              'No usable integrated terminal shell was found. On Windows, install PowerShell or make sure cmd.exe is available. On macOS/Linux, configure the SHELL environment variable or install bash, zsh, or sh.',
+            ),
       isError: true,
       shell: fallbackShell,
     }
   }
-  if (!command.trim()) return { result: t("Terminal command cannot be empty."), isError: true, shell }
+  if (!command.trim()) return { result: t('Terminal command cannot be empty.'), isError: true, shell }
   if (command.length > MAX_COMMAND_CHARACTERS) {
-    return { result: t("Terminal command exceeds {value0} character limit.", { value0: MAX_COMMAND_CHARACTERS.toLocaleString(getLanguage()) }), isError: true, shell }
+    return {
+      result: t('Terminal command exceeds {value0} character limit.', {
+        value0: MAX_COMMAND_CHARACTERS.toLocaleString(getLanguage()),
+      }),
+      isError: true,
+      shell,
+    }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, options.timeoutMs ?? 20_000))
   const runtimeSettings = options.developerRuntimes
@@ -134,9 +163,10 @@ export async function testIntegratedTerminalShell(
       ok: false,
       platform: process.platform,
       latencyMs: Math.round(performance.now() - startedAt),
-      message: config.mode === 'custom'
-        ? t("Unable to start specified shell: {value0}", { value0: config.executable || t('(empty)') })
-        : t("No usable shell was detected on this operating system."),
+      message:
+        config.mode === 'custom'
+          ? t('Unable to start specified shell: {value0}', { value0: config.executable || t('(empty)') })
+          : t('No usable shell was detected on this operating system.'),
     }
   }
   return {
@@ -145,18 +175,26 @@ export async function testIntegratedTerminalShell(
     displayName: shell.displayName,
     executable: shell.executable,
     latencyMs: Math.round(performance.now() - startedAt),
-    message: t("Connected {value0} ({value1})", { value0: shell.displayName, value1: shell.executable }),
+    message: t('Connected {value0} ({value1})', { value0: shell.displayName, value1: shell.executable }),
   }
 }
 
 function shellFromExecutable(executable: string, args: string[], fallbackName: string): ResolvedTerminalShell {
-  const fileName = basename(executable).toLowerCase().replace(/\.exe$/, '')
+  const fileName = basename(executable)
+    .toLowerCase()
+    .replace(/\.exe$/, '')
   if (fileName === 'pwsh') return { executable, launchArgs: [...args], kind: 'powershell', displayName: 'PowerShell 7' }
-  if (fileName === 'powershell') return { executable, launchArgs: [...args], kind: 'powershell', displayName: 'Windows PowerShell' }
+  if (fileName === 'powershell')
+    return { executable, launchArgs: [...args], kind: 'powershell', displayName: 'Windows PowerShell' }
   if (fileName === 'cmd') return { executable, launchArgs: [...args], kind: 'cmd', displayName: 'Command Prompt' }
   if (fileName === 'fish') return { executable, launchArgs: [...args], kind: 'fish', displayName: 'Fish' }
   if (['sh', 'bash', 'zsh', 'dash', 'ksh'].includes(fileName)) {
-    return { executable, launchArgs: [...args], kind: 'posix', displayName: fileName === 'zsh' ? 'Z shell' : fileName === 'bash' ? 'Bash' : 'POSIX shell' }
+    return {
+      executable,
+      launchArgs: [...args],
+      kind: 'posix',
+      displayName: fileName === 'zsh' ? 'Z shell' : fileName === 'bash' ? 'Bash' : 'POSIX shell',
+    }
   }
   return { executable, launchArgs: [...args], kind: 'custom', displayName: fallbackName }
 }
@@ -214,12 +252,16 @@ function runShellProcess(
     }
     const onAbort = () => {
       child.kill()
-      finish({ result: t("Terminal command canceled."), isError: true })
+      finish({ result: t('Terminal command canceled.'), isError: true })
     }
     const timer = setTimeout(() => {
       child.kill()
       finish({
-        result: t("The terminal command exceeded the {value0}-second timeout and was terminated.\n{value1}{value2}", { value0: (timeoutMs / 1_000).toFixed(1), value1: output, value2: terminalTruncationSuffix(truncated) }).trim(),
+        result: t('The terminal command exceeded the {value0}-second timeout and was terminated.\n{value1}{value2}', {
+          value0: (timeoutMs / 1_000).toFixed(1),
+          value1: output,
+          value2: terminalTruncationSuffix(truncated),
+        }).trim(),
         isError: true,
         truncated,
       })
@@ -227,13 +269,15 @@ function runShellProcess(
     child.stdout?.on('data', append)
     child.stderr?.on('data', append)
     child.once('error', (error) => finish({ result: error.message, isError: true }))
-    child.once('close', (code) => finish({
-      result: output.trim()
-        ? `${output.trim()}${terminalTruncationSuffix(truncated)}`
-        : t("(Shell exited with code {value0}; no output)", { value0: code ?? 'unknown' }),
-      isError: code !== 0,
-      truncated,
-    }))
+    child.once('close', (code) =>
+      finish({
+        result: output.trim()
+          ? `${output.trim()}${terminalTruncationSuffix(truncated)}`
+          : t('(Shell exited with code {value0}; no output)', { value0: code ?? 'unknown' }),
+        isError: code !== 0,
+        truncated,
+      }),
+    )
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
   })
@@ -241,7 +285,5 @@ function runShellProcess(
 
 function sanitizedTerminalEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const sensitiveName = /(token|secret|password|passwd|api[_-]?key|authorization|credential|cookie|private[_-]?key)/i
-  return Object.fromEntries(
-    Object.entries(env).filter(([name]) => !sensitiveName.test(name)),
-  )
+  return Object.fromEntries(Object.entries(env).filter(([name]) => !sensitiveName.test(name)))
 }

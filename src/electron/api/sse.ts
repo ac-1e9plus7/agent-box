@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 export interface SseMessage {
   event?: string
@@ -8,9 +8,7 @@ export interface SseMessage {
 const MAX_SSE_EVENT_CHARACTERS = 5 * 1024 * 1024
 
 /** Incrementally parses an SSE response without assuming chunk boundaries. */
-export async function* parseSse(
-  stream: ReadableStream<Uint8Array>,
-): AsyncGenerator<SseMessage> {
+export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenerator<SseMessage> {
   const reader = stream.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
@@ -53,7 +51,7 @@ export async function* parseSse(
           if (field === 'data') {
             dataCharacters += fieldValue.length
             if (dataCharacters > MAX_SSE_EVENT_CHARACTERS) {
-              throw new Error(t("A streaming event returned by the provider exceeds the size limit."))
+              throw new Error(t('A streaming event returned by the provider exceeds the size limit.'))
             }
             dataLines.push(fieldValue)
           }
@@ -63,7 +61,7 @@ export async function* parseSse(
       }
 
       if (buffer.length > MAX_SSE_EVENT_CHARACTERS) {
-        throw new Error(t("A streaming data line returned by the provider exceeds the size limit."))
+        throw new Error(t('A streaming data line returned by the provider exceeds the size limit.'))
       }
 
       if (done) break
@@ -75,7 +73,7 @@ export async function* parseSse(
         const fieldValue = line.slice(5).trimStart()
         dataCharacters += fieldValue.length
         if (dataCharacters > MAX_SSE_EVENT_CHARACTERS) {
-          throw new Error(t("A streaming event returned by the provider exceeds the size limit."))
+          throw new Error(t('A streaming event returned by the provider exceeds the size limit.'))
         }
         dataLines.push(fieldValue)
       }

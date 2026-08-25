@@ -5,11 +5,7 @@ import {
   parseResponsesEvent,
   parseUsage,
 } from '../src/electron/api/protocol-adapters'
-import {
-  buildRequestBody,
-  RequestAdapterError,
-  resolveWebSearchMode,
-} from '../src/electron/api/request-adapters'
+import { buildRequestBody, RequestAdapterError, resolveWebSearchMode } from '../src/electron/api/request-adapters'
 import type { ChatRequest, Message, ModelConfig } from '../src/shared/types'
 
 const timestamp = '2026-01-01T00:00:00.000Z'
@@ -202,10 +198,7 @@ describe('OpenAI Chat Completions adapter', () => {
         end_index: 18,
       },
     }
-    expect(
-      parseChatCompletionEvent({ choices: [{ delta: { annotations: [annotation] } }] })
-        .citations,
-    ).toEqual([
+    expect(parseChatCompletionEvent({ choices: [{ delta: { annotations: [annotation] } }] }).citations).toEqual([
       {
         url: 'https://example.com/search-result',
         title: 'Search result',
@@ -214,10 +207,9 @@ describe('OpenAI Chat Completions adapter', () => {
         endIndex: 18,
       },
     ])
-    expect(
-      parseChatCompletionEvent({ choices: [{ message: { annotations: [annotation] } }] })
-        .citations,
-    ).toHaveLength(1)
+    expect(parseChatCompletionEvent({ choices: [{ message: { annotations: [annotation] } }] }).citations).toHaveLength(
+      1,
+    )
   })
 
   it('parses billed web-search requests from server-tool usage', () => {
@@ -251,15 +243,12 @@ describe('OpenAI Responses adapter', () => {
     expect(parseResponsesEvent({ type, delta }).text).toBe(delta)
   })
 
-  it.each([
-    'response.reasoning.delta',
-    'response.reasoning_summary_text.delta',
-    'response.reasoning_text.delta',
-  ])('parses %s reasoning events', (type) => {
-    expect(parseResponsesEvent({ type, delta: { text: 'thought' } }).reasoning).toBe(
-      'thought',
-    )
-  })
+  it.each(['response.reasoning.delta', 'response.reasoning_summary_text.delta', 'response.reasoning_text.delta'])(
+    'parses %s reasoning events',
+    (type) => {
+      expect(parseResponsesEvent({ type, delta: { text: 'thought' } }).reasoning).toBe('thought')
+    },
+  )
 
   it('parses Gemini reasoning via reasoning_summary_text and reasoning_text events', () => {
     // Gemini through OpenRouter Responses format streams thinking as summary
@@ -287,9 +276,7 @@ describe('OpenAI Responses adapter', () => {
       }).reasoning,
     ).toBe('part thought')
     // A terminal reasoning.done without a text delta must not emit reasoning.
-    expect(
-      parseResponsesEvent({ type: 'response.reasoning.done', delta: {} }).reasoning,
-    ).toBeUndefined()
+    expect(parseResponsesEvent({ type: 'response.reasoning.done', delta: {} }).reasoning).toBeUndefined()
   })
 
   it('parses response.done and response.completed usage', () => {
@@ -501,14 +488,7 @@ describe('Anthropic Messages adapter', () => {
 describe('request body adapters', () => {
   it('makes OpenRouter reasoning visible for Chat and Responses requests', () => {
     for (const format of ['openai-chat-completions', 'openai-responses'] as const) {
-      const body = buildRequestBody(
-        format,
-        { kind: 'openrouter' },
-        model,
-        messages,
-        request,
-        4_096,
-      )
+      const body = buildRequestBody(format, { kind: 'openrouter' }, model, messages, request, 4_096)
       expect(body.reasoning).toEqual({
         enabled: true,
         effort: 'minimal',
@@ -528,28 +508,12 @@ describe('request body adapters', () => {
   })
 
   it('serializes every message supplied by the context policy', () => {
-    const body = buildRequestBody(
-      'openai-chat-completions',
-      { kind: 'openrouter' },
-      model,
-      messages,
-      request,
-      4_096,
-    )
-    expect(body.messages).toEqual(
-      messages.map(({ role, content }) => ({ role, content })),
-    )
+    const body = buildRequestBody('openai-chat-completions', { kind: 'openrouter' }, model, messages, request, 4_096)
+    expect(body.messages).toEqual(messages.map(({ role, content }) => ({ role, content })))
   })
 
   it('replays Responses assistant messages with the required output-item shape', () => {
-    const body = buildRequestBody(
-      'openai-responses',
-      { kind: 'openrouter' },
-      model,
-      messages,
-      request,
-      4_096,
-    )
+    const body = buildRequestBody('openai-responses', { kind: 'openrouter' }, model, messages, request, 4_096)
     expect(body.instructions).toBe('Be concise.')
     expect(body.input).toEqual([
       {
@@ -655,11 +619,7 @@ describe('request body adapters', () => {
         max_total_results: 8,
       },
     }
-    for (const format of [
-      'openai-chat-completions',
-      'openai-responses',
-      'anthropic-messages',
-    ] as const) {
+    for (const format of ['openai-chat-completions', 'openai-responses', 'anthropic-messages'] as const) {
       const body = buildRequestBody(
         format,
         { kind: 'openrouter' },
@@ -673,37 +633,24 @@ describe('request body adapters', () => {
     }
   })
 
-  it.each([
-    'openai-chat-completions',
-    'openai-responses',
-    'anthropic-messages',
-  ] as const)('rejects %s web search on a non-OpenRouter provider', (format) => {
-    try {
-      buildRequestBody(
-        format,
-        { kind: 'custom' },
-        model,
-        messages,
-        { ...request, webSearchMode: 'auto' },
-        4_096,
-      )
-      throw new Error('Expected adapter rejection')
-    } catch (error) {
-      expect(error).toBeInstanceOf(RequestAdapterError)
-      expect(error).toMatchObject({ code: 'web_search_not_supported' })
-      expect((error as Error).message).toContain('OpenRouter')
-    }
-  })
+  it.each(['openai-chat-completions', 'openai-responses', 'anthropic-messages'] as const)(
+    'rejects %s web search on a non-OpenRouter provider',
+    (format) => {
+      try {
+        buildRequestBody(format, { kind: 'custom' }, model, messages, { ...request, webSearchMode: 'auto' }, 4_096)
+        throw new Error('Expected adapter rejection')
+      } catch (error) {
+        expect(error).toBeInstanceOf(RequestAdapterError)
+        expect(error).toMatchObject({ code: 'web_search_not_supported' })
+        expect((error as Error).message).toContain('OpenRouter')
+      }
+    },
+  )
 
   it('defaults old models and requests to web search off', () => {
     expect(resolveWebSearchMode({}, {})).toBe('off')
     expect(resolveWebSearchMode({}, { defaultWebSearchMode: 'auto' })).toBe('auto')
-    expect(
-      resolveWebSearchMode(
-        { webSearchMode: 'off' },
-        { defaultWebSearchMode: 'native' },
-      ),
-    ).toBe('off')
+    expect(resolveWebSearchMode({ webSearchMode: 'off' }, { defaultWebSearchMode: 'native' })).toBe('off')
   })
 
   it('encodes multimodal attachments for OpenAI Chat Completions', () => {

@@ -29,11 +29,11 @@ Model Context Protocol（MCP）是开放的工具集成协议。AgentBox 使用�
 
 配置值与实际行为如下：
 
-| 配置值 | SDK Transport | 行为 |
-| --- | --- | --- |
-| `stdio` | `StdioClientTransport` | 启动本地命令，通过 stdin/stdout 交换 JSON-RPC。 |
-| `http` | `StreamableHTTPClientTransport` | 优先使用当前的 Streamable HTTP；连接失败时自动尝试旧式 HTTP+SSE。 |
-| `sse` | `SSEClientTransport` | 显式使用旧式 HTTP+SSE，不先尝试 Streamable HTTP。 |
+| 配置值  | SDK Transport                   | 行为                                                              |
+| ------- | ------------------------------- | ----------------------------------------------------------------- |
+| `stdio` | `StdioClientTransport`          | 启动本地命令，通过 stdin/stdout 交换 JSON-RPC。                   |
+| `http`  | `StreamableHTTPClientTransport` | 优先使用当前的 Streamable HTTP；连接失败时自动尝试旧式 HTTP+SSE。 |
+| `sse`   | `SSEClientTransport`            | 显式使用旧式 HTTP+SSE，不先尝试 Streamable HTTP。                 |
 
 - Stdio 子进程使用 SDK 的默认安全环境变量集合，再叠加该 MCP Server 的自定义环境变量；单条缓冲消息上限为 10 MiB。
 - Streamable HTTP 配置了有限重连（初始 500 ms、最大 10 s、最多 3 次），会话 ID、协议版本头和 SSE 数据流由 SDK 处理。
@@ -99,11 +99,11 @@ sequenceDiagram
 
 ### 审批模式
 
-| 设置 | 实际行为 |
-| --- | --- |
+| 设置                              | 实际行为                                                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | **智能确认（`sensitive`，默认）** | 只有同时声明 `readOnlyHint: true`、`destructiveHint: false`、`openWorldHint: false` 的工具可自动执行；其余工具需要审批。 |
-| **每次确认（`always`）** | 除只加载本地指令的 `agentbox_load_skill` 外，本轮所有代码、终端、工作区和 MCP 工具调用都需要审批。 |
-| **Full Access（`full-access`）** | 跳过代码运行器、终端、工作区文件和外部 MCP 工具的审批。它不会放宽路径、Schema、超时或结果大小校验。 |
+| **每次确认（`always`）**          | 除只加载本地指令的 `agentbox_load_skill` 外，本轮所有代码、终端、工作区和 MCP 工具调用都需要审批。                       |
+| **Full Access（`full-access`）**  | 跳过代码运行器、终端、工作区文件和外部 MCP 工具的审批。它不会放宽路径、Schema、超时或结果大小校验。                      |
 
 内置工具还有以下固定规则：
 

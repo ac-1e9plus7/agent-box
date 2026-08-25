@@ -1,5 +1,5 @@
 import type { Message } from '../../shared/types'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 /** Maximum length for a generated or manual conversation title. */
 export const MAX_TITLE_LENGTH = 100
@@ -10,18 +10,22 @@ export const MAX_TITLE_LENGTH = 100
  * the raw text can be cleaned into a displayable title.
  */
 export const TITLE_SYSTEM_PROMPT =
-  t("You generate concise conversation titles from user messages. Keep each title under 12 words.") +
-  t("Output only the title itself, without quotes, explanations, punctuation prefixes, or line breaks.")
+  t('You generate concise conversation titles from user messages. Keep each title under 12 words.') +
+  t('Output only the title itself, without quotes, explanations, punctuation prefixes, or line breaks.')
 
 /**
  * The user question that will be turned into a title. Empty messages, system
  * messages, and assistant messages are skipped; the first user message wins.
  */
-export function firstUserQuestion(messages: { role: Message['role']; content: string; attachments?: Message['attachments'] }[]): string {
-  const first = messages.find((message) => message.role === 'user' && (message.content.trim() || message.attachments?.length))
+export function firstUserQuestion(
+  messages: { role: Message['role']; content: string; attachments?: Message['attachments'] }[],
+): string {
+  const first = messages.find(
+    (message) => message.role === 'user' && (message.content.trim() || message.attachments?.length),
+  )
   if (!first) return ''
   if (first.content.trim()) return first.content.trim()
-  return first.attachments?.[0]?.name ? t("[File] {value0}", { value0: first.attachments[0].name }) : ''
+  return first.attachments?.[0]?.name ? t('[File] {value0}', { value0: first.attachments[0].name }) : ''
 }
 
 /**

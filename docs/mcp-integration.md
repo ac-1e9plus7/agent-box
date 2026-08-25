@@ -29,11 +29,11 @@ The Model Context Protocol (MCP) is an open protocol for tool integration. Agent
 
 The persisted transport values map to SDK transports as follows:
 
-| Config value | SDK transport | Behavior |
-| --- | --- | --- |
-| `stdio` | `StdioClientTransport` | Starts a local command and exchanges JSON-RPC over stdin/stdout. |
-| `http` | `StreamableHTTPClientTransport` | Tries the current Streamable HTTP transport first, then automatically falls back to legacy HTTP+SSE if connection setup fails. |
-| `sse` | `SSEClientTransport` | Explicitly uses legacy HTTP+SSE without first trying Streamable HTTP. |
+| Config value | SDK transport                   | Behavior                                                                                                                       |
+| ------------ | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `stdio`      | `StdioClientTransport`          | Starts a local command and exchanges JSON-RPC over stdin/stdout.                                                               |
+| `http`       | `StreamableHTTPClientTransport` | Tries the current Streamable HTTP transport first, then automatically falls back to legacy HTTP+SSE if connection setup fails. |
+| `sse`        | `SSEClientTransport`            | Explicitly uses legacy HTTP+SSE without first trying Streamable HTTP.                                                          |
 
 - A Stdio child receives the SDK's safe default environment plus environment variables configured for that MCP server. Its per-message buffer limit is 10 MiB.
 - Streamable HTTP uses bounded reconnection settings (500 ms initial delay, 10 seconds maximum, and 3 retries). The SDK handles session IDs, protocol-version headers, and SSE streams.
@@ -99,11 +99,11 @@ Every tool call is parsed as JSON and checked against the tool's input JSON Sche
 
 ### Approval modes
 
-| Setting | Effective behavior |
-| --- | --- |
+| Setting                                                 | Effective behavior                                                                                                                                                                  |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Confirm sensitive operations (`sensitive`, default)** | A tool runs automatically only if it declares all three conditions: `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. Every other tool requires approval. |
-| **Always confirm (`always`)** | Every code, terminal, workspace, and MCP tool call requires approval, except `agentbox_load_skill`, which only loads local instructions. |
-| **Full Access (`full-access`)** | Skips approval for the code runner, terminal, workspace file tools, and external MCP tools. It does not relax path, schema, timeout, or result-size checks. |
+| **Always confirm (`always`)**                           | Every code, terminal, workspace, and MCP tool call requires approval, except `agentbox_load_skill`, which only loads local instructions.                                            |
+| **Full Access (`full-access`)**                         | Skips approval for the code runner, terminal, workspace file tools, and external MCP tools. It does not relax path, schema, timeout, or result-size checks.                         |
 
 Built-in tools add these fixed rules:
 

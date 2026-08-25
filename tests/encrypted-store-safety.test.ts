@@ -15,9 +15,7 @@ vi.mock('electron', () => ({
   },
 }))
 
-const { EncryptedStore, EncryptedStoreError } = await import(
-  '../src/electron/storage/encrypted-store'
-)
+const { EncryptedStore, EncryptedStoreError } = await import('../src/electron/storage/encrypted-store')
 
 interface TestState {
   count: number
@@ -65,9 +63,7 @@ describe('EncryptedStore safety and encryption integrity', () => {
       Object.defineProperty(process, 'platform', { value: 'linux' })
       mockStorageBackend = 'basic_text'
       const store = new EncryptedStore(tempDir, defaultState, validateState)
-      await expect(store.initialize()).rejects.toThrow(
-        '已拒绝 Electron 的 basic_text 明文后端。',
-      )
+      await expect(store.initialize()).rejects.toThrow('已拒绝 Electron 的 basic_text 明文后端。')
     } finally {
       Object.defineProperty(process, 'platform', { value: originalPlatform })
     }
@@ -76,9 +72,7 @@ describe('EncryptedStore safety and encryption integrity', () => {
   it('throws when read or mutate is called before initialize', async () => {
     const store = new EncryptedStore(tempDir, defaultState, validateState)
     expect(() => store.read()).toThrow('EncryptedStore 尚未初始化。')
-    await expect(store.mutate((draft) => draft.count++)).rejects.toThrow(
-      'EncryptedStore 尚未初始化。',
-    )
+    await expect(store.mutate((draft) => draft.count++)).rejects.toThrow('EncryptedStore 尚未初始化。')
   })
 
   it('initializes default state and persists mutations with AES-256-GCM', async () => {
@@ -124,7 +118,7 @@ describe('EncryptedStore safety and encryption integrity', () => {
 
     // Tamper with ciphertext by corrupting a byte
     const cipherBuf = Buffer.from(envelope.ciphertext, 'base64')
-    cipherBuf[0] = (cipherBuf[0]! ^ 0xff)
+    cipherBuf[0] = cipherBuf[0]! ^ 0xff
     envelope.ciphertext = cipherBuf.toString('base64')
     writeFileSync(vaultPath, JSON.stringify(envelope), 'utf8')
 

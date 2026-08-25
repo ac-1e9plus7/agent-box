@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  languageFromSystemLocale,
-  resourceBundle,
-  setLanguage,
-  t,
-  type MessageKey,
-} from '../src/shared/i18n'
+import { languageFromSystemLocale, resourceBundle, setLanguage, t, type MessageKey } from '../src/shared/i18n'
 import { DEFAULT_SKILLS, localizedDefaultSkills } from '../src/electron/storage/default-skills'
 
 afterEach(() => setLanguage('zh-CN'))
@@ -46,7 +40,8 @@ describe('application localization', () => {
     const chinese = resourceBundle('zh-CN')
     const keys = Object.keys(chinese)
     // English keys must never carry the disallowed machine-translation phrasings.
-    const globallyForbidden = /\b(?:supplier|vendor|service provider|MCP service|prompt word|contextual cropping|current site|current scene|compressed package|clear text|thinking intensity|smart search|mount all|shortcode|legal JSON|cue word|tool intelligent)\b/i
+    const globallyForbidden =
+      /\b(?:supplier|vendor|service provider|MCP service|prompt word|contextual cropping|current site|current scene|compressed package|clear text|thinking intensity|smart search|mount all|shortcode|legal JSON|cue word|tool intelligent)\b/i
     expect(keys.filter((key) => globallyForbidden.test(key))).toEqual([])
 
     expect(chinese['Close']).toBe('关闭')

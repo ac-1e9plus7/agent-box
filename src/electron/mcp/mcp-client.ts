@@ -10,7 +10,7 @@ import type {
   McpToolParameterSchema,
   McpToolResultContent,
 } from '../../shared/types'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const MAX_TOOL_LIST_PAGES = 64
 const MAX_TOOLS_PER_SERVER = 2_000
@@ -75,7 +75,7 @@ export class McpClient {
       return this.connectTransport(
         new SSEClientTransport(url, {
           requestInit,
-          eventSourceInit: { fetch: this.fetchFn as typeof fetch },
+          eventSourceInit: { fetch: this.fetchFn },
           fetch: this.fetchFn,
         }),
         'sse',
@@ -102,14 +102,18 @@ export class McpClient {
         return await this.connectTransport(
           new SSEClientTransport(url, {
             requestInit,
-            eventSourceInit: { fetch: this.fetchFn as typeof fetch },
+            eventSourceInit: { fetch: this.fetchFn },
             fetch: this.fetchFn,
           }),
           'sse',
         )
       } catch (sseError) {
         throw new Error(
-          t("MCP remote connection failed (Streamable HTTP: {value0}; legacy HTTP+SSE: {value1})", { value0: errorMessage(streamableError), value1: errorMessage(sseError) }),
+          t('MCP remote connection failed (Streamable HTTP: {value0}; legacy HTTP+SSE: {value1})', {
+            value0: errorMessage(streamableError),
+            value1: errorMessage(sseError),
+          }),
+          { cause: sseError },
         )
       }
     }
@@ -136,10 +140,11 @@ export class McpClient {
     this.client = client
     this.transport = transport
     this.connectionInfo = {
-      protocolVersion: 'protocolVersion' in transport
-        ? String((transport as { protocolVersion?: string }).protocolVersion || '') || undefined
-        : undefined,
-      capabilities: capabilities as Record<string, unknown>,
+      protocolVersion:
+        'protocolVersion' in transport
+          ? String((transport as { protocolVersion?: string }).protocolVersion || '') || undefined
+          : undefined,
+      capabilities: capabilities,
       serverInfo: { name: server?.name || this.serverConfig.name, version: server?.version },
       transport: transportKind,
     }
@@ -156,7 +161,7 @@ export class McpClient {
       const response = await client.listTools(cursor ? { cursor } : {}, { timeout: 30_000 })
       for (const raw of response.tools) {
         if (collected.length >= MAX_TOOLS_PER_SERVER) {
-          throw new Error(t("MCP server {value0} returned too many tools.", { value0: this.serverConfig.name }))
+          throw new Error(t('MCP server {value0} returned too many tools.', { value0: this.serverConfig.name }))
         }
         collected.push({
           name: raw.name,
@@ -173,7 +178,12 @@ export class McpClient {
       if (!cursor) return collected
     }
 
-    throw new Error(t("Tool pagination for MCP server {value0} exceeds the {value1}-page limit.", { value0: this.serverConfig.name, value1: MAX_TOOL_LIST_PAGES }))
+    throw new Error(
+      t('Tool pagination for MCP server {value0} exceeds the {value1}-page limit.', {
+        value0: this.serverConfig.name,
+        value1: MAX_TOOL_LIST_PAGES,
+      }),
+    )
   }
 
   async callTool(
@@ -183,11 +193,10 @@ export class McpClient {
   ): Promise<McpToolExecutionResult> {
     if (!this.client) await this.connect()
     try {
-      const response = await this.requireClient().callTool(
-        { name, arguments: args },
-        undefined,
-        { timeout: 60_000, signal },
-      )
+      const response = await this.requireClient().callTool({ name, arguments: args }, undefined, {
+        timeout: 60_000,
+        signal,
+      })
       return normalizeToolResult(response)
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error
@@ -216,7 +225,7 @@ export class McpClient {
   }
 
   private requireClient(): Client {
-    if (!this.client) throw new Error(t("The MCP client is not connected."))
+    if (!this.client) throw new Error(t('The MCP client is not connected.'))
     return this.client
   }
 }
@@ -264,9 +273,8 @@ function normalizeToolResult(value: unknown): McpToolExecutionResult {
       content.push({ type: 'text', text })
       textParts.push(text)
     } else if ((raw.type === 'image' || raw.type === 'audio') && typeof raw.mimeType === 'string') {
-      const data = typeof raw.data === 'string' && raw.data.length <= MAX_BINARY_RESULT_CHARACTERS
-        ? raw.data
-        : undefined
+      const data =
+        typeof raw.data === 'string' && raw.data.length <= MAX_BINARY_RESULT_CHARACTERS ? raw.data : undefined
       truncated ||= typeof raw.data === 'string' && !data
       content.push({ type: raw.type, data, mimeType: raw.mimeType })
       textParts.push(`[${raw.type === 'image' ? 'Image' : 'Audio'}: ${raw.mimeType}]`)
@@ -275,9 +283,10 @@ function normalizeToolResult(value: unknown): McpToolExecutionResult {
         typeof raw.resource.text === 'string' ? raw.resource.text : undefined,
         MAX_TOOL_RESULT_CHARACTERS,
       )
-      const blob = typeof raw.resource.blob === 'string' && raw.resource.blob.length <= MAX_BINARY_RESULT_CHARACTERS
-        ? raw.resource.blob
-        : undefined
+      const blob =
+        typeof raw.resource.blob === 'string' && raw.resource.blob.length <= MAX_BINARY_RESULT_CHARACTERS
+          ? raw.resource.blob
+          : undefined
       truncated ||= typeof raw.resource.blob === 'string' && !blob
       content.push({
         type: 'resource',
@@ -304,9 +313,10 @@ function normalizeToolResult(value: unknown): McpToolExecutionResult {
     : undefined
   if (structuredContent) textParts.push(JSON.stringify(structuredContent))
   const joined = textParts.join('\n')
-  const result = joined.length > MAX_TOOL_RESULT_CHARACTERS
-    ? t("{value0}\n[Results truncated]", { value0: joined.slice(0, MAX_TOOL_RESULT_CHARACTERS) })
-    : joined
+  const result =
+    joined.length > MAX_TOOL_RESULT_CHARACTERS
+      ? t('{value0}\n[Results truncated]', { value0: joined.slice(0, MAX_TOOL_RESULT_CHARACTERS) })
+      : joined
   truncated ||= result.length < joined.length
   return {
     result,

@@ -96,10 +96,10 @@ describe('Markdown rendering with LaTeX and line breaks integration', () => {
         ReactMarkdown,
         {
           rehypePlugins: [[rehypeKatex, { throwOnError: false, strict: false }]],
-          remarkPlugins: [remarkGfm, remarkBreaks, remarkMath]
+          remarkPlugins: [remarkGfm, remarkBreaks, remarkMath],
         },
-        processed
-      )
+        processed,
+      ),
     )
   }
 

@@ -4,10 +4,7 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/renderer/src/App'
-import {
-  createRendererApiMock,
-  rendererConversation,
-} from './renderer-test-fixtures'
+import { createRendererApiMock, rendererConversation } from './renderer-test-fixtures'
 
 describe('App renderer integration', () => {
   beforeEach(() => {
@@ -47,10 +44,12 @@ describe('App renderer integration', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
 
     await waitFor(() => expect(bridge.mocks.stream).toHaveBeenCalledOnce())
-    expect(bridge.mocks.stream).toHaveBeenCalledWith(expect.objectContaining({
-      conversationId: rendererConversation.id,
-      messages: expect.arrayContaining([expect.objectContaining({ role: 'user', content: '新的问题' })]),
-    }))
+    expect(bridge.mocks.stream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: rendererConversation.id,
+        messages: expect.arrayContaining([expect.objectContaining({ role: 'user', content: '新的问题' })]),
+      }),
+    )
 
     await act(async () => {
       bridge.emit({ type: 'text-delta', requestId: 'request-1', delta: '流式回答' })
@@ -62,9 +61,9 @@ describe('App renderer integration', () => {
     })
     await waitFor(() => {
       const lastSaved = bridge.mocks.conversationSave.mock.calls.at(-1)?.[0]
-      expect(lastSaved.messages).toEqual(expect.arrayContaining([
-        expect.objectContaining({ role: 'assistant', content: '流式回答' }),
-      ]))
+      expect(lastSaved.messages).toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: 'assistant', content: '流式回答' })]),
+      )
     })
   })
 })

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { parseAnthropicEvent, parseChatCompletionEvent, parseResponsesEvent } from '../src/electron/api/protocol-adapters'
+import {
+  parseAnthropicEvent,
+  parseChatCompletionEvent,
+  parseResponsesEvent,
+} from '../src/electron/api/protocol-adapters'
 import { buildRequestBody } from '../src/electron/api/request-adapters'
 import {
   buildSkillRetrievalQuery,
@@ -84,14 +88,16 @@ function messagesWithTrace(): Message[] {
 describe('agent protocol ledger', () => {
   it('parses every parallel Chat Completions tool call in one delta', () => {
     const parsed = parseChatCompletionEvent({
-      choices: [{
-        delta: {
-          tool_calls: [
-            { index: 0, id: 'call-a', function: { name: 'one', arguments: '{}' } },
-            { index: 1, id: 'call-b', function: { name: 'two', arguments: '{}' } },
-          ],
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              { index: 0, id: 'call-a', function: { name: 'one', arguments: '{}' } },
+              { index: 1, id: 'call-b', function: { name: 'two', arguments: '{}' } },
+            ],
+          },
         },
-      }],
+      ],
     })
     expect(parsed.toolCallDeltas).toHaveLength(2)
     expect(parsed.toolCallDeltas?.map((item) => item.id)).toEqual(['call-a', 'call-b'])
@@ -117,15 +123,9 @@ describe('agent protocol ledger', () => {
   })
 
   it('replays function_call and function_call_output for Responses', () => {
-    const body = buildRequestBody(
-      'openai-responses',
-      { kind: 'openai' },
-      model,
-      messagesWithTrace(),
-      request,
-      4_096,
-      [tool],
-    )
+    const body = buildRequestBody('openai-responses', { kind: 'openai' }, model, messagesWithTrace(), request, 4_096, [
+      tool,
+    ])
     const input = body.input as Array<Record<string, unknown>>
     expect(input).toContainEqual({
       type: 'function_call',
@@ -156,25 +156,53 @@ describe('agent protocol ledger', () => {
   })
 
   it('replays ordered tool messages for Chat and Anthropic', () => {
-    const chat = buildRequestBody('openai-chat-completions', { kind: 'openai' }, model, messagesWithTrace(), request, 4_096, [tool])
+    const chat = buildRequestBody(
+      'openai-chat-completions',
+      { kind: 'openai' },
+      model,
+      messagesWithTrace(),
+      request,
+      4_096,
+      [tool],
+    )
     const chatMessages = chat.messages as Array<Record<string, unknown>>
     expect(chatMessages.some((message) => message.role === 'tool' && message.tool_call_id === 'call-1')).toBe(true)
 
-    const anthropic = buildRequestBody('anthropic-messages', { kind: 'anthropic' }, model, messagesWithTrace(), request, 4_096, [tool])
+    const anthropic = buildRequestBody(
+      'anthropic-messages',
+      { kind: 'anthropic' },
+      model,
+      messagesWithTrace(),
+      request,
+      4_096,
+      [tool],
+    )
     const anthropicMessages = anthropic.messages as Array<{ role: string; content: unknown }>
-    expect(anthropicMessages.some((message) => message.role === 'user' && JSON.stringify(message.content).includes('tool_result'))).toBe(true)
+    expect(
+      anthropicMessages.some(
+        (message) => message.role === 'user' && JSON.stringify(message.content).includes('tool_result'),
+      ),
+    ).toBe(true)
   })
 
   it('preserves Anthropic thinking signatures around tool use', () => {
-    expect(parseAnthropicEvent({
-      type: 'content_block_delta',
-      index: 0,
-      delta: { type: 'signature_delta', signature: 'signed-thinking' },
-    }).anthropicThinkingDelta).toEqual({ index: 0, signatureDelta: 'signed-thinking' })
+    expect(
+      parseAnthropicEvent({
+        type: 'content_block_delta',
+        index: 0,
+        delta: { type: 'signature_delta', signature: 'signed-thinking' },
+      }).anthropicThinkingDelta,
+    ).toEqual({ index: 0, signatureDelta: 'signed-thinking' })
 
     const traced = messagesWithTrace()
     traced[1]!.agentTrace = [
-      { type: 'assistant_thinking', turn: 1, blockIndex: 0, thinking: 'private reasoning', signature: 'signed-thinking' },
+      {
+        type: 'assistant_thinking',
+        turn: 1,
+        blockIndex: 0,
+        thinking: 'private reasoning',
+        signature: 'signed-thinking',
+      },
       ...(traced[1]!.agentTrace || []),
     ]
     const body = buildRequestBody('anthropic-messages', { kind: 'anthropic' }, model, traced, request, 4_096, [tool])
@@ -251,8 +279,9 @@ describe('progressive skill loading', () => {
   })
 
   it('treats a $skill id as an explicit invocation', () => {
-    expect(retrieveExplicitlyMentionedSkills('请使用 $translator-polyglot', DEFAULT_SKILLS).map((skill) => skill.id))
-      .toEqual(['translator-polyglot'])
+    expect(
+      retrieveExplicitlyMentionedSkills('请使用 $translator-polyglot', DEFAULT_SKILLS).map((skill) => skill.id),
+    ).toEqual(['translator-polyglot'])
   })
 
   it('uses recent context and attachment metadata for routing', () => {
@@ -262,7 +291,9 @@ describe('progressive skill loading', () => {
         id: 'u2',
         role: 'user',
         content: '继续处理',
-        attachments: [{ id: 'a1', name: 'sales.csv', mimeType: 'text/csv', size: 12, data: 'region,revenue', type: 'text' }],
+        attachments: [
+          { id: 'a1', name: 'sales.csv', mimeType: 'text/csv', size: 12, data: 'region,revenue', type: 'text' },
+        ],
         createdAt: timestamp,
       },
     ])

@@ -1,21 +1,23 @@
 import { isAbsolute } from 'node:path'
-import type { AppSettings, DeveloperRuntimeSettings, IntegratedTerminalShellConfig, ProxyConfig, ProxyMode } from '../../shared/types'
+import type {
+  AppSettings,
+  DeveloperRuntimeSettings,
+  IntegratedTerminalShellConfig,
+  ProxyConfig,
+} from '../../shared/types'
 import { normalizeAgentToolTurnLimit } from '../../shared/agent-limits'
 import { MAX_USER_AVATAR_DATA_URL_LENGTH, MAX_USER_NICKNAME_LENGTH } from '../../shared/user-profile'
 import { isLoopbackUrl } from '../api/provider-policy'
 import { normalizeRuntimePathInput } from '../runtime-path'
 import { isAppLanguage, type AppLanguage } from '../../shared/i18n'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 /**
  * Validates settings and fills fields introduced after vault schema v1.
  * Missing contextManagementMode is intentionally migrated to the safe,
  * non-destructive manual behavior.
  */
-export function normalizeAppSettings(
-  value: unknown,
-  fallbackLanguage: AppLanguage = 'en-US',
-): AppSettings {
+export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLanguage = 'en-US'): AppSettings {
   if (!isRecord(value)) throw new Error('Invalid settings')
   const language = value.language ?? fallbackLanguage
   if (!isAppLanguage(language)) throw new Error('Invalid language')
@@ -32,11 +34,7 @@ export function normalizeAppSettings(
   if (typeof value.defaultReasoningEnabled !== 'boolean') {
     throw new Error('Invalid reasoning setting')
   }
-  if (
-    !['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(
-      String(value.defaultReasoningEffort),
-    )
-  ) {
+  if (!['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(String(value.defaultReasoningEffort))) {
     throw new Error('Invalid reasoning effort')
   }
   if (typeof value.systemPrompt !== 'string' || value.systemPrompt.length > 100_000) {
@@ -78,14 +76,12 @@ export function normalizeAppSettings(
     language,
     theme: value.theme as AppSettings['theme'],
     sendShortcut: value.sendShortcut as AppSettings['sendShortcut'],
-    contextManagementMode:
-      contextManagementMode as AppSettings['contextManagementMode'],
+    contextManagementMode: contextManagementMode as AppSettings['contextManagementMode'],
     userNickname,
     userAvatar,
-    defaultModelId: value.defaultModelId as string | undefined,
+    defaultModelId: value.defaultModelId,
     defaultReasoningEnabled: value.defaultReasoningEnabled,
-    defaultReasoningEffort:
-      value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],
+    defaultReasoningEffort: value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],
     defaultAgentMode: Boolean(value.defaultAgentMode),
     agentToolTurnLimit,
     mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
@@ -99,19 +95,15 @@ export function normalizeAppSettings(
     developerRuntimes,
   }
   if (value.titleGenerationModelId !== undefined) {
-    settings.titleGenerationModelId = value.titleGenerationModelId as string
+    settings.titleGenerationModelId = value.titleGenerationModelId
   }
   return settings
 }
 
 function normalizeUserNickname(value: unknown): string {
   if (value === undefined || value === null) return ''
-  if (
-    typeof value !== 'string'
-    || value.length > MAX_USER_NICKNAME_LENGTH
-    || /[\r\n\0]/.test(value)
-  ) {
-    throw new Error(t("Nickname cannot exceed 50 characters or contain line breaks."))
+  if (typeof value !== 'string' || value.length > MAX_USER_NICKNAME_LENGTH || /[\r\n\0]/.test(value)) {
+    throw new Error(t('Nickname cannot exceed 50 characters or contain line breaks.'))
   }
   return value.trim()
 }
@@ -119,11 +111,11 @@ function normalizeUserNickname(value: unknown): string {
 function normalizeUserAvatar(value: unknown): string {
   if (value === undefined || value === null || value === '') return ''
   if (typeof value !== 'string' || value.length > MAX_USER_AVATAR_DATA_URL_LENGTH) {
-    throw new Error(t("The avatar data is too large or the format is invalid."))
+    throw new Error(t('The avatar data is too large or the format is invalid.'))
   }
   const match = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value)
   const payload = match?.[1]
-  if (!payload || payload.length % 4 !== 0) throw new Error(t("The avatar data is too large or the format is invalid."))
+  if (!payload || payload.length % 4 !== 0) throw new Error(t('The avatar data is too large or the format is invalid.'))
   return value
 }
 
@@ -154,9 +146,10 @@ export function normalizeDeveloperRuntimes(value: unknown): DeveloperRuntimeSett
     environment: normalizeRuntimePathInput(value.python.environment ?? ''),
     condaExecutable: normalizeRuntimePathInput(value.python.condaExecutable ?? 'conda') || 'conda',
   }
-  if (python.mode === 'venv' && !python.environment) throw new Error(t("Python venv path cannot be empty."))
-  if (python.mode === 'conda' && !python.environment) throw new Error(t("Conda environment name or path cannot be empty."))
-  if (python.mode === 'custom' && !python.executable) throw new Error(t("Python executable cannot be empty."))
+  if (python.mode === 'venv' && !python.environment) throw new Error(t('Python venv path cannot be empty.'))
+  if (python.mode === 'conda' && !python.environment)
+    throw new Error(t('Conda environment name or path cannot be empty.'))
+  if (python.mode === 'custom' && !python.executable) throw new Error(t('Python executable cannot be empty.'))
   return { jdk, go, php, python }
 }
 
@@ -169,10 +162,10 @@ function normalizeRuntimeRecord<T extends { mode: 'auto' | 'custom' }>(
   if (!isRecord(value)) throw new Error('Invalid developer runtime')
   const mode = String(value.mode ?? 'auto')
   if (mode !== 'auto' && mode !== 'custom') throw new Error('Invalid developer runtime mode')
-  const result = { ...defaults, mode } as T
+  const result = { ...defaults, mode }
   for (const field of fields) result[field] = normalizeRuntimePathInput(value[String(field)] ?? '') as T[typeof field]
   if (mode === 'custom' && fields.every((field) => !String(result[field] || '').trim())) {
-    throw new Error(t("Custom runtime path cannot be empty."))
+    throw new Error(t('Custom runtime path cannot be empty.'))
   }
   return result
 }
@@ -202,8 +195,8 @@ export function normalizeIntegratedTerminalShell(value: unknown): IntegratedTerm
     return argument
   })
   const executable = value.executable.trim()
-  if (mode === 'custom' && !executable) throw new Error(t("Custom terminal shell executable cannot be empty."))
-  return { mode: mode as IntegratedTerminalShellConfig['mode'], executable, args }
+  if (mode === 'custom' && !executable) throw new Error(t('Custom terminal shell executable cannot be empty.'))
+  return { mode: mode, executable, args }
 }
 
 /**
@@ -219,25 +212,25 @@ function normalizeProxy(value: unknown): ProxyConfig {
   if (typeof value.url !== 'string') throw new Error('Invalid proxy URL')
   if (value.url.length > 2_000) throw new Error('Invalid proxy URL')
   if (mode === 'custom') validateProxyUrl(value.url)
-  return { mode: mode as ProxyMode, url: value.url }
+  return { mode: mode, url: value.url }
 }
 
 function validateProxyUrl(url: string): void {
-  if (!url.trim()) throw new Error(t("The proxy address cannot be empty."))
+  if (!url.trim()) throw new Error(t('The proxy address cannot be empty.'))
   let parsed: URL
   try {
     parsed = new URL(url)
   } catch {
-    throw new Error(t("The proxy address format is invalid."))
+    throw new Error(t('The proxy address format is invalid.'))
   }
   const scheme = parsed.protocol.toLowerCase()
   if (scheme !== 'http:' && scheme !== 'https:') {
-    throw new Error(t("The proxy address only supports http and https protocols."))
+    throw new Error(t('The proxy address only supports http and https protocols.'))
   }
   // Remote HTTP proxies would transmit requests in the clear; require HTTPS for
   // non-loopback hosts, mirroring the provider base-URL policy.
   if (scheme === 'http:' && !isLoopbackUrl(url)) {
-    throw new Error(t("Remote HTTP proxies are not allowed. Use an HTTPS proxy."))
+    throw new Error(t('Remote HTTP proxies are not allowed. Use an HTTPS proxy.'))
   }
 }
 

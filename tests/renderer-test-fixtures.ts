@@ -158,7 +158,10 @@ export function createRendererApiMock({
       listServers: vi.fn(async () => mcpServers),
       upsertServer: vi.fn(async (input: McpServerConfig) => input),
       removeServer: vi.fn(async () => undefined),
-      toggleServer: vi.fn(async (id: string, enabled: boolean) => ({ ...mcpServers.find((server) => server.id === id)!, enabled })),
+      toggleServer: vi.fn(async (id: string, enabled: boolean) => ({
+        ...mcpServers.find((server) => server.id === id)!,
+        enabled,
+      })),
       testServer: vi.fn(async () => ({ ok: true, latencyMs: 1, toolsCount: 0, message: 'ok' })),
       listTools: vi.fn(async () => mcpTools),
     },
@@ -170,7 +173,12 @@ export function createRendererApiMock({
     },
     runtimes: {
       test: vi.fn(async (kind: 'jdk' | 'go' | 'php' | 'python') => ({ kind, ok: true, message: 'ok' })),
-      listCondaEnvironments: vi.fn(async (condaExecutable: string) => ({ ok: true, condaExecutable, environments: [], message: 'ok' })),
+      listCondaEnvironments: vi.fn(async (condaExecutable: string) => ({
+        ok: true,
+        condaExecutable,
+        environments: [],
+        message: 'ok',
+      })),
     },
     conversations: {
       list: vi.fn(async () => conversations),
@@ -179,7 +187,13 @@ export function createRendererApiMock({
       remove: vi.fn(async () => undefined),
     },
     data: {
-      exportBackup: vi.fn(async () => ({ canceled: true, mode: 'shallow', encrypted: false, conversationCount: 0, workspaceCount: 0 })),
+      exportBackup: vi.fn(async () => ({
+        canceled: true,
+        mode: 'shallow',
+        encrypted: false,
+        conversationCount: 0,
+        workspaceCount: 0,
+      })),
       clearConversations: vi.fn(async () => undefined),
     },
     chat: {

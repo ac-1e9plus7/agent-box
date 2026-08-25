@@ -6,15 +6,15 @@ AgentBox's renderer is built with React 19 and TypeScript. It owns presentation 
 
 ## Renderer organization
 
-| Module | Responsibility |
-| --- | --- |
-| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx) | Initial data loading, settings persistence, feature coordination, and top-level composition |
-| [`src/renderer/src/hooks/useConversation.ts`](../src/renderer/src/hooks/useConversation.ts) | Conversation state/ref synchronization, creation, persistence, active-branch updates, and the New conversation shortcut |
-| [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts) | Active-stream registration, normalized event reduction, cancellation, tool approval, completion, and error checkpointing |
-| [`src/renderer/src/components/`](../src/renderer/src/components/) | React components for the sidebar, top bar, messages, composer, New conversation dialog, and Settings shell |
-| [`src/renderer/src/components/settings/`](../src/renderer/src/components/settings/) | General, runtimes, Skills, MCP, models, providers, security, and About Settings sections plus shared controls |
-| [`src/renderer/src/*.ts`](../src/renderer/src/) | Testable logic for context projection, title cleanup, attachments, Markdown preprocessing, keyboard behavior, and workspace grouping |
-| [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts) | Message-tree traversal, branch selection, and node deletion shared by the renderer and tests |
+| Module                                                                                      | Responsibility                                                                                                                       |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx)                                   | Initial data loading, settings persistence, feature coordination, and top-level composition                                          |
+| [`src/renderer/src/hooks/useConversation.ts`](../src/renderer/src/hooks/useConversation.ts) | Conversation state/ref synchronization, creation, persistence, active-branch updates, and the New conversation shortcut              |
+| [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts)     | Active-stream registration, normalized event reduction, cancellation, tool approval, completion, and error checkpointing             |
+| [`src/renderer/src/components/`](../src/renderer/src/components/)                           | React components for the sidebar, top bar, messages, composer, New conversation dialog, and Settings shell                           |
+| [`src/renderer/src/components/settings/`](../src/renderer/src/components/settings/)         | General, runtimes, Skills, MCP, models, providers, security, and About Settings sections plus shared controls                        |
+| [`src/renderer/src/*.ts`](../src/renderer/src/)                                             | Testable logic for context projection, title cleanup, attachments, Markdown preprocessing, keyboard behavior, and workspace grouping |
+| [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts)                     | Message-tree traversal, branch selection, and node deletion shared by the renderer and tests                                         |
 
 The Settings shell owns the staged `preferences`, model, provider, and API-key changes that are committed together by **Save changes**. Each Settings section owns its local selection, search, test, and modal state where applicable. Skills and MCP server mutations continue to use their dedicated immediate-persistence APIs.
 
@@ -64,9 +64,9 @@ Before rendering, [`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts)
 
 [`composer-helper.ts`](../src/renderer/src/composer-helper.ts) keeps keyboard decisions in a pure function and ignores Enter while an IME composition is active:
 
-| Preference | Send | Insert a line break |
-| --- | --- | --- |
-| **Press Enter to send** enabled | `Enter` | `Shift + Enter`, or `Ctrl/Cmd + Enter` for an explicit insertion |
-| **Press Enter to send** disabled | `Ctrl/Cmd + Enter` | `Enter` or `Shift + Enter` |
+| Preference                       | Send               | Insert a line break                                              |
+| -------------------------------- | ------------------ | ---------------------------------------------------------------- |
+| **Press Enter to send** enabled  | `Enter`            | `Shift + Enter`, or `Ctrl/Cmd + Enter` for an explicit insertion |
+| **Press Enter to send** disabled | `Ctrl/Cmd + Enter` | `Enter` or `Shift + Enter`                                       |
 
 The composer toolbar also controls Agent mode, Skill routing, available MCP servers, reasoning, web search, and the context budget. When the projected context exceeds the input budget, sending is blocked or—when safe trimming is available—the UI offers a one-time **Trim and send** action. At application level, `Ctrl/Cmd + N` opens the New conversation dialog.

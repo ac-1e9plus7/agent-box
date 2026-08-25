@@ -4,8 +4,9 @@ import { t, type MessageKey } from '../../shared/i18n'
 export const DEFAULT_SKILLS: Skill[] = [
   {
     id: 'code-interpreter',
-    name: "Code Execution & Algorithm Assistant",
-    description: "Write and debug code, solve algorithm and data-structure problems, analyze complexity, implement solutions in Python or TypeScript, write unit tests, and optimize performance.",
+    name: 'Code Execution & Algorithm Assistant',
+    description:
+      'Write and debug code, solve algorithm and data-structure problems, analyze complexity, implement solutions in Python or TypeScript, write unit tests, and optimize performance.',
     icon: 'code',
     entryFile: 'SKILL.md',
     files: [
@@ -20,7 +21,7 @@ You are a senior software engineer and algorithm specialist. Help users implemen
 1. **Run and verify:** Use \`agentbox_run_code\` as the default for calculations, data validation, logic checks, and tests. Prefer JavaScript for cross-platform compatibility; use Python when the user explicitly requests it or the task requires it. Use \`agentbox_run_terminal\` for compilers, package managers, and project commands.
 2. **Report results faithfully:** Say that code was “run” or that “tests passed” only after the tool reports success. If Python is unavailable, perform equivalent validation in JavaScript when possible and state which language was used.
 3. **Provide self-contained code:** Include all required imports, appropriate type annotations, and assertions for relevant edge cases. Use \`scripts/sandbox_runner.py\` as a reference for organizing test cases.
-4. **Analyze before implementing:** For complex algorithms, explain the time and space complexity, then provide a clear implementation, examples, and actual execution results.`
+4. **Analyze before implementing:** For complex algorithms, explain the time and space complexity, then provide a clear implementation, examples, and actual execution results.`,
       },
       {
         path: 'scripts/sandbox_runner.py',
@@ -75,7 +76,7 @@ def run_test_suite(target_fn: Callable, test_cases: List[Tuple[Tuple, Any]]) -> 
 
 if __name__ == "__main__":
     print("Sandbox Runner ready for Python 3 code verification.")
-`
+`,
       },
       {
         path: 'references/algorithm_patterns.md',
@@ -86,20 +87,21 @@ if __name__ == "__main__":
 1. **Two pointers / sliding window:** Useful for substring, range, and monotonic-window problems, often with O(n) time and O(1) extra space.
 2. **Dynamic programming (DP):** Define the state, recurrence relation, base cases, and any space optimization.
 3. **Monotonic stack / queue:** Find the next greater or smaller element, or maintain sliding-window minima and maxima.
-4. **Backtracking and pruning:** Apply to permutations, combinations, subsets, and graph path searches.`
-      }
+4. **Backtracking and pruning:** Apply to permutations, combinations, subsets, and graph path searches.`,
+      },
     ],
     isBuiltIn: true,
     enabled: true,
     author: 'AgentBox System',
     version: '1.0.0',
     createdAt: '2026-08-16T00:00:00.000Z',
-    updatedAt: '2026-08-16T00:00:00.000Z'
+    updatedAt: '2026-08-16T00:00:00.000Z',
   },
   {
     id: 'data-analyst',
-    name: "Data Analysis & Visualization",
-    description: "Analyze CSV, Excel, tabular, and other datasets; compute statistics; identify likely drivers of trends; and create charts and data visualizations.",
+    name: 'Data Analysis & Visualization',
+    description:
+      'Analyze CSV, Excel, tabular, and other datasets; compute statistics; identify likely drivers of trends; and create charts and data visualizations.',
     icon: 'chart',
     entryFile: 'SKILL.md',
     files: [
@@ -114,7 +116,7 @@ You are a senior data scientist and business analyst. Analyze structured and uns
 1. **Data quality and overview:** Clarify field definitions and examine the sample size, missing values, outliers, and distributions.
 2. **Statistical analysis:** Use \`agentbox_run_code\` to calculate means, medians, quantiles, correlations, variance, and other relevant statistics. Prefer JavaScript by default; use Python when it is available and better suited to the task. See \`scripts/data_summary.py\` for a reference implementation.
 3. **Driver analysis:** Use the business context and available evidence to identify plausible drivers. Clearly distinguish established findings from hypotheses or inferences.
-4. **Present the results:** Use well-formatted Markdown tables and Mermaid diagrams to communicate the conclusions. Clearly distinguish tool-computed results from analytical inferences.`
+4. **Present the results:** Use well-formatted Markdown tables and Mermaid diagrams to communicate the conclusions. Clearly distinguish tool-computed results from analytical inferences.`,
       },
       {
         path: 'scripts/data_summary.py',
@@ -164,7 +166,7 @@ def compute_stats(numbers: List[Union[int, float]]) -> Dict[str, Any]:
 if __name__ == "__main__":
     sample = [12, 15, 18, 20, 22, 25, 29, 32, 45, 99]
     print("Sample Statistics:", compute_stats(sample))
-`
+`,
       },
       {
         path: 'references/visualization_formats.md',
@@ -177,20 +179,21 @@ if __name__ == "__main__":
 
 ## Mermaid Diagrams
 - Use \`xychart-beta\` for quantitative trends and \`graph LR\` for directional comparisons.
-- Use \`flowchart TD\` for process flows.`
-      }
+- Use \`flowchart TD\` for process flows.`,
+      },
     ],
     isBuiltIn: true,
     enabled: true,
     author: 'AgentBox System',
     version: '1.0.0',
     createdAt: '2026-08-16T00:00:00.000Z',
-    updatedAt: '2026-08-16T00:00:00.000Z'
+    updatedAt: '2026-08-16T00:00:00.000Z',
   },
   {
     id: 'web-extractor',
-    name: "Research & Document Analysis",
-    description: "Summarize and closely analyze PDFs, web pages, research reports, academic papers, and other long-form content, and extract key facts and figures.",
+    name: 'Research & Document Analysis',
+    description:
+      'Summarize and closely analyze PDFs, web pages, research reports, academic papers, and other long-form content, and extract key facts and figures.',
     icon: 'search',
     entryFile: 'SKILL.md',
     files: [
@@ -205,7 +208,7 @@ You are a research analyst specializing in the close reading of long-form materi
 1. **Executive summary:** Summarize the overall conclusions in no more than three key points.
 2. **Key arguments and evidence:** Extract important facts, figures, supporting evidence, and quantitative findings.
 3. **Risks and uncertainty:** Identify underlying assumptions, potential risks, limitations, and unresolved questions.
-4. **Text cleanup:** When the source contains raw HTML or noisy text, use \`scripts/text_cleaner.py\` as a reference for removing boilerplate and irrelevant content.`
+4. **Text cleanup:** When the source contains raw HTML or noisy text, use \`scripts/text_cleaner.py\` as a reference for removing boilerplate and irrelevant content.`,
       },
       {
         path: 'scripts/text_cleaner.py',
@@ -236,7 +239,7 @@ if __name__ == "__main__":
     sample = "<div>2025年第三季度营收达到45.2亿元，同比增长18.5%，净利润达6.8亿元。</div>"
     print("Cleaned:", clean_extracted_text(sample))
     print("Numbers:", extract_key_numbers(sample))
-`
+`,
       },
       {
         path: 'references/extraction_rubric.md',
@@ -244,20 +247,21 @@ if __name__ == "__main__":
         content: `# Extraction Quality Rubric
 
 - **Fidelity:** Never alter statistics or other data reported in the source.
-- **Objectivity:** Clearly distinguish the author’s opinions or interpretations from verifiable facts.`
-      }
+- **Objectivity:** Clearly distinguish the author’s opinions or interpretations from verifiable facts.`,
+      },
     ],
     isBuiltIn: true,
     enabled: true,
     author: 'AgentBox System',
     version: '1.0.0',
     createdAt: '2026-08-16T00:00:00.000Z',
-    updatedAt: '2026-08-16T00:00:00.000Z'
+    updatedAt: '2026-08-16T00:00:00.000Z',
   },
   {
     id: 'translator-polyglot',
-    name: "Professional Translation & Localization",
-    description: "Translate between Chinese, English, and other languages; localize and polish text; and maintain terminology consistency.",
+    name: 'Professional Translation & Localization',
+    description:
+      'Translate between Chinese, English, and other languages; localize and polish text; and maintain terminology consistency.',
     icon: 'translate',
     entryFile: 'SKILL.md',
     files: [
@@ -271,7 +275,7 @@ You are an experienced translator and localization specialist with native-level 
 ## Three-Pass Translation Workflow
 1. **Accuracy:** Preserve all facts, logical relationships, intent, constraints, and nuances in the source text.
 2. **Fluency:** Restructure sentences where necessary so the translation reads naturally in the target language and avoids source-language calques.
-3. **Polish:** Adapt the register, tone, and domain terminology for technical, legal, business, or literary content. Use \`scripts/terminology_matcher.py\` as a reference when checking terminology consistency.`
+3. **Polish:** Adapt the register, tone, and domain terminology for technical, legal, business, or literary content. Use \`scripts/terminology_matcher.py\` as a reference when checking terminology consistency.`,
       },
       {
         path: 'scripts/terminology_matcher.py',
@@ -301,7 +305,7 @@ if __name__ == "__main__":
     src = "Please check the token window before submission."
     tgt = "提交前请检查 Token 大小。"
     print("Terminology Audits:", check_terminology_consistency(src, tgt, sample_glossary))
-`
+`,
       },
       {
         path: 'references/localization_standards.md',
@@ -309,20 +313,21 @@ if __name__ == "__main__":
         content: `# Localization Style Guide
 
 - When Chinese and Latin text are mixed, insert spaces between them where appropriate.
-- Preserve product names, proper nouns, identifiers, and function names unless an official localized form exists.`
-      }
+- Preserve product names, proper nouns, identifiers, and function names unless an official localized form exists.`,
+      },
     ],
     isBuiltIn: true,
     enabled: true,
     author: 'AgentBox System',
     version: '1.0.0',
     createdAt: '2026-08-16T00:00:00.000Z',
-    updatedAt: '2026-08-16T00:00:00.000Z'
+    updatedAt: '2026-08-16T00:00:00.000Z',
   },
   {
     id: 'prompt-optimizer',
-    name: "Prompt Engineering Expert",
-    description: "Write, optimize, and troubleshoot system prompts, task prompts, role definitions, and structured prompt templates.",
+    name: 'Prompt Engineering Expert',
+    description:
+      'Write, optimize, and troubleshoot system prompts, task prompts, role definitions, and structured prompt templates.',
     icon: 'sparkles',
     entryFile: 'SKILL.md',
     files: [
@@ -338,7 +343,7 @@ You are a senior prompt engineer and LLM systems architect. Turn vague or incomp
 2. **Role:** Define the persona, expertise, perspective, and tone.
 3. **Instructions:** Break the core task into explicit, actionable requirements.
 4. **Specifications:** Define constraints, success criteria, and the required output format or schema, such as JSON, Markdown, code, or structured data.
-5. **Examples:** Provide high-quality few-shot input/output examples when they would improve reliability.`
+5. **Examples:** Provide high-quality few-shot input/output examples when they would improve reliability.`,
       },
       {
         path: 'scripts/prompt_linter.py',
@@ -369,7 +374,7 @@ def lint_prompt_structure(prompt_text: str) -> Dict[str, Any]:
 if __name__ == "__main__":
     test_prompt = "你是一个翻译官。请把英文翻译成中文，必须保持信达雅。"
     print("Lint Results:", lint_prompt_structure(test_prompt))
-`
+`,
       },
       {
         path: 'references/prompt_patterns.md',
@@ -377,16 +382,16 @@ if __name__ == "__main__":
         content: `# Common Prompt Patterns
 
 - **Chain-of-thought (CoT)**: “Reason through the problem step by step and explain each step...”
-- **Structured output**: “Return valid JSON only, without an outer Markdown code fence...”`
-      }
+- **Structured output**: “Return valid JSON only, without an outer Markdown code fence...”`,
+      },
     ],
     isBuiltIn: true,
     enabled: true,
     author: 'AgentBox System',
     version: '1.0.0',
     createdAt: '2026-08-16T00:00:00.000Z',
-    updatedAt: '2026-08-16T00:00:00.000Z'
-  }
+    updatedAt: '2026-08-16T00:00:00.000Z',
+  },
 ]
 
 /**
@@ -404,9 +409,9 @@ export function localizedDefaultSkills(): Skill[] {
     ...skill,
     name: localize(skill.name),
     description: localize(skill.description),
-    files: skill.files.map((file) => (
-      file.kind === 'markdown' ? { ...file, content: localize(file.content) } : { ...file }
-    )),
+    files: skill.files.map((file) =>
+      file.kind === 'markdown' ? { ...file, content: localize(file.content) } : { ...file },
+    ),
     systemPrompt: skill.systemPrompt ? localize(skill.systemPrompt) : skill.systemPrompt,
   }))
 }

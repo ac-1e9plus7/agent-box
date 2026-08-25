@@ -125,19 +125,28 @@ exec(compile(tree, "agentbox-user-code.py", "exec"), scope, scope)
 
 let pythonCommandPromise: Promise<{ command: string; prefixArgs: string[] } | undefined> | undefined
 
-export async function executeCode(
-  request: CodeExecutionRequest,
-  signal?: AbortSignal,
-): Promise<CodeExecutionResult> {
-  if (!request.code.trim()) return { result: t("Code cannot be empty."), isError: true }
+export async function executeCode(request: CodeExecutionRequest, signal?: AbortSignal): Promise<CodeExecutionResult> {
+  if (!request.code.trim()) return { result: t('Code cannot be empty.'), isError: true }
   if (request.code.length > MAX_CODE_CHARACTERS) {
-    return { result: t("Code length exceeds {value0} character limit.", { value0: MAX_CODE_CHARACTERS.toLocaleString(getLanguage()) }), isError: true }
+    return {
+      result: t('Code length exceeds {value0} character limit.', {
+        value0: MAX_CODE_CHARACTERS.toLocaleString(getLanguage()),
+      }),
+      isError: true,
+    }
   }
   const timeoutMs = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_TIMEOUT_MS, request.timeoutMs ?? 8_000))
   if (request.language === 'javascript') {
     return executeJavaScript(request.code, request.input, timeoutMs, signal)
   }
-  return executePython(request.code, request.input, timeoutMs, signal, request.runtimeSettings, request.workingDirectory)
+  return executePython(
+    request.code,
+    request.input,
+    timeoutMs,
+    signal,
+    request.runtimeSettings,
+    request.workingDirectory,
+  )
 }
 
 function executeJavaScript(
@@ -155,8 +164,8 @@ function executeJavaScript(
         timeoutMs,
         maxOutput: MAX_OUTPUT_CHARACTERS,
         messages: {
-          noOutput: t("(Code execution completed with no output)"),
-          outputTruncated: t("[Output truncated]"),
+          noOutput: t('(Code execution completed with no output)'),
+          outputTruncated: t('[Output truncated]'),
         },
       },
       resourceLimits: { maxOldGenerationSizeMb: 32, maxYoungGenerationSizeMb: 8, stackSizeMb: 4 },
@@ -170,15 +179,25 @@ function executeJavaScript(
       void worker.terminate()
       resolve(result)
     }
-    const onAbort = () => finish({ result: t("Code execution canceled."), isError: true })
+    const onAbort = () => finish({ result: t('Code execution canceled.'), isError: true })
     const timer = setTimeout(
-      () => finish({ result: t("Code execution exceeded {value0} seconds and terminated.", { value0: (timeoutMs / 1_000).toFixed(1) }), isError: true }),
+      () =>
+        finish({
+          result: t('Code execution exceeded {value0} seconds and terminated.', {
+            value0: (timeoutMs / 1_000).toFixed(1),
+          }),
+          isError: true,
+        }),
       timeoutMs + 250,
     )
     worker.once('message', (message: CodeExecutionResult) => finish(message))
     worker.once('error', (error) => finish({ result: error.stack || error.message, isError: true }))
     worker.once('exit', (code) => {
-      if (!settled) finish({ result: t("The code runner exited abnormally (exit code {value0}).", { value0: code }), isError: true })
+      if (!settled)
+        finish({
+          result: t('The code runner exited abnormally (exit code {value0}).', { value0: code }),
+          isError: true,
+        })
     })
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
@@ -196,10 +215,11 @@ async function executePython(
   const configuredRuntime = runtimeSettings
     ? await resolveDeveloperRuntime('python', runtimeSettings, workingDirectory)
     : undefined
-  const requiresConfiguredRuntime = Boolean(runtimeSettings && (
-    ['venv', 'conda', 'custom'].includes(runtimeSettings.python.mode)
-    || (runtimeSettings.python.mode === 'system' && runtimeSettings.python.executable)
-  ))
+  const requiresConfiguredRuntime = Boolean(
+    runtimeSettings &&
+    (['venv', 'conda', 'custom'].includes(runtimeSettings.python.mode) ||
+      (runtimeSettings.python.mode === 'system' && runtimeSettings.python.executable)),
+  )
   const python = configuredRuntime
     ? { command: configuredRuntime.executable, prefixArgs: configuredRuntime.prefixArgs }
     : requiresConfiguredRuntime
@@ -207,7 +227,9 @@ async function executePython(
       : await resolvePythonCommand()
   if (!python) {
     return {
-      result: t("No available Python 3 interpreter detected. Please use language=\"javascript\" instead, or install Python 3 in your system PATH."),
+      result: t(
+        'No available Python 3 interpreter detected. Please use language="javascript" instead, or install Python 3 in your system PATH.',
+      ),
       isError: true,
     }
   }
@@ -215,12 +237,11 @@ async function executePython(
   const tempDirectory = await mkdtemp(join(tmpdir(), 'agentbox-code-'))
   const scriptPath = join(tempDirectory, 'runner.py')
   try {
-    const wrapper = PYTHON_WRAPPER
-      .replace('__USER_INPUT__', JSON.stringify(JSON.stringify(input ?? null)))
+    const wrapper = PYTHON_WRAPPER.replace('__USER_INPUT__', JSON.stringify(JSON.stringify(input ?? null)))
       .replace('__USER_CODE__', JSON.stringify(code))
-      .replace('__MODULE_NOT_ALLOWED__', JSON.stringify(t("Module {name} is not allowed")))
-      .replace('__DUNDER_NOT_ALLOWED__', JSON.stringify(t("Double-underscore attributes are not allowed")))
-      .replace('__NAME_NOT_ALLOWED__', JSON.stringify(t("{name} is not allowed")))
+      .replace('__MODULE_NOT_ALLOWED__', JSON.stringify(t('Module {name} is not allowed')))
+      .replace('__DUNDER_NOT_ALLOWED__', JSON.stringify(t('Double-underscore attributes are not allowed')))
+      .replace('__NAME_NOT_ALLOWED__', JSON.stringify(t('{name} is not allowed')))
     await writeFile(scriptPath, wrapper, { encoding: 'utf8', mode: 0o600 })
     return await runProcess(
       python.command,
@@ -236,9 +257,17 @@ async function executePython(
 
 async function resolvePythonCommand(): Promise<{ command: string; prefixArgs: string[] } | undefined> {
   pythonCommandPromise ??= (async () => {
-    const candidates = process.platform === 'win32'
-      ? [{ command: 'py', prefixArgs: ['-3'] }, { command: 'python', prefixArgs: [] }, { command: 'python3', prefixArgs: [] }]
-      : [{ command: 'python3', prefixArgs: [] }, { command: 'python', prefixArgs: [] }]
+    const candidates =
+      process.platform === 'win32'
+        ? [
+            { command: 'py', prefixArgs: ['-3'] },
+            { command: 'python', prefixArgs: [] },
+            { command: 'python3', prefixArgs: [] },
+          ]
+        : [
+            { command: 'python3', prefixArgs: [] },
+            { command: 'python', prefixArgs: [] },
+          ]
     for (const candidate of candidates) {
       const result = await runProcess(candidate.command, [...candidate.prefixArgs, '--version'], 2_000)
       if (!result.isError && /python 3/i.test(result.result)) return candidate
@@ -294,15 +323,15 @@ function runProcess(
     }
     const onAbort = () => {
       child.kill()
-      finish({ result: t("Code execution canceled."), isError: true })
+      finish({ result: t('Code execution canceled.'), isError: true })
     }
     const timer = setTimeout(() => {
       child.kill()
       finish({
-        result: t("Code execution exceeded {value0} seconds and terminated.\n{value1}{value2}", {
+        result: t('Code execution exceeded {value0} seconds and terminated.\n{value1}{value2}', {
           value0: (timeoutMs / 1_000).toFixed(1),
           value1: output,
-          value2: truncated ? `\n${t("[Output truncated]")}` : '',
+          value2: truncated ? `\n${t('[Output truncated]')}` : '',
         }).trim(),
         isError: true,
         truncated,
@@ -311,13 +340,15 @@ function runProcess(
     child.stdout?.on('data', append)
     child.stderr?.on('data', append)
     child.once('error', (error) => finish({ result: error.message, isError: true }))
-    child.once('close', (code) => finish({
-      result: output.trim()
-        ? `${output.trim()}${truncated ? `\n${t("[Output truncated]")}` : ''}`
-        : t("(Process exited with code {value0}; no output)", { value0: code ?? 'unknown' }),
-      isError: code !== 0,
-      truncated,
-    }))
+    child.once('close', (code) =>
+      finish({
+        result: output.trim()
+          ? `${output.trim()}${truncated ? `\n${t('[Output truncated]')}` : ''}`
+          : t('(Process exited with code {value0}; no output)', { value0: code ?? 'unknown' }),
+        isError: code !== 0,
+        truncated,
+      }),
+    )
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })
   })

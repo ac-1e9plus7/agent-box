@@ -1,23 +1,8 @@
-export type ApiFormat =
-  | 'openai-chat-completions'
-  | 'openai-responses'
-  | 'anthropic-messages'
+export type ApiFormat = 'openai-chat-completions' | 'openai-responses' | 'anthropic-messages'
 
-export type ProviderKind =
-  | 'openrouter'
-  | 'openai'
-  | 'anthropic'
-  | 'cliproxy'
-  | 'custom'
+export type ProviderKind = 'openrouter' | 'openai' | 'anthropic' | 'cliproxy' | 'custom'
 
-export type ReasoningEffort =
-  | 'none'
-  | 'minimal'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'xhigh'
-  | 'max'
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export type ThemeMode = 'system' | 'light' | 'dark'
 export type ContextManagementMode = 'manual' | 'auto'
@@ -288,8 +273,7 @@ export interface ModelConfig {
   updatedAt: string
 }
 
-export interface ModelInput
-  extends Omit<ModelConfig, 'id' | 'createdAt' | 'updatedAt'> {
+export interface ModelInput extends Omit<ModelConfig, 'id' | 'createdAt' | 'updatedAt'> {
   id?: string
 }
 
@@ -306,14 +290,7 @@ export interface RemoteModel {
 export type MessageRole = 'system' | 'user' | 'assistant'
 
 export type AgentInterruptionReason =
-  | 'rate_limit'
-  | 'network'
-  | 'timeout'
-  | 'cancelled'
-  | 'tool_turn_limit'
-  | 'output_limit'
-  | 'api_error'
-  | 'unknown'
+  'rate_limit' | 'network' | 'timeout' | 'cancelled' | 'tool_turn_limit' | 'output_limit' | 'api_error' | 'unknown'
 
 export interface AgentInterruption {
   reason: AgentInterruptionReason
@@ -438,7 +415,7 @@ export interface Conversation {
   /**
    * Absolute local directory reference used as the filesystem and terminal scope.
    * Only this path string is persisted; project files are never copied into or encrypted by the vault.
-  */
+   */
   workingDirectory?: string
   /** Defaults to off when omitted by an older vault. */
   webSearchMode?: WebSearchMode
@@ -487,14 +464,66 @@ export type StreamEvent =
   | { type: 'start'; requestId: string }
   | { type: 'skill-activated'; requestId: string; skill: SkillActivation }
   | { type: 'text-delta'; requestId: string; delta: string; turn?: number }
-  | { type: 'reasoning-delta'; requestId: string; delta: string; turn?: number; thinkingBlockIndex?: number; signatureDelta?: string }
-  | { type: 'agent-provider-item'; requestId: string; turn: number; format: 'openai-responses'; item: Record<string, unknown> }
+  | {
+      type: 'reasoning-delta'
+      requestId: string
+      delta: string
+      turn?: number
+      thinkingBlockIndex?: number
+      signatureDelta?: string
+    }
+  | {
+      type: 'agent-provider-item'
+      requestId: string
+      turn: number
+      format: 'openai-responses'
+      item: Record<string, unknown>
+    }
   | { type: 'citation'; requestId: string; citation: WebCitation }
-  | { type: 'tool-call-start'; requestId: string; callId: string; toolName: string; modelToolName?: string; serverName?: string; turn?: number }
+  | {
+      type: 'tool-call-start'
+      requestId: string
+      callId: string
+      toolName: string
+      modelToolName?: string
+      serverName?: string
+      turn?: number
+    }
   | { type: 'tool-call-args'; requestId: string; callId: string; delta: string; turn?: number }
-  | { type: 'tool-approval-required'; requestId: string; callId: string; toolName: string; modelToolName: string; serverName?: string; args: Record<string, unknown>; riskLevel: 'low' | 'sensitive'; reason: string; turn: number }
-  | { type: 'tool-call-complete'; requestId: string; callId: string; toolName: string; modelToolName?: string; args: Record<string, unknown>; turn?: number }
-  | { type: 'tool-result'; requestId: string; callId: string; toolName: string; result: string; resultContent?: McpToolResultContent[]; structuredResult?: Record<string, unknown>; resultTruncated?: boolean; isError?: boolean; denied?: boolean; turn?: number }
+  | {
+      type: 'tool-approval-required'
+      requestId: string
+      callId: string
+      toolName: string
+      modelToolName: string
+      serverName?: string
+      args: Record<string, unknown>
+      riskLevel: 'low' | 'sensitive'
+      reason: string
+      turn: number
+    }
+  | {
+      type: 'tool-call-complete'
+      requestId: string
+      callId: string
+      toolName: string
+      modelToolName?: string
+      args: Record<string, unknown>
+      turn?: number
+    }
+  | {
+      type: 'tool-result'
+      requestId: string
+      callId: string
+      toolName: string
+      result: string
+      resultContent?: McpToolResultContent[]
+      structuredResult?: Record<string, unknown>
+      resultTruncated?: boolean
+      isError?: boolean
+      denied?: boolean
+      turn?: number
+    }
   | { type: 'usage'; requestId: string; usage: TokenUsage }
   | { type: 'done'; requestId: string; finishReason?: string }
   | { type: 'error'; requestId: string; error: ChatError }
@@ -569,7 +598,11 @@ export interface AgentboxAPI {
     selectDirectory(initialPath?: string): Promise<string | undefined>
   }
   runtimes: {
-    test(kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string): Promise<RuntimeTestResult>
+    test(
+      kind: DeveloperRuntimeKind,
+      settings: DeveloperRuntimeSettings,
+      workingDirectory?: string,
+    ): Promise<RuntimeTestResult>
     listCondaEnvironments(condaExecutable: string): Promise<CondaEnvironmentListResult>
   }
   conversations: {

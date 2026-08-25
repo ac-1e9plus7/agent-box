@@ -16,9 +16,7 @@ const zhPath = path.join(sharedI18nRoot, 'locales', 'zh-CN.ts')
 const enPath = path.join(sharedI18nRoot, 'locales', 'en-US.ts')
 const defaultSkillsPath = path.join(root, 'src', 'electron', 'storage', 'default-skills.ts')
 
-const mode = process.argv.includes('--apply') ? 'apply'
-  : process.argv.includes('--verify') ? 'verify'
-  : 'dry-run'
+const mode = process.argv.includes('--apply') ? 'apply' : process.argv.includes('--verify') ? 'verify' : 'dry-run'
 
 // --- collision resolution table ---------------------------------------------------
 // For each COLLISION group (distinct old keys sharing one English value but with
@@ -28,19 +26,34 @@ const mode = process.argv.includes('--apply') ? 'apply'
 // need no entry: default inversion collapses them.
 // Keys are the exact shared English values (verified against the old bundle).
 const RESOLUTION = {
-  'English': { plain: 'language.englishName', hatches: { 'language.displayName': 'language.displayName' } },
+  English: { plain: 'language.englishName', hatches: { 'language.displayName': 'language.displayName' } },
   '[Output truncated]': { plain: 'code.outputTruncated', hatches: { '\n[输出已截断]': 'stream.outputTruncatedLine' } },
-  'Export backup': { plain: '导出备份', hatches: { '导出加密备份': 'backup.exportEncrypted' } },
-  'Continue': { plain: '继续', hatches: { '接着来': 'agentContinuation.continueVariant1', '接着做': 'agentContinuation.continueVariant2' } },
-  'Deny': { plain: '拒绝', hatches: { '禁止': 'modelPermissions.denyOption' } },
-  'how': { plain: '如何', hatches: { '怎么': 'skillRetrieval.howVariant' } },
+  'Export backup': { plain: '导出备份', hatches: { 导出加密备份: 'backup.exportEncrypted' } },
+  Continue: {
+    plain: '继续',
+    hatches: { 接着来: 'agentContinuation.continueVariant1', 接着做: 'agentContinuation.continueVariant2' },
+  },
+  Deny: { plain: '拒绝', hatches: { 禁止: 'modelPermissions.denyOption' } },
+  how: { plain: '如何', hatches: { 怎么: 'skillRetrieval.howVariant' } },
   'Add MCP server': { plain: '添加 MCP 服务', hatches: { '新建 MCP 外部服务': 'mcp.addServerHeading' } },
-  'New conversation': { plain: '新建对话', hatches: { '新对话': 'conversation.newPlaceholder' } },
-  'Try again': { plain: '重试', hatches: { '再次尝试': 'agentContinuation.tryAgainVariant1', '再试一次': 'agentContinuation.tryAgainVariant2', '重新尝试': 'agentContinuation.tryAgainVariant3' } },
-  'Agent tool-call limit': { plain: 'Agent 工具调用轮次上限', hatches: { 'Agent 工具调用轮次': 'agent.toolCallTurns' } },
-  'CLIProxyAPI (local)': { plain: 'CLIProxyAPI（本机）', hatches: { 'CLIProxyAPI（本地）': 'provider.cliProxyLocalVariant' } },
+  'New conversation': { plain: '新建对话', hatches: { 新对话: 'conversation.newPlaceholder' } },
+  'Try again': {
+    plain: '重试',
+    hatches: {
+      再次尝试: 'agentContinuation.tryAgainVariant1',
+      再试一次: 'agentContinuation.tryAgainVariant2',
+      重新尝试: 'agentContinuation.tryAgainVariant3',
+    },
+  },
+  'Agent tool-call limit': {
+    plain: 'Agent 工具调用轮次上限',
+    hatches: { 'Agent 工具调用轮次': 'agent.toolCallTurns' },
+  },
+  'CLIProxyAPI (local)': {
+    plain: 'CLIProxyAPI（本机）',
+    hatches: { 'CLIProxyAPI（本地）': 'provider.cliProxyLocalVariant' },
+  },
 }
-const HATCH_NAMES = new Set(Object.values(RESOLUTION).flatMap((r) => Object.values(r.hatches)))
 
 // --- bundle parsing ----------------------------------------------------------------
 function parseBundleText(text) {
@@ -66,8 +79,8 @@ function buildMapping(oldZh, oldEn) {
     ;(byEn[en] || (byEn[en] = [])).push(key)
   }
 
-  const oldToNew = new Map()   // oldKey -> newKey
-  const hatchEn = {}           // newKey -> english value (en-US.ts entries)
+  const oldToNew = new Map() // oldKey -> newKey
+  const hatchEn = {} // newKey -> english value (en-US.ts entries)
   const collisions = []
   const merges = []
 
@@ -92,10 +105,13 @@ function buildMapping(oldZh, oldEn) {
     // validate resolution covers exactly these keys
     const resKeys = new Set([resolution.plain, ...Object.keys(resolution.hatches)])
     for (const k of keys) {
-      if (!resKeys.has(k)) throw new Error(`Resolution for ${JSON.stringify(enValue)} missing old key ${JSON.stringify(k)}`)
+      if (!resKeys.has(k))
+        throw new Error(`Resolution for ${JSON.stringify(enValue)} missing old key ${JSON.stringify(k)}`)
     }
     if (resKeys.size !== keys.length) {
-      throw new Error(`Resolution for ${JSON.stringify(enValue)} has extra keys: ${JSON.stringify([...resKeys].filter((k) => !keys.includes(k)))}`)
+      throw new Error(
+        `Resolution for ${JSON.stringify(enValue)} has extra keys: ${JSON.stringify([...resKeys].filter((k) => !keys.includes(k)))}`,
+      )
     }
     oldToNew.set(resolution.plain, enValue)
     for (const [oldKey, newName] of Object.entries(resolution.hatches)) {
@@ -109,8 +125,8 @@ function buildMapping(oldZh, oldEn) {
 
 // --- new bundle construction -------------------------------------------------------
 function buildBundles(oldZh, oldEn, oldToNew, hatchEn) {
-  const newZh = {}      // newKey -> chinese value
-  const newEn = {}      // newKey -> english value (hatch only)
+  const newZh = {} // newKey -> chinese value
+  const newEn = {} // newKey -> english value (hatch only)
   for (const [oldKey, newKey] of oldToNew) {
     const zhValue = oldZh[oldKey]
     if (Object.prototype.hasOwnProperty.call(newZh, newKey) && newZh[newKey] !== zhValue) {
@@ -127,7 +143,8 @@ function buildBundles(oldZh, oldEn, oldToNew, hatchEn) {
   // order: hatch keys first (sorted), then plain keys by localeCompare('en-US')
   const isHatch = (k) => Object.prototype.hasOwnProperty.call(hatchEn, k)
   const sorted = Object.keys(newZh).sort((a, b) => {
-    const ha = isHatch(a), hb = isHatch(b)
+    const ha = isHatch(a),
+      hb = isHatch(b)
     if (ha !== hb) return ha ? -1 : 1
     return a.localeCompare(b, 'en-US')
   })
@@ -139,8 +156,7 @@ function buildBundles(oldZh, oldEn, oldToNew, hatchEn) {
 }
 
 function resourceFile(variableName, header, entries, typed) {
-  const lines = Object.entries(entries)
-    .map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)},`)
+  const lines = Object.entries(entries).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)},`)
   return `${header}\nexport const ${variableName}${typed ? ': Record<string, string>' : ''} = {\n${lines.join('\n')}\n}${typed ? '' : ' as const'}\n`
 }
 
@@ -156,9 +172,7 @@ function sourceFileOf(file, sourceText) {
 }
 
 function isTCall(node) {
-  return ts.isCallExpression(node)
-    && ts.isIdentifier(node.expression)
-    && node.expression.text === 't'
+  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 't'
 }
 
 // Collect string-literal leaf nodes inside the first argument of a t() call.
@@ -238,10 +252,10 @@ function isMarkdownFileContent(node) {
   if (!ts.isObjectLiteralExpression(object)) return false
   const kindProp = object.properties.find((p) => ts.isPropertyAssignment(p) && p.name.getText() === 'kind')
   return Boolean(
-    kindProp
-    && ts.isPropertyAssignment(kindProp)
-    && ts.isStringLiteral(kindProp.initializer)
-    && kindProp.initializer.text === 'markdown',
+    kindProp &&
+    ts.isPropertyAssignment(kindProp) &&
+    ts.isStringLiteral(kindProp.initializer) &&
+    kindProp.initializer.text === 'markdown',
   )
 }
 
@@ -255,7 +269,10 @@ function rewriteDefaultSkills(oldToNew, report) {
   const counts = { name: 0, description: 0, systemPrompt: 0, content: 0 }
 
   const visit = (node) => {
-    if ((ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) && ts.isPropertyAssignment(node.parent)) {
+    if (
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+      ts.isPropertyAssignment(node.parent)
+    ) {
       const fieldName = node.parent.name.getText()
       if (LOCALIZABLE_SKILL_FIELDS.has(fieldName)) {
         const isContent = fieldName === 'content'
@@ -328,12 +345,14 @@ function execGit(...args) {
   return execSync(['git', ...args].join(' '), { encoding: 'utf8' })
 }
 
-const oldZh = mode === 'verify'
-  ? parseBundleText(execGit('show', `HEAD:${path.relative(root, zhPath).replaceAll(path.sep, '/')}`))
-  : parseBundle(zhPath)
-const oldEn = mode === 'verify'
-  ? parseBundleText(execGit('show', `HEAD:${path.relative(root, enPath).replaceAll(path.sep, '/')}`))
-  : parseBundle(enPath)
+const oldZh =
+  mode === 'verify'
+    ? parseBundleText(execGit('show', `HEAD:${path.relative(root, zhPath).replaceAll(path.sep, '/')}`))
+    : parseBundle(zhPath)
+const oldEn =
+  mode === 'verify'
+    ? parseBundleText(execGit('show', `HEAD:${path.relative(root, enPath).replaceAll(path.sep, '/')}`))
+    : parseBundle(enPath)
 
 // idempotency guard: zh-CN keys already English -> already migrated.
 // --verify intentionally bypasses this so it can self-check a migrated tree.
@@ -356,9 +375,9 @@ if (mode === 'verify') {
     let template = newZh[key] ?? newEn[key] ?? key
     if (lang === 'en-US') template = newEn[key] ?? key
     if (!values) return template
-    return template.replace(/\{([A-Za-z0-9_]+)\}/g, (m, name) => (
-      Object.prototype.hasOwnProperty.call(values, name) ? String(values[name] ?? '') : m
-    ))
+    return template.replace(/\{([A-Za-z0-9_]+)\}/g, (m, name) =>
+      Object.prototype.hasOwnProperty.call(values, name) ? String(values[name] ?? '') : m,
+    )
   }
   let failures = 0
   for (const [oldKey, newKey] of oldToNew) {
@@ -366,8 +385,18 @@ if (mode === 'verify') {
     const expEn = oldEn[oldKey]
     const gotZh = t('zh-CN', newKey)
     const gotEn = t('en-US', newKey)
-    if (gotZh !== expZh) { failures += 1; process.stderr.write(`zh mismatch ${JSON.stringify(oldKey)} -> ${JSON.stringify(newKey)}: ${JSON.stringify(gotZh)} !== ${JSON.stringify(expZh)}\n`) }
-    if (gotEn !== expEn) { failures += 1; process.stderr.write(`en mismatch ${JSON.stringify(oldKey)} -> ${JSON.stringify(newKey)}: ${JSON.stringify(gotEn)} !== ${JSON.stringify(expEn)}\n`) }
+    if (gotZh !== expZh) {
+      failures += 1
+      process.stderr.write(
+        `zh mismatch ${JSON.stringify(oldKey)} -> ${JSON.stringify(newKey)}: ${JSON.stringify(gotZh)} !== ${JSON.stringify(expZh)}\n`,
+      )
+    }
+    if (gotEn !== expEn) {
+      failures += 1
+      process.stderr.write(
+        `en mismatch ${JSON.stringify(oldKey)} -> ${JSON.stringify(newKey)}: ${JSON.stringify(gotEn)} !== ${JSON.stringify(expEn)}\n`,
+      )
+    }
   }
   process.stdout.write(`verify: ${oldToNew.size} keys checked, ${failures} failures\n`)
   process.exit(failures === 0 ? 0 : 1)
@@ -383,35 +412,40 @@ rewriteDefaultSkills(oldToNew, report)
 if (mode === 'apply') {
   fs.writeFileSync(
     zhPath,
-    resourceFile('zhCN', '/** Simplified Chinese resource bundle. English source copy is the key; values are reviewed Simplified Chinese. */', orderedZh, false),
+    resourceFile(
+      'zhCN',
+      '/** Simplified Chinese resource bundle. English source copy is the key; values are reviewed Simplified Chinese. */',
+      orderedZh,
+      false,
+    ),
   )
   fs.writeFileSync(
     enPath,
-    resourceFile('enUS', '/** English resource bundle. Holds only semantic hatch keys whose shared English text must distinguish different Chinese messages. */', orderedEn, true),
+    resourceFile(
+      'enUS',
+      '/** English resource bundle. Holds only semantic hatch keys whose shared English text must distinguish different Chinese messages. */',
+      orderedEn,
+      true,
+    ),
   )
 }
 
 // --- report -------------------------------------------------------------------------
 const unmappedFiles = Object.keys(report.unmappedLiterals)
-const deadKeys = []
-for (const [oldKey, newKey] of oldToNew) {
-  if (!report.callSiteRewrites && false) { /* noop */ }
-}
-// keys with zero call-site occurrence (informational; still emitted to bundle)
-const rewrittenOldKeys = new Set()
-for (const [, count] of Object.entries(report.callSiteRewrites)) {
-  // can't reconstruct which keys here; compute below via a second pass
-}
 
 process.stdout.write(`i18n key migration ${mode === 'apply' ? '(applied)' : '(dry-run)'}\n`)
-process.stdout.write(`  old keys: ${oldToNew.size} (zh entries: ${Object.keys(orderedZh).length}, en hatch entries: ${Object.keys(orderedEn).length})\n`)
+process.stdout.write(
+  `  old keys: ${oldToNew.size} (zh entries: ${Object.keys(orderedZh).length}, en hatch entries: ${Object.keys(orderedEn).length})\n`,
+)
 process.stdout.write(`  collision groups: ${collisions.length} (resolved via semantic hatch keys)\n`)
 process.stdout.write(`  merge groups: ${merges.length} (collapsed to plain keys)\n`)
 process.stdout.write(`  call-site files rewritten: ${Object.keys(report.callSiteRewrites).length}\n`)
 process.stdout.write(`  call-site literals rewritten: ${report.totalCallSiteRewrites}\n`)
 if (report.defaultSkillsRewrites) {
   const c = report.defaultSkillsRewrites
-  process.stdout.write(`  DEFAULT_SKILLS rewrites: names ${c.name}, descriptions ${c.description}, systemPrompt ${c.systemPrompt}, markdown content ${c.content}\n`)
+  process.stdout.write(
+    `  DEFAULT_SKILLS rewrites: names ${c.name}, descriptions ${c.description}, systemPrompt ${c.systemPrompt}, markdown content ${c.content}\n`,
+  )
 }
 if (unmappedFiles.length > 0) {
   process.stdout.write(`  UNMAPPED literals inside t() args (must be empty):\n`)
@@ -423,13 +457,17 @@ process.stdout.write(`\ncollision resolutions:\n`)
 for (const c of collisions) {
   const parts = c.keys.map((k) => {
     const nk = oldToNew.get(k)
-    return nk === c.enValue ? `${JSON.stringify(k)} -> plain ${JSON.stringify(nk)}` : `${JSON.stringify(k)} -> ${JSON.stringify(nk)}`
+    return nk === c.enValue
+      ? `${JSON.stringify(k)} -> plain ${JSON.stringify(nk)}`
+      : `${JSON.stringify(k)} -> ${JSON.stringify(nk)}`
   })
   process.stdout.write(`  ${JSON.stringify(c.enValue)}: ${parts.join('; ')}\n`)
 }
 process.stdout.write(`\nmerge resolutions:\n`)
 for (const m of merges) {
-  process.stdout.write(`  ${JSON.stringify(m.enValue)}: ${JSON.stringify(m.keys)} -> plain ${JSON.stringify(m.enValue)} (zh ${JSON.stringify(m.zh)})\n`)
+  process.stdout.write(
+    `  ${JSON.stringify(m.enValue)}: ${JSON.stringify(m.keys)} -> plain ${JSON.stringify(m.enValue)} (zh ${JSON.stringify(m.zh)})\n`,
+  )
 }
 
 if (unmappedFiles.length > 0) {

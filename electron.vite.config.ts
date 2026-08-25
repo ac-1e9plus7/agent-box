@@ -14,7 +14,7 @@ const developmentCspPlugin: Plugin = {
   apply: 'serve',
   transformIndexHtml(html) {
     return html.replace(productionCsp, developmentCsp)
-  }
+  },
 }
 
 export default defineConfig({
@@ -23,41 +23,41 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/electron/main.ts')
+          index: resolve(__dirname, 'src/electron/main.ts'),
         },
         // Keep the packaged main process in CommonJS. Electron's ESM loader
         // cannot reliably resolve legacy CommonJS package entry points (for
         // example ajv's dist/ajv.js) from inside app.asar on Windows.
         output: {
           format: 'cjs',
-          entryFileNames: '[name].cjs'
-        }
-      }
-    }
+          entryFileNames: '[name].cjs',
+        },
+      },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'src/electron/preload.ts')
+          index: resolve(__dirname, 'src/electron/preload.ts'),
         },
         // Electron executes sandboxed preload scripts as CommonJS. An ESM
         // preload fails before contextBridge can expose the renderer API.
         output: {
           format: 'cjs',
-          entryFileNames: '[name].cjs'
-        }
-      }
-    }
+          entryFileNames: '[name].cjs',
+        },
+      },
+    },
   },
   renderer: {
     root: resolve(__dirname, 'src/renderer'),
     build: {
       rollupOptions: {
-        input: resolve(__dirname, 'src/renderer/index.html')
-      }
+        input: resolve(__dirname, 'src/renderer/index.html'),
+      },
     },
-    plugins: [react(), developmentCspPlugin]
-  }
+    plugins: [react(), developmentCspPlugin],
+  },
 })

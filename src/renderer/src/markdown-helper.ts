@@ -42,13 +42,13 @@ export function preprocessMarkdown(content: string): string {
       // 3. Convert standalone LaTeX environments to $$...$$
       text = text.replace(
         /(?<!\$)\\(begin\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases|aligned|align\*?|equation\*?|gather\*?|split)\}[\s\S]*?\\end\{(?:matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases|aligned|align\*?|equation\*?|gather\*?|split)\})(?!\$)/g,
-        (match: string) => `\n$$\n${match.trim()}\n$$\n`
+        (match: string) => `\n$$\n${match.trim()}\n$$\n`,
       )
 
       // 4. Protect standalone currency amounts (e.g. $100, $50.99, $1,000) from accidental pairing
       text = text.replace(
-        /(^|[\s(（\[<])\$(\d+(?:[\d,.]*\d)?)(?=$|[\s,.:;!?!)[\]>，。])/g,
-        (_match: string, prefix: string, amount: string) => `${prefix}\\$${amount}`
+        /(^|[\s(（[<])\$(\d+(?:[\d,.]*\d)?)(?=$|[\s,.:;!?!)[\]>，。])/g,
+        (_match: string, prefix: string, amount: string) => `${prefix}\\$${amount}`,
       )
 
       // 5. Normalize $$...$$ blocks so $$ is separated by newlines

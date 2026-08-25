@@ -7,12 +7,7 @@ import {
 } from '../src/electron/api/context-window'
 import type { Message } from '../src/shared/types'
 
-const message = (
-  id: string,
-  role: Message['role'],
-  content: string,
-  reasoning?: string,
-): Message => ({
+const message = (id: string, role: Message['role'], content: string, reasoning?: string): Message => ({
   id,
   role,
   content,
@@ -29,9 +24,7 @@ describe('context-window', () => {
   it('does not count reasoning that is not sent on the wire', () => {
     const withoutReasoning = message('a', 'assistant', 'answer')
     const withReasoning = message('a', 'assistant', 'answer', 'x'.repeat(10_000))
-    expect(estimateMessageTokens(withReasoning)).toBe(
-      estimateMessageTokens(withoutReasoning),
-    )
+    expect(estimateMessageTokens(withReasoning)).toBe(estimateMessageTokens(withoutReasoning))
   })
 
   it('drops oldest complete turns and retains system plus latest user', () => {
@@ -59,13 +52,8 @@ describe('context-window', () => {
   })
 
   it('fails rather than removing required system or latest-user content', () => {
-    const messages = [
-      message('system', 'system', 's'.repeat(1_000)),
-      message('latest-user', 'user', 'u'.repeat(1_000)),
-    ]
-    expect(() => prepareMessagesForContext(messages, 600, 100, 'auto')).toThrow(
-      '系统提示词与最后一条用户消息',
-    )
+    const messages = [message('system', 'system', 's'.repeat(1_000)), message('latest-user', 'user', 'u'.repeat(1_000))]
+    expect(() => prepareMessagesForContext(messages, 600, 100, 'auto')).toThrow('系统提示词与最后一条用户消息')
   })
 
   it('manual mode never silently removes history', () => {
@@ -74,9 +62,7 @@ describe('context-window', () => {
       message('old-assistant', 'assistant', 'b'.repeat(400)),
       message('latest-user', 'user', 'latest'),
     ]
-    expect(() => prepareMessagesForContext(messages, 500, 100, 'manual')).toThrow(
-      '启用“自动裁剪”',
-    )
+    expect(() => prepareMessagesForContext(messages, 500, 100, 'manual')).toThrow('启用“自动裁剪”')
   })
 
   it('manual mode returns the complete history when it fits', () => {
@@ -96,9 +82,7 @@ describe('context-window', () => {
       message('old-assistant', 'assistant', 'b'.repeat(400)),
       message('latest-user', 'user', 'latest'),
     ]
-    expect(() => prepareMessagesForContext(messages, 500, 100)).toThrow(
-      '当前对话估算需要',
-    )
+    expect(() => prepareMessagesForContext(messages, 500, 100)).toThrow('当前对话估算需要')
   })
 
   it('allows a one-request trimming override without changing the configured mode', () => {

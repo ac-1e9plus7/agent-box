@@ -8,17 +8,22 @@
 
 CI 当前以 Node.js 20 和 pnpm 9 为基线。仓库尚未通过 `engines` 或 `packageManager` 字段强制本地版本，排查环境差异时应优先与 CI 对齐。
 
-| 命令 | 实际行为 |
-| --- | --- |
-| `pnpm install` | 安装依赖；CI 使用 `pnpm install --frozen-lockfile` |
-| `pnpm dev` | 通过 `electron-vite dev` 启动 renderer 开发服务器和 Electron |
-| `pnpm preview` | 预览已经生成的 electron-vite 构建 |
-| `pnpm typecheck` | 分别以 `tsconfig.node.json` 和 `tsconfig.web.json` 检查 main/preload/shared 与 renderer，不生成文件 |
-| `pnpm test` | 以 `vitest run` 单次运行全部测试 |
-| `pnpm test:watch` | 以 Vitest watch 模式运行受影响测试 |
-| `pnpm build` | 先运行 `pnpm typecheck`，再执行 `electron-vite build` |
-| `pnpm package` | 先构建，再以 `electron-builder --dir` 生成未封装应用目录 |
-| `pnpm dist` | 先构建，再为当前平台生成 electron-builder 分发产物 |
+| 命令                | 实际行为                                                                                            |
+| ------------------- | --------------------------------------------------------------------------------------------------- |
+| `pnpm install`      | 安装依赖；CI 使用 `pnpm install --frozen-lockfile`                                                  |
+| `pnpm dev`          | 通过 `electron-vite dev` 启动 renderer 开发服务器和 Electron                                        |
+| `pnpm preview`      | 预览已经生成的 electron-vite 构建                                                                   |
+| `pnpm typecheck`    | 分别以 `tsconfig.node.json` 和 `tsconfig.web.json` 检查 main/preload/shared 与 renderer，不生成文件 |
+| `pnpm lint`         | 运行带 TypeScript 类型信息的 ESLint，并将 warning 视为失败                                          |
+| `pnpm lint:fix`     | 应用 ESLint 可安全执行的自动修复                                                                    |
+| `pnpm format`       | 使用 Prettier 格式化受支持的源码、配置、样式与文档文件                                              |
+| `pnpm format:check` | 只检查 Prettier 格式，不修改文件                                                                    |
+| `pnpm test`         | 以 `vitest run` 单次运行全部测试                                                                    |
+| `pnpm test:watch`   | 以 Vitest watch 模式运行受影响测试                                                                  |
+| `pnpm check`        | 依次运行类型检查、lint、格式、本地化检查与完整测试                                                  |
+| `pnpm build`        | 先运行 `pnpm typecheck`，再执行 `electron-vite build`                                               |
+| `pnpm package`      | 先构建，再以 `electron-builder --dir` 生成未封装应用目录                                            |
+| `pnpm dist`         | 先构建，再为当前平台生成 electron-builder 分发产物                                                  |
 
 ## 构建产物与打包冒烟测试
 
@@ -36,15 +41,15 @@ pnpm package
 
 [`vitest.config.ts`](../vitest.config.ts) 默认使用 Node 环境，同时匹配 `tests/**/*.test.ts` 与 `tests/**/*.test.tsx`。适合单测的 renderer 行为仍应尽量拆成纯函数。Renderer 集成测试通过文件级配置启用 jsdom，使用 Testing Library 渲染真实 React 组件，并以进程内 mock 替换 `window.agentbox` preload bridge；它们不属于完整 Electron UI 自动化。由于这些测试会导入真实组件图，`tsconfig.node.json` 纳入完整 renderer 源码树；`.ts` 与 `.tsx` 测试都会参加 TypeScript 检查。
 
-| 范围 | 代表性测试 |
-| --- | --- |
-| 进程、安全与外部输入边界 | `gateway-safety`, `encrypted-store-safety`, `repository-validation`, `provider-policy`, `proxy-masking` |
-| 三种 API、SSE 与联网元数据 | `protocol-adapters`, `sse`, `stream-helper`, `web-metadata-schema`, `web-search-helper` |
-| Vault、Schema、迁移、配额与备份 | `settings-schema`, `vault-legacy-migration`, `vault-resource-limits`, `clear-conversations`, `backup-export` |
-| Agent、MCP、Skills 与代码执行 | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor` |
-| renderer 纯逻辑 | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
-| renderer 集成 | `app.integration`, `settings-dialog.integration`：通过 mock preload bridge 验证应用快捷键、流式更新及 Settings 暂存保存/取消语义 |
-| 国际化 | `i18n`：英文为 key 的资源结构、占位符一致、逃生舱解析、locale 决策、英文术语规则和内置 Skill 本地化 |
+| 范围                            | 代表性测试                                                                                                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 进程、安全与外部输入边界        | `gateway-safety`, `encrypted-store-safety`, `repository-validation`, `provider-policy`, `proxy-masking`                                                                  |
+| 三种 API、SSE 与联网元数据      | `protocol-adapters`, `sse`, `stream-helper`, `web-metadata-schema`, `web-search-helper`                                                                                  |
+| Vault、Schema、迁移、配额与备份 | `settings-schema`, `vault-legacy-migration`, `vault-resource-limits`, `clear-conversations`, `backup-export`                                                             |
+| Agent、MCP、Skills 与代码执行   | `agent-runtime`, `agent-continuation`, `gateway-mcp-loop`, `mcp-manager`, `mcp-schema`, `tool-retriever`, `skills-management`, `builtin-agent-tools`, `code-executor`    |
+| renderer 纯逻辑                 | `conversation-tree`, `context-projection`, `context-window`, `composer-helper`, `file-helper`, `markdown-helper`, `title-generation`, `token-step`, `workspace-grouping` |
+| renderer 集成                   | `app.integration`, `settings-dialog.integration`：通过 mock preload bridge 验证应用快捷键、流式更新及 Settings 暂存保存/取消语义                                         |
+| 国际化                          | `i18n`：英文为 key 的资源结构、占位符一致、逃生舱解析、locale 决策、英文术语规则和内置 Skill 本地化                                                                      |
 
 涉及外部数据的测试至少应覆盖正常路径、功能关闭状态、旧字段缺失、非法或超大输入，以及取消/失败路径。协议改动需覆盖所有受影响的 API 格式，不能只验证单一 provider。
 
@@ -53,20 +58,20 @@ pnpm package
 普通代码改动至少运行：
 
 ```powershell
-pnpm test
+pnpm check
 pnpm build
 ```
 
-`pnpm build` 已包含类型检查，但不包含测试。涉及打包入口、依赖外置、preload 或 Electron 启动生命周期时，额外执行 `pnpm package` 和 unpacked 应用冒烟测试。
+`pnpm check` 是不会修改文件的统一质量门禁。需要自动修复时先运行 `pnpm lint:fix` 与 `pnpm format`，再重新执行检查。自动生成的语言包与包管理器锁文件不交给 Prettier，以各自的生成器输出为准。`pnpm build` 包含类型检查，但不包含其他质量检查。涉及打包入口、依赖外置、preload 或 Electron 启动生命周期时，额外执行 `pnpm package` 和 unpacked 应用冒烟测试。
 
 ## GitHub Actions
 
-当前 [`.github/workflows/release.yml`](../.github/workflows/release.yml) 在匹配 `v*.*.*` 的 tag 推送或手动 `workflow_dispatch` 时运行：
+[质量检查工作流](../.github/workflows/quality.yml) 会在分支推送和 pull request 上运行 `pnpm check`。[发布工作流](../.github/workflows/release.yml) 在匹配 `v*.*.*` 的 tag 推送或手动 `workflow_dispatch` 时运行：
 
 - Windows：x64 与 arm64；
 - macOS：runner 原生架构；
 - Ubuntu：x64 与 arm64。
 
-每个 job 安装 pnpm 9、Node.js 20 和冻结锁文件依赖，运行 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。
+每个发布 job 安装 pnpm 9、Node.js 20 和冻结锁文件依赖，运行 `pnpm check` 与 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。
 
-该工作流目前**不会运行 `pnpm test`，也不会创建或发布 GitHub Release**。因此测试仍是本地/代码审查阶段的必要门禁；若产品流程要求自动发布 Release，需要另行增加测试与 release publishing 步骤，不能把 artifact upload 误认为正式发布。
+发布工作流仍不会创建或发布 GitHub Release。若产品流程要求自动发布 Release，需要另行增加 release publishing 步骤，不能把 artifact upload 误认为正式发布。

@@ -17,7 +17,7 @@ function crc32(buf) {
     c ^= buf[i]
     for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1))
   }
-  return (~c) >>> 0
+  return ~c >>> 0
 }
 
 function chunk(type, data) {
@@ -88,11 +88,11 @@ function renderLogo(size) {
   // Spark polygon in normalized 0..1 space (derived from the app icon mark).
   const spark = [
     [0.375, 0.508],
-    [0.410, 0.332],
-    [0.531, 0.230],
+    [0.41, 0.332],
+    [0.531, 0.23],
     [0.516, 0.406],
     [0.578, 0.484],
-    [0.703, 0.520],
+    [0.703, 0.52],
     [0.578, 0.555],
     [0.469, 0.672],
     [0.449, 0.828],
@@ -100,13 +100,12 @@ function renderLogo(size) {
     [0.328, 0.539],
   ]
   const sparkPx = spark.map(([x, y]) => [x * S, y * S])
-  const cross = (a, b, p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
   const pointInPoly = (p) => {
     let inside = false
     for (let i = 0, j = sparkPx.length - 1; i < sparkPx.length; j = i++) {
       const a = sparkPx[i]
       const b = sparkPx[j]
-      if (((a[1] > p[1]) !== (b[1] > p[1])) && (p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0])) {
+      if (a[1] > p[1] !== b[1] > p[1] && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]) {
         inside = !inside
       }
     }

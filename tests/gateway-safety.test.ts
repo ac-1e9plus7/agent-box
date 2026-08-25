@@ -15,9 +15,7 @@ describe('Gateway credential and proxy redaction', () => {
   it('redacts secret API keys from error messages', () => {
     const key = 'sk-or-v1-abcdef1234567890abcdef'
     const message = `Upstream error with Authorization: Bearer ${key} failed.`
-    expect(redactSecret(message, key)).toBe(
-      'Upstream error with Authorization: Bearer [REDACTED] failed.',
-    )
+    expect(redactSecret(message, key)).toBe('Upstream error with Authorization: Bearer [REDACTED] failed.')
   })
 
   it('redacts proxy username and password from error messages', () => {
@@ -32,19 +30,13 @@ describe('Gateway credential and proxy redaction', () => {
     const key = 'my-secret-api-key'
     const proxyUrl = 'https://corp_user:corp_pass@proxy.internal:443'
     const message = 'Failed: key my-secret-api-key using user corp_user pass corp_pass'
-    expect(redactSecret(message, key, proxyUrl)).toBe(
-      'Failed: key [REDACTED] using user [REDACTED] pass [REDACTED]',
-    )
+    expect(redactSecret(message, key, proxyUrl)).toBe('Failed: key [REDACTED] using user [REDACTED] pass [REDACTED]')
   })
 
   it('handles clean messages, missing secrets, and non-credential proxies', () => {
     expect(redactSecret('Ordinary error message')).toBe('Ordinary error message')
-    expect(
-      redactSecret('Ordinary error message', undefined, 'http://127.0.0.1:7890'),
-    ).toBe('Ordinary error message')
-    expect(redactSecret('Ordinary error message', undefined, 'invalid url')).toBe(
-      'Ordinary error message',
-    )
+    expect(redactSecret('Ordinary error message', undefined, 'http://127.0.0.1:7890')).toBe('Ordinary error message')
+    expect(redactSecret('Ordinary error message', undefined, 'invalid url')).toBe('Ordinary error message')
   })
 
   it('redactError preserves GatewayError metadata while masking message content', () => {
@@ -63,9 +55,7 @@ describe('Gateway chat request validation (validateChatRequest)', () => {
   const validRequest: ChatRequest = {
     conversationId: 'conv-123',
     modelId: 'model-abc',
-    messages: [
-      { id: 'm1', role: 'user', content: 'hello', createdAt: '2026-01-01T00:00:00.000Z' },
-    ],
+    messages: [{ id: 'm1', role: 'user', content: 'hello', createdAt: '2026-01-01T00:00:00.000Z' }],
     reasoningEnabled: true,
     reasoningEffort: 'medium',
     webSearchMode: 'auto',
@@ -84,30 +74,20 @@ describe('Gateway chat request validation (validateChatRequest)', () => {
   })
 
   it('rejects invalid conversation ID or model ID', () => {
-    expect(() => validateChatRequest({ ...validRequest, conversationId: '' })).toThrow(
-      '会话 ID 无效。',
-    )
-    expect(() =>
-      validateChatRequest({ ...validRequest, conversationId: 'x'.repeat(501) }),
-    ).toThrow('会话 ID 无效。')
-    expect(() => validateChatRequest({ ...validRequest, modelId: '' })).toThrow(
-      '会话 ID 无效。',
-    )
+    expect(() => validateChatRequest({ ...validRequest, conversationId: '' })).toThrow('会话 ID 无效。')
+    expect(() => validateChatRequest({ ...validRequest, conversationId: 'x'.repeat(501) })).toThrow('会话 ID 无效。')
+    expect(() => validateChatRequest({ ...validRequest, modelId: '' })).toThrow('会话 ID 无效。')
   })
 
   it('rejects empty or overly long message arrays', () => {
-    expect(() => validateChatRequest({ ...validRequest, messages: [] })).toThrow(
-      '消息列表为空或过长。',
-    )
+    expect(() => validateChatRequest({ ...validRequest, messages: [] })).toThrow('消息列表为空或过长。')
     const tooManyMessages: Message[] = Array.from({ length: 2001 }, (_, i) => ({
       id: `m-${i}`,
       role: 'user' as const,
       content: 'hi',
       createdAt: '2026-01-01T00:00:00.000Z',
     }))
-    expect(() =>
-      validateChatRequest({ ...validRequest, messages: tooManyMessages }),
-    ).toThrow('消息列表为空或过长。')
+    expect(() => validateChatRequest({ ...validRequest, messages: tooManyMessages })).toThrow('消息列表为空或过长。')
   })
 
   it('rejects invalid message roles and oversized messages', () => {
@@ -142,21 +122,17 @@ describe('Gateway chat request validation (validateChatRequest)', () => {
   })
 
   it('rejects invalid temperature, maxOutputTokens, reasoningEffort, and webSearchMode', () => {
-    expect(() =>
-      validateChatRequest({ ...validRequest, temperature: -0.1 }),
-    ).toThrow('temperature 必须在 0 到 2 之间。')
-    expect(() =>
-      validateChatRequest({ ...validRequest, temperature: 2.1 }),
-    ).toThrow('temperature 必须在 0 到 2 之间。')
-    expect(() =>
-      validateChatRequest({ ...validRequest, maxOutputTokens: -10 }),
-    ).toThrow('最大输出长度配置无效。')
-    expect(() =>
-      validateChatRequest({ ...validRequest, reasoningEffort: 'extreme' as never }),
-    ).toThrow('思考强度配置无效。')
-    expect(() =>
-      validateChatRequest({ ...validRequest, webSearchMode: 'always' as never }),
-    ).toThrow('网页搜索模式无效。')
+    expect(() => validateChatRequest({ ...validRequest, temperature: -0.1 })).toThrow(
+      'temperature 必须在 0 到 2 之间。',
+    )
+    expect(() => validateChatRequest({ ...validRequest, temperature: 2.1 })).toThrow('temperature 必须在 0 到 2 之间。')
+    expect(() => validateChatRequest({ ...validRequest, maxOutputTokens: -10 })).toThrow('最大输出长度配置无效。')
+    expect(() => validateChatRequest({ ...validRequest, reasoningEffort: 'extreme' as never })).toThrow(
+      '思考强度配置无效。',
+    )
+    expect(() => validateChatRequest({ ...validRequest, webSearchMode: 'always' as never })).toThrow(
+      '网页搜索模式无效。',
+    )
   })
 })
 
@@ -223,23 +199,16 @@ describe('Gateway response limiting and model array extraction', () => {
   })
 
   it('extracts models array from valid payload and rejects invalid data', () => {
-    expect(extractModelArray({ data: [{ id: 'm1' }, { id: 'm2' }] })).toEqual([
-      { id: 'm1' },
-      { id: 'm2' },
-    ])
-    expect(() => extractModelArray({ models: [] })).toThrow(
-      '供应商返回了无法识别的模型列表。',
+    expect(extractModelArray({ data: [{ id: 'm1' }, { id: 'm2' }] })).toEqual([{ id: 'm1' }, { id: 'm2' }])
+    expect(() => extractModelArray({ models: [] })).toThrow('供应商返回了无法识别的模型列表。')
+    expect(() => extractModelArray({ data: Array.from({ length: 20_001 }, () => ({})) })).toThrow(
+      '供应商返回的模型数量超过限制。',
     )
-    expect(() =>
-      extractModelArray({ data: Array.from({ length: 20_001 }, () => ({})) }),
-    ).toThrow('供应商返回的模型数量超过限制。')
   })
 })
 
 describe('Gateway system prompt composition (addConfiguredSystemPrompt)', () => {
-  const messages: Message[] = [
-    { id: 'u1', role: 'user', content: 'hello', createdAt: '2026-01-01T00:00:00.000Z' },
-  ]
+  const messages: Message[] = [{ id: 'u1', role: 'user', content: 'hello', createdAt: '2026-01-01T00:00:00.000Z' }]
 
   it('prepends configured system prompt to head of messages', () => {
     const result = addConfiguredSystemPrompt(messages, 'You are a helpful assistant.')

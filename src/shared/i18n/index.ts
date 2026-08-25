@@ -41,11 +41,9 @@ export function t(key: MessageKey, values?: MessageValues): string {
   // semantic "hatch" keys; any other key renders as itself under English.
   const template = resources[activeLanguage][key] ?? resources['en-US'][key] ?? key
   if (!values) return template
-  return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) => (
-    Object.prototype.hasOwnProperty.call(values, name)
-      ? (values[name] == null ? '' : String(values[name]))
-      : match
-  ))
+  return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, name: string) =>
+    Object.prototype.hasOwnProperty.call(values, name) ? (values[name] == null ? '' : String(values[name])) : match,
+  )
 }
 
 export function resourceBundle(language: AppLanguage): Readonly<Record<string, string>> {

@@ -36,19 +36,29 @@ describe('integrated terminal shell resolution', () => {
       kind,
       displayName: executable,
     })
-    expect(commandArguments(shell('powershell', 'pwsh'), 'echo ok')).toEqual(['--startup', '-NonInteractive', '-Command', 'echo ok'])
+    expect(commandArguments(shell('powershell', 'pwsh'), 'echo ok')).toEqual([
+      '--startup',
+      '-NonInteractive',
+      '-Command',
+      'echo ok',
+    ])
     expect(commandArguments(shell('cmd', 'cmd'), 'echo ok')).toEqual(['--startup', '/s', '/c', 'echo ok'])
     expect(commandArguments(shell('posix', 'bash'), 'echo ok')).toEqual(['--startup', '-lc', 'echo ok'])
     expect(commandArguments(shell('fish', 'fish'), 'echo ok')).toEqual(['--startup', '-c', 'echo ok'])
   })
 
   it('supports a {command} argument template for custom shells', () => {
-    expect(commandArguments({
-      executable: 'custom-shell',
-      launchArgs: ['run', '--expression={command}'],
-      kind: 'custom',
-      displayName: 'Custom',
-    }, 'echo ok')).toEqual(['run', '--expression=echo ok'])
+    expect(
+      commandArguments(
+        {
+          executable: 'custom-shell',
+          launchArgs: ['run', '--expression={command}'],
+          kind: 'custom',
+          displayName: 'Custom',
+        },
+        'echo ok',
+      ),
+    ).toEqual(['run', '--expression=echo ok'])
   })
 
   it('separates localized truncation markers from terminal output', () => {

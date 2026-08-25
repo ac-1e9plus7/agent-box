@@ -1,8 +1,5 @@
-import {
-  MAX_USER_AVATAR_DATA_URL_LENGTH,
-  MAX_USER_AVATAR_DIMENSION,
-} from '../../shared/user-profile'
-import { t } from "../../shared/i18n"
+import { MAX_USER_AVATAR_DATA_URL_LENGTH, MAX_USER_AVATAR_DIMENSION } from '../../shared/user-profile'
+import { t } from '../../shared/i18n'
 
 export const AVATAR_CROP_VIEWPORT_SIZE = 340
 export const MIN_AVATAR_ZOOM = 1
@@ -36,14 +33,14 @@ export function resolveAvatarCropLayout(
   viewportSize = AVATAR_CROP_VIEWPORT_SIZE,
 ): AvatarCropLayout {
   if (
-    !Number.isFinite(sourceWidth)
-    || !Number.isFinite(sourceHeight)
-    || sourceWidth <= 0
-    || sourceHeight <= 0
-    || !Number.isFinite(viewportSize)
-    || viewportSize <= 0
+    !Number.isFinite(sourceWidth) ||
+    !Number.isFinite(sourceHeight) ||
+    sourceWidth <= 0 ||
+    sourceHeight <= 0 ||
+    !Number.isFinite(viewportSize) ||
+    viewportSize <= 0
   ) {
-    throw new Error(t("Avatar image size is invalid."))
+    throw new Error(t('Avatar image size is invalid.'))
   }
 
   const normalizedZoom = clamp(zoom, MIN_AVATAR_ZOOM, MAX_AVATAR_ZOOM)
@@ -70,43 +67,38 @@ export function resolveAvatarCropLayout(
 
 export function validateAvatarSourceFile(file: Pick<File, 'size' | 'type'>): void {
   if (!file.type.startsWith('image/') || file.type === 'image/svg+xml') {
-    throw new Error(t("Choose a PNG, JPEG, WebP, or another common bitmap format."))
+    throw new Error(t('Choose a PNG, JPEG, WebP, or another common bitmap format.'))
   }
   if (file.size <= 0 || file.size > MAX_AVATAR_SOURCE_BYTES) {
-    throw new Error(t("The source image cannot exceed 30 MB."))
+    throw new Error(t('The source image cannot exceed 30 MB.'))
   }
 }
 
 export function validateAvatarSourceDimensions(width: number, height: number): void {
   if (
-    !Number.isInteger(width)
-    || !Number.isInteger(height)
-    || width <= 0
-    || height <= 0
-    || width > MAX_AVATAR_SOURCE_DIMENSION
-    || height > MAX_AVATAR_SOURCE_DIMENSION
-    || width * height > MAX_AVATAR_SOURCE_PIXELS
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    width <= 0 ||
+    height <= 0 ||
+    width > MAX_AVATAR_SOURCE_DIMENSION ||
+    height > MAX_AVATAR_SOURCE_DIMENSION ||
+    width * height > MAX_AVATAR_SOURCE_PIXELS
   ) {
-    throw new Error(t("The original avatar image is too large or invalid."))
+    throw new Error(t('The original avatar image is too large or invalid.'))
   }
 }
 
 export function resolveAvatarOutputSize(sourceSize: number): number {
-  if (!Number.isFinite(sourceSize) || sourceSize <= 0) throw new Error(t("Avatar crop size is invalid."))
+  if (!Number.isFinite(sourceSize) || sourceSize <= 0) throw new Error(t('Avatar crop size is invalid.'))
   return Math.min(MAX_USER_AVATAR_DIMENSION, Math.max(1, Math.round(sourceSize)))
 }
 
-function renderAvatar(
-  image: HTMLImageElement,
-  layout: AvatarCropLayout,
-  outputSize: number,
-  quality: number,
-): string {
+function renderAvatar(image: HTMLImageElement, layout: AvatarCropLayout, outputSize: number, quality: number): string {
   const canvas = document.createElement('canvas')
   canvas.width = outputSize
   canvas.height = outputSize
   const context = canvas.getContext('2d')
-  if (!context) throw new Error(t("Unable to create avatar canvas."))
+  if (!context) throw new Error(t('Unable to create avatar canvas.'))
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
   context.drawImage(
@@ -123,20 +115,9 @@ function renderAvatar(
   return canvas.toDataURL('image/webp', quality)
 }
 
-export function cropAvatarImage(
-  image: HTMLImageElement,
-  zoom: number,
-  offsetX: number,
-  offsetY: number,
-): string {
+export function cropAvatarImage(image: HTMLImageElement, zoom: number, offsetX: number, offsetY: number): string {
   validateAvatarSourceDimensions(image.naturalWidth, image.naturalHeight)
-  const layout = resolveAvatarCropLayout(
-    image.naturalWidth,
-    image.naturalHeight,
-    zoom,
-    offsetX,
-    offsetY,
-  )
+  const layout = resolveAvatarCropLayout(image.naturalWidth, image.naturalHeight, zoom, offsetX, offsetY)
   let outputSize = resolveAvatarOutputSize(layout.sourceSize)
 
   while (true) {
@@ -147,5 +128,5 @@ export function cropAvatarImage(
     if (outputSize <= 128) break
     outputSize = Math.max(128, Math.floor(outputSize * 0.8))
   }
-  throw new Error(t("The avatar is still too large after compression. Choose another image."))
+  throw new Error(t('The avatar is still too large after compression. Choose another image.'))
 }

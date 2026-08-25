@@ -76,15 +76,17 @@ describe('MCP Schema & AppRepository Storage', () => {
     })
 
     it('rejects invalid MCP approval policy', () => {
-      expect(() => normalizeAppSettings({
-        theme: 'system',
-        sendShortcut: 'enter',
-        contextManagementMode: 'manual',
-        defaultReasoningEnabled: false,
-        defaultReasoningEffort: 'medium',
-        mcpToolApprovalPolicy: 'unsafe',
-        systemPrompt: '',
-      })).toThrow('Invalid MCP tool approval policy')
+      expect(() =>
+        normalizeAppSettings({
+          theme: 'system',
+          sendShortcut: 'enter',
+          contextManagementMode: 'manual',
+          defaultReasoningEnabled: false,
+          defaultReasoningEffort: 'medium',
+          mcpToolApprovalPolicy: 'unsafe',
+          systemPrompt: '',
+        }),
+      ).toThrow('Invalid MCP tool approval policy')
     })
   })
 

@@ -22,9 +22,7 @@ export function isLoopbackUrl(value: string): boolean {
   }
 }
 
-export function isApiKeyOptional(
-  provider: Pick<ProviderPolicyInput, 'kind' | 'baseUrl'>,
-): boolean {
+export function isApiKeyOptional(provider: Pick<ProviderPolicyInput, 'kind' | 'baseUrl'>): boolean {
   return provider.kind === 'cliproxy' && isLoopbackUrl(provider.baseUrl)
 }
 

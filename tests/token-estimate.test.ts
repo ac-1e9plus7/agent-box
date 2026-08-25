@@ -26,9 +26,9 @@ describe('shared token estimate', () => {
   it('adds per-message overhead and ignores reasoning', () => {
     expect(estimateMessageTokens({ content: 'abcd' })).toBe(PER_MESSAGE_OVERHEAD + 1)
     // A full Message may carry reasoning/usage, but only content is estimated.
-    expect(
-      estimateMessageTokens({ content: 'abcd', reasoning: 'x'.repeat(10_000) } as never),
-    ).toBe(PER_MESSAGE_OVERHEAD + 1)
+    expect(estimateMessageTokens({ content: 'abcd', reasoning: 'x'.repeat(10_000) } as never)).toBe(
+      PER_MESSAGE_OVERHEAD + 1,
+    )
   })
 
   it('exposes the constants shared by main and renderer', () => {
@@ -40,13 +40,24 @@ describe('shared token estimate', () => {
   it('estimates token costs for image, text, and document attachments', () => {
     const withImage = estimateMessageTokens({
       content: 'hello',
-      attachments: [{ id: '1', name: 'pic.png', mimeType: 'image/png', size: 1000, data: 'data:image/png;base64,123', type: 'image' }],
+      attachments: [
+        {
+          id: '1',
+          name: 'pic.png',
+          mimeType: 'image/png',
+          size: 1000,
+          data: 'data:image/png;base64,123',
+          type: 'image',
+        },
+      ],
     })
     expect(withImage).toBe(PER_MESSAGE_OVERHEAD + estimateTextTokens('hello') + 1000)
 
     const withText = estimateMessageTokens({
       content: '',
-      attachments: [{ id: '2', name: 'code.ts', mimeType: 'text/typescript', size: 50, data: 'const x = 1;', type: 'text' }],
+      attachments: [
+        { id: '2', name: 'code.ts', mimeType: 'text/typescript', size: 50, data: 'const x = 1;', type: 'text' },
+      ],
     })
     expect(withText).toBe(PER_MESSAGE_OVERHEAD + 0 + estimateTextTokens('const x = 1;') + 16)
   })
@@ -57,8 +68,20 @@ describe('shared token estimate', () => {
       content: 'done',
       agentTrace: [
         { type: 'assistant_text', turn: 1, text: 'done' },
-        { type: 'provider_item', turn: 1, format: 'openai-responses', item: { type: 'reasoning', id: 'rs_1', encrypted_content: 'opaque' } },
-        { type: 'tool_call', turn: 1, callId: 'call-1', toolName: 'read_file', modelToolName: 'mcp_a_read_file', args: { path: 'README.md' } },
+        {
+          type: 'provider_item',
+          turn: 1,
+          format: 'openai-responses',
+          item: { type: 'reasoning', id: 'rs_1', encrypted_content: 'opaque' },
+        },
+        {
+          type: 'tool_call',
+          turn: 1,
+          callId: 'call-1',
+          toolName: 'read_file',
+          modelToolName: 'mcp_a_read_file',
+          args: { path: 'README.md' },
+        },
         { type: 'tool_result', turn: 1, callId: 'call-1', toolName: 'read_file', result: 'file contents' },
       ],
     })

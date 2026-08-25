@@ -1,5 +1,5 @@
 import type { AgentInterruption, ChatError, Message, StreamEvent } from '../../shared/types'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const EXACT_CONTINUATION_COMMANDS = new Set([
   'go',
@@ -12,18 +12,18 @@ const EXACT_CONTINUATION_COMMANDS = new Set([
   'retry please',
   'try again',
   'again',
-  t("Continue"),
-  t("Continue execution"),
-  t("Go ahead"),
-  t("Please continue"),
-  t("agentContinuation.continueVariant1"),
-  t("agentContinuation.continueVariant2"),
-  t("Try again"),
-  t("agentContinuation.tryAgainVariant2"),
-  t("agentContinuation.tryAgainVariant1"),
-  t("agentContinuation.tryAgainVariant3"),
-  t("Resume from the interruption"),
-  t("Continue previous work"),
+  t('Continue'),
+  t('Continue execution'),
+  t('Go ahead'),
+  t('Please continue'),
+  t('agentContinuation.continueVariant1'),
+  t('agentContinuation.continueVariant2'),
+  t('Try again'),
+  t('agentContinuation.tryAgainVariant2'),
+  t('agentContinuation.tryAgainVariant1'),
+  t('agentContinuation.tryAgainVariant3'),
+  t('Resume from the interruption'),
+  t('Continue previous work'),
 ])
 
 export function isAgentContinuationCommand(content: string): boolean {
@@ -45,9 +45,7 @@ export function resolveNaturalAgentResumeMessageId(
 ): string | undefined {
   if (hasAttachments || !isAgentContinuationCommand(content)) return undefined
   const lastMessage = messages.at(-1)
-  return lastMessage?.role === 'assistant' && lastMessage.interruption
-    ? lastMessage.id
-    : undefined
+  return lastMessage?.role === 'assistant' && lastMessage.interruption ? lastMessage.id : undefined
 }
 
 export function interruptionFromStreamEvent(
@@ -69,13 +67,28 @@ export function interruptionFromStreamEvent(
 
   const finishReason = event.finishReason
   if (finishReason === 'cancelled') {
-    return { reason: 'cancelled', message: t("Agent execution stopped. The current checkpoint was preserved."), occurredAt, finishReason }
+    return {
+      reason: 'cancelled',
+      message: t('Agent execution stopped. The current checkpoint was preserved.'),
+      occurredAt,
+      finishReason,
+    }
   }
   if (finishReason === 'tool_turn_limit') {
-    return { reason: 'tool_turn_limit', message: t("The Agent reached the tool-call turn limit. The current checkpoint was preserved."), occurredAt, finishReason }
+    return {
+      reason: 'tool_turn_limit',
+      message: t('The Agent reached the tool-call turn limit. The current checkpoint was preserved.'),
+      occurredAt,
+      finishReason,
+    }
   }
   if (finishReason && ['length', 'max_tokens', 'incomplete'].includes(finishReason)) {
-    return { reason: 'output_limit', message: t("The model reached its output limit. The current Agent checkpoint was preserved."), occurredAt, finishReason }
+    return {
+      reason: 'output_limit',
+      message: t('The model reached its output limit. The current Agent checkpoint was preserved.'),
+      occurredAt,
+      finishReason,
+    }
   }
   return undefined
 }
@@ -83,15 +96,22 @@ export function interruptionFromStreamEvent(
 function classifyChatError(error: ChatError): AgentInterruption['reason'] {
   const code = (error.code || '').toLocaleLowerCase()
   const message = error.message.toLocaleLowerCase()
-  if (error.status === 429 || code.includes('rate') || message.includes(t("Rate limited").toLocaleLowerCase()) || message.includes('rate limit')) {
+  if (
+    error.status === 429 ||
+    code.includes('rate') ||
+    message.includes(t('Rate limited').toLocaleLowerCase()) ||
+    message.includes('rate limit')
+  ) {
     return 'rate_limit'
   }
-  if (code.includes('timeout') || message.includes(t("time out").toLocaleLowerCase()) || message.includes('timed out')) return 'timeout'
+  if (code.includes('timeout') || message.includes(t('time out').toLocaleLowerCase()) || message.includes('timed out'))
+    return 'timeout'
   if (
-    code.includes('network')
-    || code.includes('fetch')
-    || /econn|socket|connection|网络|连接中断/.test(`${code} ${message}`)
-  ) return 'network'
+    code.includes('network') ||
+    code.includes('fetch') ||
+    /econn|socket|connection|网络|连接中断/.test(`${code} ${message}`)
+  )
+    return 'network'
   if (error.status !== undefined || code) return 'api_error'
   return 'unknown'
 }

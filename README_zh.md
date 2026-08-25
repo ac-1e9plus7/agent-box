@@ -58,8 +58,7 @@ pnpm install
 pnpm dev
 
 # 验证项目
-pnpm typecheck
-pnpm test
+pnpm check
 
 # 构建生产代码
 pnpm build

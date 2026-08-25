@@ -41,11 +41,11 @@ sequenceDiagram
 
 `ModelConfig.apiFormat` can override the provider's default format. The endpoint is formed from the normalized base URL and one of these relative paths:
 
-| API format | Endpoint | Main request structure | Main streaming events |
-| --- | --- | --- | --- |
-| **OpenAI Chat Completions API** | `chat/completions` | `messages`, `tools`, `max_tokens`, `reasoning` / `reasoning_effort` | `choices[].delta.content`, `delta.tool_calls`, `reasoning*`, `usage` |
-| **OpenAI Responses API** | `responses` | `instructions`, `input`, function tools, `max_output_tokens`, `reasoning` | `response.output_text.delta`, `response.function_call_arguments.delta`, `response.reasoning*`, terminal response events |
-| **Anthropic Messages API** | `messages` | `system`, content-block `messages`, `tools`, `thinking`, `max_tokens` | `content_block_start/delta`, `text_delta`, `thinking_delta`, `signature_delta`, `input_json_delta` |
+| API format                      | Endpoint           | Main request structure                                                    | Main streaming events                                                                                                   |
+| ------------------------------- | ------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **OpenAI Chat Completions API** | `chat/completions` | `messages`, `tools`, `max_tokens`, `reasoning` / `reasoning_effort`       | `choices[].delta.content`, `delta.tool_calls`, `reasoning*`, `usage`                                                    |
+| **OpenAI Responses API**        | `responses`        | `instructions`, `input`, function tools, `max_output_tokens`, `reasoning` | `response.output_text.delta`, `response.function_call_arguments.delta`, `response.reasoning*`, terminal response events |
+| **Anthropic Messages API**      | `messages`         | `system`, content-block `messages`, `tools`, `thinking`, `max_tokens`     | `content_block_start/delta`, `text_delta`, `thinking_delta`, `signature_delta`, `input_json_delta`                      |
 
 The adapters are implemented in [`request-adapters.ts`](../src/electron/api/request-adapters.ts) and [`protocol-adapters.ts`](../src/electron/api/protocol-adapters.ts). Shared history is reconstructed into each protocol's assistant tool-call and tool-result representation. Completed Responses reasoning items and Anthropic thinking signatures are retained in the Agent trace so protocol state can be replayed in later turns and after interruption recovery.
 

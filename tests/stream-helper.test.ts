@@ -16,7 +16,7 @@ describe('runStreamWithReplay', () => {
       mockStreamApi,
       mockOnEventApi,
       { prompt: 'test' },
-      mockProcessEvent
+      mockProcessEvent,
     )
 
     expect(requestId).toBe('req-1')
@@ -45,7 +45,7 @@ describe('runStreamWithReplay', () => {
       mockListener?.({ type: 'start', requestId: 'req-race' })
       mockListener?.({ type: 'text-delta', requestId: 'req-race', delta: 'fast' })
       mockListener?.({ type: 'done', requestId: 'req-race' })
-      
+
       // Also emit an unrelated event to ensure it gets ignored
       mockListener?.({ type: 'text-delta', requestId: 'req-other', delta: 'ignored' })
 
@@ -53,12 +53,7 @@ describe('runStreamWithReplay', () => {
     })
     const mockProcessEvent = vi.fn()
 
-    await runStreamWithReplay(
-      mockStreamApi,
-      mockOnEventApi,
-      { prompt: 'test' },
-      mockProcessEvent
-    )
+    await runStreamWithReplay(mockStreamApi, mockOnEventApi, { prompt: 'test' }, mockProcessEvent)
 
     // The events were buffered and replayed successfully upon resolution
     expect(mockProcessEvent).toHaveBeenCalledTimes(3)
@@ -76,7 +71,7 @@ describe('runStreamWithReplay', () => {
     const mockProcessEvent = vi.fn()
 
     await expect(
-      runStreamWithReplay(mockStreamApi, mockOnEventApi, { prompt: 'test' }, mockProcessEvent)
+      runStreamWithReplay(mockStreamApi, mockOnEventApi, { prompt: 'test' }, mockProcessEvent),
     ).rejects.toThrow('Network failure')
 
     expect(mockUnsubscribe).toHaveBeenCalledOnce()

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  effectiveWebSearchMode,
-  isWebSearchAvailable,
-  WEB_SEARCH_MODE_LABELS,
-} from '../src/renderer/src/web-search'
+import { effectiveWebSearchMode, isWebSearchAvailable, WEB_SEARCH_MODE_LABELS } from '../src/renderer/src/web-search'
 import type { ModelConfig, ProviderConfig } from '../src/renderer/src/types'
 
 const timestamp = '2026-01-01T00:00:00.000Z'
@@ -76,14 +72,8 @@ describe('Renderer web search availability and mode resolution', () => {
   })
 
   it('resolves effective search mode according to user selection when supported', () => {
-    expect(effectiveWebSearchMode(openRouterModel, openRouterProvider, 'native')).toBe(
-      'native',
-    )
-    expect(effectiveWebSearchMode(openRouterModel, openRouterProvider, 'auto')).toBe(
-      'auto',
-    )
-    expect(effectiveWebSearchMode(openRouterModel, openRouterProvider, undefined)).toBe(
-      'off',
-    )
+    expect(effectiveWebSearchMode(openRouterModel, openRouterProvider, 'native')).toBe('native')
+    expect(effectiveWebSearchMode(openRouterModel, openRouterProvider, 'auto')).toBe('auto')
+    expect(effectiveWebSearchMode(openRouterModel, openRouterProvider, undefined)).toBe('off')
   })
 })

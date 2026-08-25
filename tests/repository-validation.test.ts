@@ -11,12 +11,8 @@ vi.mock('electron', () => ({
   },
 }))
 
-const {
-  AppRepository,
-  normalizeBaseUrl,
-  sanitizeHeaders,
-  sanitizeProviderRouting,
-} = await import('../src/electron/storage/app-repository')
+const { AppRepository, normalizeBaseUrl, sanitizeHeaders, sanitizeProviderRouting } =
+  await import('../src/electron/storage/app-repository')
 
 describe('Header sanitization and injection prevention (sanitizeHeaders)', () => {
   it('accepts safe custom HTTP headers', () => {
@@ -40,9 +36,7 @@ describe('Header sanitization and injection prevention (sanitizeHeaders)', () =>
     'host',
     'content-length',
   ])('rejects forbidden sensitive header %s', (forbiddenName) => {
-    expect(() => sanitizeHeaders({ [forbiddenName]: 'value' })).toThrow(
-      `不允许使用请求头：${forbiddenName}`,
-    )
+    expect(() => sanitizeHeaders({ [forbiddenName]: 'value' })).toThrow(`不允许使用请求头：${forbiddenName}`)
   })
 
   it('rejects header names with invalid characters or spaces', () => {
@@ -51,40 +45,28 @@ describe('Header sanitization and injection prevention (sanitizeHeaders)', () =>
   })
 
   it('rejects CRLF in header values to prevent HTTP response splitting', () => {
-    expect(() => sanitizeHeaders({ 'X-Test': 'line1\r\nInjected: header' })).toThrow(
-      '请求头 X-Test 的值无效',
-    )
-    expect(() => sanitizeHeaders({ 'X-Test': 'line1\nline2' })).toThrow(
-      '请求头 X-Test 的值无效',
-    )
+    expect(() => sanitizeHeaders({ 'X-Test': 'line1\r\nInjected: header' })).toThrow('请求头 X-Test 的值无效')
+    expect(() => sanitizeHeaders({ 'X-Test': 'line1\nline2' })).toThrow('请求头 X-Test 的值无效')
   })
 
   it('limits custom header count and value length', () => {
-    const tooMany = Object.fromEntries(
-      Array.from({ length: 33 }, (_, i) => [`X-Header-${i}`, 'val']),
-    )
+    const tooMany = Object.fromEntries(Array.from({ length: 33 }, (_, i) => [`X-Header-${i}`, 'val']))
     expect(() => sanitizeHeaders(tooMany)).toThrow('Too many custom headers')
 
-    expect(() =>
-      sanitizeHeaders({ 'X-Long': 'v'.repeat(4_097) }),
-    ).toThrow('请求头 X-Long 的值无效')
+    expect(() => sanitizeHeaders({ 'X-Long': 'v'.repeat(4_097) })).toThrow('请求头 X-Long 的值无效')
   })
 })
 
 describe('Base URL normalization and security policy (normalizeBaseUrl)', () => {
   it('accepts HTTPS URLs and loopback HTTP URLs, stripping trailing slash and query/hash', () => {
     expect(normalizeBaseUrl('https://api.openai.com/v1/')).toBe('https://api.openai.com/v1')
-    expect(normalizeBaseUrl('http://127.0.0.1:8080/v1/?query=1#frag')).toBe(
-      'http://127.0.0.1:8080/v1',
-    )
+    expect(normalizeBaseUrl('http://127.0.0.1:8080/v1/?query=1#frag')).toBe('http://127.0.0.1:8080/v1')
     expect(normalizeBaseUrl('http://localhost:8317/v1/')).toBe('http://localhost:8317/v1')
     expect(normalizeBaseUrl('http://[::1]:9000/')).toBe('http://[::1]:9000')
   })
 
   it('strips embedded credentials from the Base URL', () => {
-    expect(normalizeBaseUrl('https://user:password@openrouter.ai/api/v1')).toBe(
-      'https://openrouter.ai/api/v1',
-    )
+    expect(normalizeBaseUrl('https://user:password@openrouter.ai/api/v1')).toBe('https://openrouter.ai/api/v1')
   })
 
   it('rejects remote plain HTTP endpoints', () => {
@@ -94,12 +76,8 @@ describe('Base URL normalization and security policy (normalizeBaseUrl)', () => 
   })
 
   it('rejects unsupported protocol schemes', () => {
-    expect(() => normalizeBaseUrl('ftp://127.0.0.1:8080')).toThrow(
-      '供应商地址必须使用 http 或 https。',
-    )
-    expect(() => normalizeBaseUrl('file:///C:/path')).toThrow(
-      '供应商地址必须使用 http 或 https。',
-    )
+    expect(() => normalizeBaseUrl('ftp://127.0.0.1:8080')).toThrow('供应商地址必须使用 http 或 https。')
+    expect(() => normalizeBaseUrl('file:///C:/path')).toThrow('供应商地址必须使用 http 或 https。')
   })
 })
 
@@ -126,15 +104,11 @@ describe('Provider routing sanitization (sanitizeProviderRouting)', () => {
   })
 
   it('rejects invalid provider slugs or unknown enum values', () => {
-    expect(() =>
-      sanitizeProviderRouting({ order: ['bad slug with spaces!'] }),
-    ).toThrow('Invalid provider order')
-    expect(() =>
-      sanitizeProviderRouting({ dataCollection: 'invalid-option' as never }),
-    ).toThrow('Invalid provider data-collection setting')
-    expect(() =>
-      sanitizeProviderRouting({ sort: 'fastest' as never }),
-    ).toThrow('Invalid provider sort setting')
+    expect(() => sanitizeProviderRouting({ order: ['bad slug with spaces!'] })).toThrow('Invalid provider order')
+    expect(() => sanitizeProviderRouting({ dataCollection: 'invalid-option' as never })).toThrow(
+      'Invalid provider data-collection setting',
+    )
+    expect(() => sanitizeProviderRouting({ sort: 'fastest' as never })).toThrow('Invalid provider sort setting')
   })
 })
 
@@ -184,9 +158,7 @@ describe('AppRepository business constraints and relational integrity', () => {
     })
 
     // Attempting to remove provider should throw
-    await expect(repo.removeProvider(provider.id)).rejects.toThrow(
-      '该供应商仍被模型使用，请先删除或迁移相关模型。',
-    )
+    await expect(repo.removeProvider(provider.id)).rejects.toThrow('该供应商仍被模型使用，请先删除或迁移相关模型。')
 
     // Once model is removed, provider removal succeeds
     await repo.removeModel(model.id)
@@ -199,17 +171,13 @@ describe('AppRepository business constraints and relational integrity', () => {
       id: 'conv-test-1',
       title: 'Active Conversation',
       modelId: defaultModel.id,
-      messages: [
-        { id: 'm1', role: 'user' as const, content: 'hi', createdAt: timestamp },
-      ],
+      messages: [{ id: 'm1', role: 'user' as const, content: 'hi', createdAt: timestamp }],
       createdAt: timestamp,
       updatedAt: timestamp,
     }
     await repo.saveConversation(conversation)
 
-    await expect(repo.removeModel(defaultModel.id)).rejects.toThrow(
-      '该模型仍被会话使用，请先删除会话或切换模型。',
-    )
+    await expect(repo.removeModel(defaultModel.id)).rejects.toThrow('该模型仍被会话使用，请先删除会话或切换模型。')
 
     // Remove conversation then model
     await repo.removeConversation(conversation.id)
@@ -348,18 +316,22 @@ describe('AppRepository business constraints and relational integrity', () => {
       skillIds: ['translator-polyglot'],
       mcpServerIds: ['filesystem'],
       workingDirectory: process.cwd(),
-      messages: [{
-        id: 'assistant-with-skill',
-        role: 'assistant',
-        content: 'done',
-        skillActivations: [{
-          id: 'translator-polyglot',
-          name: '专业多语言精翻与本地化',
-          source: 'explicit',
-          turn: 0,
-        }],
-        createdAt: timestamp,
-      }],
+      messages: [
+        {
+          id: 'assistant-with-skill',
+          role: 'assistant',
+          content: 'done',
+          skillActivations: [
+            {
+              id: 'translator-polyglot',
+              name: '专业多语言精翻与本地化',
+              source: 'explicit',
+              turn: 0,
+            },
+          ],
+          createdAt: timestamp,
+        },
+      ],
       createdAt: timestamp,
       updatedAt: timestamp,
     })
@@ -377,19 +349,21 @@ describe('AppRepository business constraints and relational integrity', () => {
       modelId: 'openrouter-auto',
       agentMode: true,
       workingDirectory: process.cwd(),
-      messages: [{
-        id: 'assistant-interrupted',
-        role: 'assistant',
-        content: 'Partial result',
-        interruption: {
-          reason: 'rate_limit',
-          message: 'Rate limit exceeded',
-          occurredAt: timestamp,
-          status: 429,
-          retryAfterSeconds: 5,
+      messages: [
+        {
+          id: 'assistant-interrupted',
+          role: 'assistant',
+          content: 'Partial result',
+          interruption: {
+            reason: 'rate_limit',
+            message: 'Rate limit exceeded',
+            occurredAt: timestamp,
+            status: 429,
+            retryAfterSeconds: 5,
+          },
+          createdAt: timestamp,
         },
-        createdAt: timestamp,
-      }],
+      ],
       createdAt: timestamp,
       updatedAt: timestamp,
     })

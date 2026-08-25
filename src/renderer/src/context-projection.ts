@@ -1,9 +1,5 @@
 import type { AppSettings, Message, ModelConfig } from '../../shared/types'
-import {
-  REQUEST_OVERHEAD,
-  RESERVED_SAFETY_TOKENS,
-  estimateMessageTokens,
-} from '../../shared/token-estimate'
+import { REQUEST_OVERHEAD, RESERVED_SAFETY_TOKENS, estimateMessageTokens } from '../../shared/token-estimate'
 import { getLanguage, t } from '../../shared/i18n'
 
 /**
@@ -57,8 +53,7 @@ export function projectContext(
   const systemCost =
     (configuredSystemPrompt && !promptAlreadyInHistory
       ? estimateMessageTokens({ content: configuredSystemPrompt })
-      : 0) +
-    systemMessages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
+      : 0) + systemMessages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
 
   const turns: ProjectionMessage[][] = []
   for (const message of messages) {
@@ -76,11 +71,8 @@ export function projectContext(
     ])
   }
 
-  const turnCosts = turns.map((turn) =>
-    turn.reduce((sum, message) => sum + estimateMessageTokens(message), 0),
-  )
-  const estimatedInputTokens =
-    REQUEST_OVERHEAD + systemCost + turnCosts.reduce((sum, cost) => sum + cost, 0)
+  const turnCosts = turns.map((turn) => turn.reduce((sum, message) => sum + estimateMessageTokens(message), 0))
+  const estimatedInputTokens = REQUEST_OVERHEAD + systemCost + turnCosts.reduce((sum, cost) => sum + cost, 0)
   const latestTurnCost = turnCosts.at(-1) ?? 0
   const minimumRequired = REQUEST_OVERHEAD + systemCost + latestTurnCost
   const irreducibleOverflow = inputBudget <= REQUEST_OVERHEAD || minimumRequired > inputBudget
@@ -93,7 +85,9 @@ export function projectContext(
       canTrimOnce: false,
       trimTurnCount: 0,
       tone: 'error',
-      message: t("The system prompt and latest question exceed the available context. Shorten them or increase the model’s context window."),
+      message: t(
+        'The system prompt and latest question exceed the available context. Shorten them or increase the model’s context window.',
+      ),
     }
   }
 
@@ -129,7 +123,10 @@ export function projectContext(
       canTrimOnce: true,
       trimTurnCount: trimCount,
       tone: 'error',
-      message: t("The input exceeds the available context by approximately {value0} tokens. Manual mode never removes history automatically; you can trim complete turns for this request only.", { value0: overflow.toLocaleString(getLanguage()) }),
+      message: t(
+        'The input exceeds the available context by approximately {value0} tokens. Manual mode never removes history automatically; you can trim complete turns for this request only.',
+        { value0: overflow.toLocaleString(getLanguage()) },
+      ),
     }
   }
 
@@ -146,6 +143,9 @@ export function projectContext(
     canTrimOnce: false,
     trimTurnCount,
     tone: 'warning',
-    message: t("When sent, approximately {value0} complete conversation turns will be trimmed from the oldest history; the latest question will be kept.", { value0: trimTurnCount }),
+    message: t(
+      'When sent, approximately {value0} complete conversation turns will be trimmed from the oldest history; the latest question will be kept.',
+      { value0: trimTurnCount },
+    ),
   }
 }

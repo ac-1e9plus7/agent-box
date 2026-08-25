@@ -5,7 +5,7 @@ import {
   estimateMessageTokens,
   estimateTextTokens,
 } from '../../shared/token-estimate'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 // Re-exported so existing import sites keep working; the estimate now lives in
 // the shared module and is reused by the renderer context projection.
@@ -44,16 +44,18 @@ export function prepareMessagesForContext(
   mode: ContextManagementMode = 'manual',
 ): ContextPreparationResult {
   if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
-    throw new Error(t("The model context window configuration is invalid."))
+    throw new Error(t('The model context window configuration is invalid.'))
   }
   if (!Number.isInteger(maxOutputTokens) || maxOutputTokens <= 0) {
-    throw new Error(t("The model maximum output length configuration is invalid."))
+    throw new Error(t('The model maximum output length configuration is invalid.'))
   }
 
   const inputBudget = contextWindow - maxOutputTokens - RESERVED_SAFETY_TOKENS
   if (inputBudget <= REQUEST_OVERHEAD) {
     throw new ContextWindowError(
-      t("The context window cannot reserve enough room for model output. Reduce the maximum output tokens or increase the model context window."),
+      t(
+        'The context window cannot reserve enough room for model output. Reduce the maximum output tokens or increase the model context window.',
+      ),
     )
   }
 
@@ -61,18 +63,22 @@ export function prepareMessagesForContext(
   const turns = groupConversationTurns(messages)
   const latestTurn = turns.at(-1)
   if (!latestTurn?.some((message) => message.role === 'user')) {
-    throw new Error(t("The content sent must contain user messages."))
+    throw new Error(t('The content sent must contain user messages.'))
   }
   const fullInputEstimate =
-    REQUEST_OVERHEAD +
-    messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
+    REQUEST_OVERHEAD + messages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
 
   if (mode === 'manual') {
     if (fullInputEstimate > inputBudget) {
       throw new ContextWindowError(
-        t("This conversation is estimated to require {value0} input tokens, but only about {value1} are available for this model.", { value0: fullInputEstimate, value1: inputBudget }) +
-          t("Create a new conversation, shorten the system prompt or latest user request, or reduce the maximum output tokens,") +
-          t("Choose “Trim this request automatically” or enable “Automatic trimming” in Settings."),
+        t(
+          'This conversation is estimated to require {value0} input tokens, but only about {value1} are available for this model.',
+          { value0: fullInputEstimate, value1: inputBudget },
+        ) +
+          t(
+            'Create a new conversation, shorten the system prompt or latest user request, or reduce the maximum output tokens,',
+          ) +
+          t('Choose “Trim this request automatically” or enable “Automatic trimming” in Settings.'),
       )
     }
     return {
@@ -82,14 +88,14 @@ export function prepareMessagesForContext(
     }
   }
 
-  if (mode !== 'auto') throw new Error(t("Invalid context management mode."))
+  if (mode !== 'auto') throw new Error(t('Invalid context management mode.'))
   let used = REQUEST_OVERHEAD
   used += systemMessages.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
   used += latestTurn.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
   if (used > inputBudget) {
     throw new ContextWindowError(
-      t("The system prompt and final user message exceed the model’s available context.") +
-        t("Shorten the system prompt or final message, or reduce the maximum output tokens."),
+      t('The system prompt and final user message exceed the model’s available context.') +
+        t('Shorten the system prompt or final message, or reduce the maximum output tokens.'),
     )
   }
 

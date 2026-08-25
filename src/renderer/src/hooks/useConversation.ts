@@ -20,7 +20,7 @@ interface UseConversationOptions {
 }
 
 function normalizeError(error: unknown): string {
-  return error instanceof Error ? error.message : t("An unknown error occurred. Try again later.")
+  return error instanceof Error ? error.message : t('An unknown error occurred. Try again later.')
 }
 
 export function toUiConversation(conversation: StoredConversation): Conversation {
@@ -51,22 +51,11 @@ export function toStoredConversation(conversation: Conversation): StoredConversa
     currentLeafId: conversation.currentLeafId,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
-    messages: conversation.messages.map(({
-      status: _status,
-      modelId: _modelId,
-      error: _error,
-      ...message
-    }) => message),
+    messages: conversation.messages.map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message),
   }
 }
 
-export function useConversation({
-  models,
-  onMissingModel,
-  providers,
-  settings,
-  showToast,
-}: UseConversationOptions) {
+export function useConversation({ models, onMissingModel, providers, settings, showToast }: UseConversationOptions) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState('')
   const [creatingConversation, setCreatingConversation] = useState(false)
@@ -88,95 +77,118 @@ export function useConversation({
     setActiveConversationId(activeId ?? next[0]?.id ?? '')
   }, [])
 
-  const persistConversation = useCallback(async (conversation: Conversation): Promise<boolean> => {
-    try {
-      const saved = await window.agentbox.conversations.save(toStoredConversation(conversation))
-      replaceConversations((current) => current.map((item) => (
-        item.id === saved.id ? { ...toUiConversation(saved), messages: item.messages } : item
-      )))
-      return true
-    } catch (error) {
-      showToast(t("Failed to save the conversation: {value0}", { value0: normalizeError(error) }))
-      return false
-    }
-  }, [replaceConversations, showToast])
-
-  const createConversation = useCallback(async ({
-    modeOverrides,
-    modelId,
-    workingDirectory,
-  }: CreateConversationOptions): Promise<Conversation | undefined> => {
-    const resolvedWorkingDirectory = workingDirectory.trim()
-    if (!resolvedWorkingDirectory) {
-      showToast(t("Choose a working directory before creating a conversation."))
-      return undefined
-    }
-    if (creatingConversationRef.current) return undefined
-
-    const resolvedModel = models.find((model) => model.id === modelId)
-      ?? models.find((model) => model.id === settings.defaultModelId)
-      ?? models[0]
-    if (!resolvedModel) {
-      onMissingModel()
-      return undefined
-    }
-
-    creatingConversationRef.current = true
-    setCreatingConversation(true)
-    const now = new Date().toISOString()
-    const resolvedProvider = providers.find((provider) => provider.id === resolvedModel.providerId)
-    const conversation: Conversation = {
-      id: `conversation-${crypto.randomUUID()}`,
-      title: t("conversation.newPlaceholder"),
-      modelId: resolvedModel.id,
-      reasoningEnabled: resolvedModel.supportsReasoning && (
-        modeOverrides?.reasoningEnabled ?? (
-          resolvedModel.defaultReasoningEnabled || settings.defaultReasoningEnabled
+  const persistConversation = useCallback(
+    async (conversation: Conversation): Promise<boolean> => {
+      try {
+        const saved = await window.agentbox.conversations.save(toStoredConversation(conversation))
+        replaceConversations((current) =>
+          current.map((item) =>
+            item.id === saved.id ? { ...toUiConversation(saved), messages: item.messages } : item,
+          ),
         )
-      ),
-      agentMode: modeOverrides?.agentMode ?? settings.defaultAgentMode ?? false,
-      workingDirectory: resolvedWorkingDirectory,
-      webSearchMode: effectiveWebSearchMode(
-        resolvedModel,
-        resolvedProvider,
-        modeOverrides?.webSearchMode ?? resolvedModel.defaultWebSearchMode,
-      ),
-      messages: [],
-      createdAt: now,
-      updatedAt: now,
-    }
+        return true
+      } catch (error) {
+        showToast(t('Failed to save the conversation: {value0}', { value0: normalizeError(error) }))
+        return false
+      }
+    },
+    [replaceConversations, showToast],
+  )
 
-    try {
-      const saved = toUiConversation(await window.agentbox.conversations.save(toStoredConversation(conversation)))
-      replaceConversations((current) => [saved, ...current])
-      setActiveConversationId(saved.id)
-      return saved
-    } catch (error) {
-      showToast(t("Could not create the conversation: {value0}", { value0: normalizeError(error) }))
-      return undefined
-    } finally {
-      creatingConversationRef.current = false
-      setCreatingConversation(false)
-    }
-  }, [models, onMissingModel, providers, replaceConversations, settings.defaultAgentMode, settings.defaultModelId, settings.defaultReasoningEnabled, showToast])
+  const createConversation = useCallback(
+    async ({
+      modeOverrides,
+      modelId,
+      workingDirectory,
+    }: CreateConversationOptions): Promise<Conversation | undefined> => {
+      const resolvedWorkingDirectory = workingDirectory.trim()
+      if (!resolvedWorkingDirectory) {
+        showToast(t('Choose a working directory before creating a conversation.'))
+        return undefined
+      }
+      if (creatingConversationRef.current) return undefined
 
-  const switchActiveBranch = useCallback((targetMessageId: string): Conversation | undefined => {
-    const current = conversationsRef.current.find((conversation) => conversation.id === activeConversationId)
-    if (!current) return undefined
-    const next = switchBranch(current, targetMessageId)
-    replaceConversations((items) => items.map((item) => item.id === next.id ? next : item))
-    void persistConversation(next)
-    return next
-  }, [activeConversationId, persistConversation, replaceConversations])
+      const resolvedModel =
+        models.find((model) => model.id === modelId) ??
+        models.find((model) => model.id === settings.defaultModelId) ??
+        models[0]
+      if (!resolvedModel) {
+        onMissingModel()
+        return undefined
+      }
 
-  const deleteActiveMessageBranch = useCallback((messageId: string): Conversation | undefined => {
-    const current = conversationsRef.current.find((conversation) => conversation.id === activeConversationId)
-    if (!current) return undefined
-    const next = deleteMessageNode(current, messageId)
-    replaceConversations((items) => items.map((item) => item.id === next.id ? next : item))
-    void persistConversation(next)
-    return next
-  }, [activeConversationId, persistConversation, replaceConversations])
+      creatingConversationRef.current = true
+      setCreatingConversation(true)
+      const now = new Date().toISOString()
+      const resolvedProvider = providers.find((provider) => provider.id === resolvedModel.providerId)
+      const conversation: Conversation = {
+        id: `conversation-${crypto.randomUUID()}`,
+        title: t('conversation.newPlaceholder'),
+        modelId: resolvedModel.id,
+        reasoningEnabled:
+          resolvedModel.supportsReasoning &&
+          (modeOverrides?.reasoningEnabled ??
+            (resolvedModel.defaultReasoningEnabled || settings.defaultReasoningEnabled)),
+        agentMode: modeOverrides?.agentMode ?? settings.defaultAgentMode ?? false,
+        workingDirectory: resolvedWorkingDirectory,
+        webSearchMode: effectiveWebSearchMode(
+          resolvedModel,
+          resolvedProvider,
+          modeOverrides?.webSearchMode ?? resolvedModel.defaultWebSearchMode,
+        ),
+        messages: [],
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      try {
+        const saved = toUiConversation(await window.agentbox.conversations.save(toStoredConversation(conversation)))
+        replaceConversations((current) => [saved, ...current])
+        setActiveConversationId(saved.id)
+        return saved
+      } catch (error) {
+        showToast(t('Could not create the conversation: {value0}', { value0: normalizeError(error) }))
+        return undefined
+      } finally {
+        creatingConversationRef.current = false
+        setCreatingConversation(false)
+      }
+    },
+    [
+      models,
+      onMissingModel,
+      providers,
+      replaceConversations,
+      settings.defaultAgentMode,
+      settings.defaultModelId,
+      settings.defaultReasoningEnabled,
+      showToast,
+    ],
+  )
+
+  const switchActiveBranch = useCallback(
+    (targetMessageId: string): Conversation | undefined => {
+      const current = conversationsRef.current.find((conversation) => conversation.id === activeConversationId)
+      if (!current) return undefined
+      const next = switchBranch(current, targetMessageId)
+      replaceConversations((items) => items.map((item) => (item.id === next.id ? next : item)))
+      void persistConversation(next)
+      return next
+    },
+    [activeConversationId, persistConversation, replaceConversations],
+  )
+
+  const deleteActiveMessageBranch = useCallback(
+    (messageId: string): Conversation | undefined => {
+      const current = conversationsRef.current.find((conversation) => conversation.id === activeConversationId)
+      if (!current) return undefined
+      const next = deleteMessageNode(current, messageId)
+      replaceConversations((items) => items.map((item) => (item.id === next.id ? next : item)))
+      void persistConversation(next)
+      return next
+    },
+    [activeConversationId, persistConversation, replaceConversations],
+  )
 
   const clearConversationState = useCallback((): void => {
     hydrateConversations([], '')
@@ -199,21 +211,10 @@ export function useConversation({
   }
 }
 
-export function useNewConversationShortcut({
-  enabled,
-  onOpen,
-}: {
-  enabled: boolean
-  onOpen: () => void
-}): void {
+export function useNewConversationShortcut({ enabled, onOpen }: { enabled: boolean; onOpen: () => void }): void {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (
-        enabled
-        && !event.altKey
-        && (event.ctrlKey || event.metaKey)
-        && event.key.toLowerCase() === 'n'
-      ) {
+      if (enabled && !event.altKey && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') {
         event.preventDefault()
         onOpen()
       }

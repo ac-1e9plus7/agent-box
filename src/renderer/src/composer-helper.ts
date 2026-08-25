@@ -47,7 +47,7 @@ export function handleComposerKeyDown(params: ComposerKeyParams): ComposerKeyAct
         return {
           type: 'newline',
           nextDraft,
-          nextCursor: start + 1
+          nextCursor: start + 1,
         }
       }
       return { type: 'none' }

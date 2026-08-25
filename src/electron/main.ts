@@ -55,9 +55,7 @@ function createWindow(): BrowserWindow {
 function isSafeExternalUrl(value: string): boolean {
   try {
     const url = new URL(value)
-    return (url.protocol === 'https:' || url.protocol === 'http:')
-      && !url.username
-      && !url.password
+    return (url.protocol === 'https:' || url.protocol === 'http:') && !url.username && !url.password
   } catch {
     return false
   }
@@ -133,21 +131,26 @@ function migrateLegacyUserDataDirectory(): void {
 }
 
 async function handleStartupFailure(error: unknown): Promise<void> {
-  const errorMessage = error instanceof Error ? error.message : t("Unknown error")
+  const errorMessage = error instanceof Error ? error.message : t('Unknown error')
   const normalizedErrorMessage = errorMessage.toLowerCase()
-  const isDecryptionError = [t("Decrypt"), 'decrypt', 'safeStorage', t("system key")]
-    .some((marker) => normalizedErrorMessage.includes(marker.toLowerCase()))
+  const isDecryptionError = [t('Decrypt'), 'decrypt', 'safeStorage', t('system key')].some((marker) =>
+    normalizedErrorMessage.includes(marker.toLowerCase()),
+  )
 
   const choice = dialog.showMessageBoxSync({
     type: 'warning',
-    title: t("AgentBox — Data recovery"),
+    title: t('AgentBox — Data recovery'),
     message: isDecryptionError
-      ? t("Unable to decrypt existing local data (possibly due to changes in system credentials, corrupted data files, or mismatched migration keys).")
-      : t("The app could not start: {value0}", { value0: errorMessage }),
+      ? t(
+          'Unable to decrypt existing local data (possibly due to changes in system credentials, corrupted data files, or mismatched migration keys).',
+        )
+      : t('The app could not start: {value0}', { value0: errorMessage }),
     detail: isDecryptionError
-      ? t("Choose “Reset and create new data” to back up the current files as `.bak` and start from a clean state, or choose “Exit app” to troubleshoot manually.")
-      : t("You can choose to reset local data and restart, or exit the app."),
-    buttons: [t("Reset and create new data (recommended)"), t("Exit application")],
+      ? t(
+          'Choose “Reset and create new data” to back up the current files as `.bak` and start from a clean state, or choose “Exit app” to troubleshoot manually.',
+        )
+      : t('You can choose to reset local data and restart, or exit the app.'),
+    buttons: [t('Reset and create new data (recommended)'), t('Exit application')],
     defaultId: 0,
     cancelId: 1,
     noLink: true,
@@ -158,18 +161,17 @@ async function handleStartupFailure(error: unknown): Promise<void> {
       const currentPath = app.getPath('userData')
       const vaultPath = join(currentPath, 'vault')
       if (existsSync(vaultPath)) {
-        const backupPath = join(
-          currentPath,
-          `vault.corrupted.${Date.now()}.bak`,
-        )
+        const backupPath = join(currentPath, `vault.corrupted.${Date.now()}.bak`)
         renameSync(vaultPath, backupPath)
       }
       await start()
       return
     } catch (resetError) {
       dialog.showErrorBox(
-        t("Reset data failed"),
-        t("Unable to reset local data: {value0}", { value0: resetError instanceof Error ? resetError.message : String(resetError) }),
+        t('Reset data failed'),
+        t('Unable to reset local data: {value0}', {
+          value0: resetError instanceof Error ? resetError.message : String(resetError),
+        }),
       )
     }
   }

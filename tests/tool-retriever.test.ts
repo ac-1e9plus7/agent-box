@@ -67,7 +67,10 @@ describe('retrieveRelevantTools', () => {
   })
 
   it('ranks exact and relevant tools at the top for filesystem query', () => {
-    const res = retrieveRelevantTools('Please read the file at src/index.ts', sampleTools, { mode: 'auto', maxTools: 2 })
+    const res = retrieveRelevantTools('Please read the file at src/index.ts', sampleTools, {
+      mode: 'auto',
+      maxTools: 2,
+    })
     expect(res).toHaveLength(2)
     expect(res[0]?.name).toBe('read_file')
   })
@@ -78,7 +81,10 @@ describe('retrieveRelevantTools', () => {
   })
 
   it('ranks git tool first for git query', () => {
-    const res = retrieveRelevantTools('Check git status and modified files in repository', sampleTools, { mode: 'auto', maxTools: 3 })
+    const res = retrieveRelevantTools('Check git status and modified files in repository', sampleTools, {
+      mode: 'auto',
+      maxTools: 3,
+    })
     expect(res[0]?.name).toBe('git_status')
   })
 })

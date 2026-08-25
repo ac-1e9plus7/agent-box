@@ -1,10 +1,27 @@
 import type { Message, Skill } from '../../shared/types'
 import { tokenize } from '../mcp/tool-retriever'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const GENERIC_TERMS = new Set([
-  t("one"), t("one time"), t("this"), t("that"), t("What"), t("skillRetrieval.howVariant"), t("how"), t("Why"), t("whether"), t("Can"),
-  t("help me"), t("please help"), t("need"), t("use"), t("conduct"), t("content"), t("Task"), t("question"), t("analyze"),
+  t('one'),
+  t('one time'),
+  t('this'),
+  t('that'),
+  t('What'),
+  t('skillRetrieval.howVariant'),
+  t('how'),
+  t('Why'),
+  t('whether'),
+  t('Can'),
+  t('help me'),
+  t('please help'),
+  t('need'),
+  t('use'),
+  t('conduct'),
+  t('content'),
+  t('Task'),
+  t('question'),
+  t('analyze'),
 ])
 
 /**
@@ -33,10 +50,12 @@ export function retrieveExplicitlyMentionedSkills(query: string, skills: Skill[]
   return skills.filter((skill) => {
     const id = skill.id.toLowerCase()
     const name = skill.name.toLowerCase()
-    return normalizedQuery.includes(`$${id}`)
-      || normalizedQuery.includes(`@${id}`)
-      || normalizedQuery.includes(name)
-      || containsDelimitedIdentifier(normalizedQuery, id)
+    return (
+      normalizedQuery.includes(`$${id}`) ||
+      normalizedQuery.includes(`@${id}`) ||
+      normalizedQuery.includes(name) ||
+      containsDelimitedIdentifier(normalizedQuery, id)
+    )
   })
 }
 

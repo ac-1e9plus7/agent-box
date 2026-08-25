@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  BUILTIN_AGENT_TOOL_SERVER_IDS,
-  createBuiltinAgentToolCatalog,
-} from '../src/shared/builtin-agent-tools'
+import { BUILTIN_AGENT_TOOL_SERVER_IDS, createBuiltinAgentToolCatalog } from '../src/shared/builtin-agent-tools'
 import type { Skill } from '../src/shared/types'
 
 function makeSkill(overrides: Partial<Skill> = {}): Skill {

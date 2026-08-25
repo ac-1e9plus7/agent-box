@@ -80,23 +80,23 @@ interface VaultState {
 
 The main limits are enforced by [`app-repository.ts`](../src/electron/storage/app-repository.ts), [`vault-resource-limits.ts`](../src/electron/storage/vault-resource-limits.ts), and [`web-metadata-schema.ts`](../src/electron/storage/web-metadata-schema.ts):
 
-| Resource | Current limit |
-| --- | ---: |
-| Providers | 100 |
-| Models | 2,000 |
-| Conversations | 10,000 |
-| Skills | 500 |
-| MCP servers | 100 |
-| Messages per conversation | 20,000 |
-| Message content or reasoning field | 2,000,000 characters each |
-| Counted content per conversation | 50,000,000 characters |
-| Serialized data across all conversations | 50 MiB |
-| Messages / citations across all conversations | 100,000 each |
-| Citations per message | 100 |
-| Attachments per message | 20 |
-| Files per skill / content per skill file | 50 / 500,000 characters |
-| Arguments / environment variables per MCP server | 50 / 100 |
-| Each MCP argument or environment-variable value | 8,192 characters |
+| Resource                                         |             Current limit |
+| ------------------------------------------------ | ------------------------: |
+| Providers                                        |                       100 |
+| Models                                           |                     2,000 |
+| Conversations                                    |                    10,000 |
+| Skills                                           |                       500 |
+| MCP servers                                      |                       100 |
+| Messages per conversation                        |                    20,000 |
+| Message content or reasoning field               | 2,000,000 characters each |
+| Counted content per conversation                 |     50,000,000 characters |
+| Serialized data across all conversations         |                    50 MiB |
+| Messages / citations across all conversations    |              100,000 each |
+| Citations per message                            |                       100 |
+| Attachments per message                          |                        20 |
+| Files per skill / content per skill file         |   50 / 500,000 characters |
+| Arguments / environment variables per MCP server |                  50 / 100 |
+| Each MCP argument or environment-variable value  |          8,192 characters |
 
 Saving a conversation applies both per-conversation and aggregate quotas. To avoid locking users out of legacy data when a newer aggregate quota is introduced, an already-over-limit Vault can still load and the user can delete or shrink data. A save that would further increase any over-limit dimension is rejected.
 

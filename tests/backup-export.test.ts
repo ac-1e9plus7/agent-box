@@ -1,13 +1,7 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import {
-  TextWriter,
-  Uint8ArrayReader,
-  ZipReader,
-  type Entry,
-  type FileEntry,
-} from '@zip.js/zip.js'
+import { TextWriter, Uint8ArrayReader, ZipReader, type Entry, type FileEntry } from '@zip.js/zip.js'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Conversation } from '../src/shared/types'
 import {
@@ -49,8 +43,9 @@ describe('conversation backup export', () => {
       workspaceCount: 0,
     })
     expect(result.bytesWritten).toBeGreaterThan(0)
-    expect((await readdir(temporaryDirectory)).filter((name) => name.includes('.partial') || name.includes('.replaced')))
-      .toEqual([])
+    expect(
+      (await readdir(temporaryDirectory)).filter((name) => name.includes('.partial') || name.includes('.replaced')),
+    ).toEqual([])
 
     const { entries, close } = await openArchive(outputPath)
     try {
@@ -74,9 +69,7 @@ describe('conversation backup export', () => {
       })
       expect(manifest.omitted.join(' ')).toContain('API keys')
 
-      const exported = JSON.parse(
-        await readEntryText(entries, 'conversations/conversation-0001.json'),
-      ) as Conversation
+      const exported = JSON.parse(await readEntryText(entries, 'conversations/conversation-0001.json')) as Conversation
       expect(exported).toEqual(conversations[0])
       const markdown = await readEntryText(entries, 'conversations/conversation-0001.md')
       expect(markdown).toContain('# Backup test')
@@ -143,9 +136,7 @@ describe('conversation backup export', () => {
       expect(filenames).toContain('workspaces/workspace-0001/README.md')
       expect(filenames).toContain('workspaces/workspace-0001/src/index.ts')
       expect(filenames).not.toContain('workspaces/workspace-0001/deep-backup.zip')
-      expect(await readEntryText(entries, 'workspaces/workspace-0001/src/index.ts')).toBe(
-        'export const answer = 42\n',
-      )
+      expect(await readEntryText(entries, 'workspaces/workspace-0001/src/index.ts')).toBe('export const answer = 42\n')
 
       const manifest = JSON.parse(await readEntryText(entries, 'manifest.json')) as BackupManifest
       expect(manifest.workspaces).toMatchObject({
@@ -172,23 +163,26 @@ describe('conversation backup export', () => {
       workingDirectory: join(temporaryDirectory, 'does-not-exist'),
     }
 
-    await expect(createBackupArchive({
-      outputPath,
-      input: { mode: 'deep' },
-      conversations: [conversation],
-      appInfo: { name: 'AgentBox', version: 'test', platform: process.platform },
-    })).rejects.toThrow('无法读取会话“Backup test”的工作目录')
+    await expect(
+      createBackupArchive({
+        outputPath,
+        input: { mode: 'deep' },
+        conversations: [conversation],
+        appInfo: { name: 'AgentBox', version: 'test', platform: process.platform },
+      }),
+    ).rejects.toThrow('无法读取会话“Backup test”的工作目录')
 
     expect(await readdir(temporaryDirectory)).not.toContain('missing.zip')
   })
 
   it('validates modes and password bounds and creates filesystem-safe default names', () => {
-    expect(() => normalizeExportBackupInput({ mode: 'shallow', password: 'x'.repeat(257) }))
-      .toThrow('不能超过 256 个字符')
-    expect(() => normalizeExportBackupInput({ mode: 'invalid' } as never))
-      .toThrow('备份模式无效')
-    expect(createBackupFileName('deep', new Date('2026-08-23T10:11:12.345Z')))
-      .toBe('AgentBox-backup-deep-2026-08-23_10-11-12-345.zip')
+    expect(() => normalizeExportBackupInput({ mode: 'shallow', password: 'x'.repeat(257) })).toThrow(
+      '不能超过 256 个字符',
+    )
+    expect(() => normalizeExportBackupInput({ mode: 'invalid' } as never)).toThrow('备份模式无效')
+    expect(createBackupFileName('deep', new Date('2026-08-23T10:11:12.345Z'))).toBe(
+      'AgentBox-backup-deep-2026-08-23_10-11-12-345.zip',
+    )
   })
 })
 
@@ -204,14 +198,16 @@ function sampleConversation(id: string): Conversation {
         id: `${id}-user`,
         role: 'user',
         content: 'Hello from the backup test',
-        attachments: [{
-          id: `${id}-attachment`,
-          name: 'note.txt',
-          mimeType: 'text/plain',
-          size: 4,
-          data: 'note',
-          type: 'text',
-        }],
+        attachments: [
+          {
+            id: `${id}-attachment`,
+            name: 'note.txt',
+            mimeType: 'text/plain',
+            size: 4,
+            data: 'note',
+            type: 'text',
+          },
+        ],
         createdAt: '2026-08-23T09:00:00.000Z',
       },
       {
@@ -240,14 +236,10 @@ async function openArchive(path: string): Promise<{
   return { entries, close: () => reader.close() }
 }
 
-async function readEntryText(
-  entries: Entry[],
-  filename: string,
-  password?: string,
-): Promise<string> {
-  const entry = entries.find((candidate): candidate is FileEntry => (
-    candidate.filename === filename && !candidate.directory
-  ))
+async function readEntryText(entries: Entry[], filename: string, password?: string): Promise<string> {
+  const entry = entries.find(
+    (candidate): candidate is FileEntry => candidate.filename === filename && !candidate.directory,
+  )
   if (!entry) throw new Error(`Missing ZIP entry: ${filename}`)
   return entry.getData(new TextWriter(), {
     ...(password ? { password } : {}),

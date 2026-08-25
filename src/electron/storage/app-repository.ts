@@ -35,8 +35,7 @@ import {
 } from './web-metadata-schema'
 import { APP_LANGUAGES, resourceBundle, t, type AppLanguage } from '../../shared/i18n'
 
-export interface StoredProvider
-  extends Omit<ProviderView, 'hasApiKey' | 'apiKeyOptional'> {
+export interface StoredProvider extends Omit<ProviderView, 'hasApiKey' | 'apiKeyOptional'> {
   apiKey?: string
 }
 
@@ -50,11 +49,7 @@ export interface VaultState {
   mcpServers?: McpServerConfig[]
 }
 
-const API_FORMATS = new Set<ApiFormat>([
-  'openai-chat-completions',
-  'openai-responses',
-  'anthropic-messages',
-])
+const API_FORMATS = new Set<ApiFormat>(['openai-chat-completions', 'openai-responses', 'anthropic-messages'])
 const MAX_PROVIDERS = 100
 const MAX_MODELS = 2_000
 const MAX_CONVERSATIONS = 10_000
@@ -179,15 +174,11 @@ export class AppRepository {
 
   async upsertProvider(input: ProviderInput): Promise<ProviderView> {
     return this.store.mutate((draft) => {
-      const existing = input.id
-        ? draft.providers.find((provider) => provider.id === input.id)
-        : undefined
+      const existing = input.id ? draft.providers.find((provider) => provider.id === input.id) : undefined
       const provider = buildStoredProvider(input, existing)
 
       if (existing) {
-        draft.providers = draft.providers.map((item) =>
-          item.id === existing.id ? provider : item,
-        )
+        draft.providers = draft.providers.map((item) => (item.id === existing.id ? provider : item))
       } else {
         draft.providers.push(provider)
       }
@@ -198,7 +189,7 @@ export class AppRepository {
   async removeProvider(id: string): Promise<void> {
     return this.store.mutate((draft) => {
       if (draft.models.some((model) => model.providerId === id)) {
-        throw new Error(t("This provider is still used by one or more models. Remove or migrate those models first."))
+        throw new Error(t('This provider is still used by one or more models. Remove or migrate those models first.'))
       }
       draft.providers = draft.providers.filter((provider) => provider.id !== id)
     })
@@ -215,12 +206,10 @@ export class AppRepository {
   async upsertModel(input: ModelInput): Promise<ModelConfig> {
     return this.store.mutate((draft) => {
       if (!draft.providers.some((provider) => provider.id === input.providerId)) {
-        throw new Error(t("The provider referenced by this model no longer exists."))
+        throw new Error(t('The provider referenced by this model no longer exists.'))
       }
 
-      const existing = input.id
-        ? draft.models.find((model) => model.id === input.id)
-        : undefined
+      const existing = input.id ? draft.models.find((model) => model.id === input.id) : undefined
       const timestamp = new Date().toISOString()
       const model: ModelConfig = {
         id: existing?.id ?? randomUUID(),
@@ -233,10 +222,7 @@ export class AppRepository {
         supportsReasoning: input.supportsReasoning,
         defaultReasoningEnabled: input.defaultReasoningEnabled,
         defaultReasoningEffort: input.defaultReasoningEffort,
-        defaultWebSearchMode: parseOptionalWebSearchMode(
-          input.defaultWebSearchMode,
-          'model web search mode',
-        ),
+        defaultWebSearchMode: parseOptionalWebSearchMode(input.defaultWebSearchMode, 'model web search mode'),
         anthropicThinkingMode: input.anthropicThinkingMode,
         providerRouting: sanitizeProviderRouting(input.providerRouting),
         createdAt: existing?.createdAt ?? timestamp,
@@ -245,9 +231,7 @@ export class AppRepository {
       validateModel(model)
 
       if (existing) {
-        draft.models = draft.models.map((item) =>
-          item.id === existing.id ? model : item,
-        )
+        draft.models = draft.models.map((item) => (item.id === existing.id ? model : item))
       } else {
         draft.models.push(model)
       }
@@ -258,7 +242,11 @@ export class AppRepository {
   async removeModel(id: string): Promise<void> {
     return this.store.mutate((draft) => {
       if (draft.conversations.some((conversation) => conversation.modelId === id)) {
-        throw new Error(t("This model is still used by one or more conversations. Delete those conversations or switch their model first."))
+        throw new Error(
+          t(
+            'This model is still used by one or more conversations. Delete those conversations or switch their model first.',
+          ),
+        )
       }
       draft.models = draft.models.filter((model) => model.id !== id)
       if (draft.settings.defaultModelId === id) {
@@ -276,9 +264,7 @@ export class AppRepository {
       const sourceDefault = DEFAULT_SKILLS.find((item) => item.id === skill.id)
       // Keep user enablement and edited instructions, while allowing built-in
       // resources and trigger metadata to follow the selected display language.
-      return currentDefault && sourceDefault
-        ? mergeLocalizedBuiltInSkill(skill, sourceDefault, currentDefault)
-        : skill
+      return currentDefault && sourceDefault ? mergeLocalizedBuiltInSkill(skill, sourceDefault, currentDefault) : skill
     })
     return structuredClone(skills)
   }
@@ -301,8 +287,8 @@ export class AppRepository {
             {
               path: entryFile,
               content: input.systemPrompt.trim(),
-              kind: 'markdown'
-            }
+              kind: 'markdown',
+            },
           ]
         } else if (existing?.files?.length) {
           files = existing.files
@@ -311,16 +297,14 @@ export class AppRepository {
             {
               path: entryFile,
               content: `# ${input.name.trim()}\n\n${input.description.trim()}`,
-              kind: 'markdown'
-            }
+              kind: 'markdown',
+            },
           ]
         }
       }
 
-      const systemPrompt = input.systemPrompt?.trim()
-        || files.find((f) => f.path === entryFile)?.content
-        || files[0]?.content
-        || ''
+      const systemPrompt =
+        input.systemPrompt?.trim() || files.find((f) => f.path === entryFile)?.content || files[0]?.content || ''
 
       const candidate: Skill = {
         id: input.id?.trim() || `skill-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -341,7 +325,7 @@ export class AppRepository {
       if (existing) {
         draft.skills = skills.map((item) => (item.id === validated.id ? validated : item))
       } else {
-        if (skills.length >= MAX_SKILLS) throw new Error(t("The Skill limit has been reached."))
+        if (skills.length >= MAX_SKILLS) throw new Error(t('The Skill limit has been reached.'))
         draft.skills = [...skills, validated]
       }
       return structuredClone(validated)
@@ -354,7 +338,7 @@ export class AppRepository {
       const target = skills.find((skill) => skill.id === id)
       if (!target) return
       if (target.isBuiltIn) {
-        throw new Error(t("System preset skills cannot be deleted and you can choose to deactivate them."))
+        throw new Error(t('System preset skills cannot be deleted and you can choose to deactivate them.'))
       }
       draft.skills = skills.filter((skill) => skill.id !== id)
     })
@@ -364,7 +348,7 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const skills = draft.skills ?? localizedDefaultSkills()
       const target = skills.find((skill) => skill.id === id)
-      if (!target) throw new Error(t("Skill not found."))
+      if (!target) throw new Error(t('Skill not found.'))
       const updated: Skill = {
         ...target,
         enabled,
@@ -425,7 +409,7 @@ export class AppRepository {
       if (existing) {
         draft.mcpServers = servers.map((s) => (s.id === validated.id ? validated : s))
       } else {
-        if (servers.length >= MAX_MCP_SERVERS) throw new Error(t("The MCP server limit has been reached."))
+        if (servers.length >= MAX_MCP_SERVERS) throw new Error(t('The MCP server limit has been reached.'))
         draft.mcpServers = [...servers, validated]
       }
       return structuredClone(validated)
@@ -448,7 +432,7 @@ export class AppRepository {
     return this.store.mutate((draft) => {
       const servers = draft.mcpServers ?? []
       const target = servers.find((s) => s.id === id)
-      if (!target) throw new Error(t("MCP server not found."))
+      if (!target) throw new Error(t('MCP server not found.'))
       const updated: McpServerConfig = {
         ...target,
         enabled,
@@ -460,9 +444,7 @@ export class AppRepository {
   }
 
   listConversations(): Conversation[] {
-    return this.store
-      .read()
-      .conversations.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    return this.store.read().conversations.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }
 
   getConversation(id: string): Conversation | undefined {
@@ -474,9 +456,7 @@ export class AppRepository {
       const validated = validateConversation(structuredClone(conversation))
       const existing = draft.conversations.some((item) => item.id === validated.id)
       if (existing) {
-        const conversations = draft.conversations.map((item) =>
-          item.id === validated.id ? validated : item,
-        )
+        const conversations = draft.conversations.map((item) => (item.id === validated.id ? validated : item))
         assertConversationMutationAllowed(draft.conversations, conversations)
         draft.conversations = conversations
       } else {
@@ -490,9 +470,7 @@ export class AppRepository {
 
   async removeConversation(id: string): Promise<void> {
     return this.store.mutate((draft) => {
-      draft.conversations = draft.conversations.filter(
-        (conversation) => conversation.id !== id,
-      )
+      draft.conversations = draft.conversations.filter((conversation) => conversation.id !== id)
     })
   }
 
@@ -509,30 +487,21 @@ export class AppRepository {
   }
 }
 
-function buildStoredProvider(
-  input: ProviderInput,
-  existing?: StoredProvider,
-): StoredProvider {
-  if (
-    input.apiKey !== undefined &&
-    (typeof input.apiKey !== 'string' || input.apiKey.length > 16_384)
-  ) {
-    throw new Error(t("The API key is invalid or exceeds the length limit."))
+function buildStoredProvider(input: ProviderInput, existing?: StoredProvider): StoredProvider {
+  if (input.apiKey !== undefined && (typeof input.apiKey !== 'string' || input.apiKey.length > 16_384)) {
+    throw new Error(t('The API key is invalid or exceeds the length limit.'))
   }
   const timestamp = new Date().toISOString()
   const normalizedBaseUrl = normalizeBaseUrl(input.baseUrl)
   const suppliedApiKey = input.apiKey?.trim()
-  const canRetainExistingKey =
-    existing?.baseUrl === normalizedBaseUrl && existing.kind === input.kind
+  const canRetainExistingKey = existing?.baseUrl === normalizedBaseUrl && existing.kind === input.kind
   const provider: StoredProvider = {
     id: existing?.id ?? randomUUID(),
     name: input.name.trim(),
     kind: input.kind,
     baseUrl: normalizedBaseUrl,
     apiFormat: input.apiFormat,
-    apiKey: input.clearApiKey
-      ? undefined
-      : suppliedApiKey || (canRetainExistingKey ? existing.apiKey : undefined),
+    apiKey: input.clearApiKey ? undefined : suppliedApiKey || (canRetainExistingKey ? existing.apiKey : undefined),
     defaultHeaders: sanitizeHeaders(input.defaultHeaders ?? existing?.defaultHeaders ?? {}),
     createdAt: existing?.createdAt ?? timestamp,
     updatedAt: timestamp,
@@ -571,21 +540,14 @@ function validateVault(value: unknown, fallbackLanguage: AppLanguage): VaultStat
   if (!isRecord(value) || value.schemaVersion !== 1) {
     throw new Error('Unsupported vault schema')
   }
-  const providers = requireArray(value.providers, 'providers', MAX_PROVIDERS).map(
-    parseStoredProvider,
-  )
+  const providers = requireArray(value.providers, 'providers', MAX_PROVIDERS).map(parseStoredProvider)
   const models = requireArray(value.models, 'models', MAX_MODELS).map(parseModel)
-  const conversations = requireArray(
-    value.conversations,
-    'conversations',
-    MAX_CONVERSATIONS,
-  ).map(validateConversation)
-  const skills = value.skills !== undefined
-    ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
-    : localizedDefaultSkills()
-  const mcpServers = value.mcpServers !== undefined
-    ? parseStoredMcpServers(value.mcpServers)
-    : []
+  const conversations = requireArray(value.conversations, 'conversations', MAX_CONVERSATIONS).map(validateConversation)
+  const skills =
+    value.skills !== undefined
+      ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
+      : localizedDefaultSkills()
+  const mcpServers = value.mcpServers !== undefined ? parseStoredMcpServers(value.mcpServers) : []
   return {
     schemaVersion: 1,
     settings: normalizeAppSettings(value.settings, fallbackLanguage),
@@ -608,9 +570,7 @@ function validateStoredProvider(value: unknown): asserts value is StoredProvider
   if (!API_FORMATS.has(value.apiFormat as ApiFormat)) throw new Error('Invalid API format')
   if (
     value.apiKey !== undefined &&
-    (typeof value.apiKey !== 'string' ||
-      !value.apiKey.trim() ||
-      value.apiKey.length > 16_384)
+    (typeof value.apiKey !== 'string' || !value.apiKey.trim() || value.apiKey.length > 16_384)
   ) {
     throw new Error('Invalid API key')
   }
@@ -676,10 +636,7 @@ function parseModel(value: unknown): ModelConfig {
     supportsReasoning: value.supportsReasoning,
     defaultReasoningEnabled: value.defaultReasoningEnabled,
     defaultReasoningEffort: value.defaultReasoningEffort,
-    defaultWebSearchMode: parseOptionalWebSearchMode(
-      value.defaultWebSearchMode,
-      'model web search mode',
-    ),
+    defaultWebSearchMode: parseOptionalWebSearchMode(value.defaultWebSearchMode, 'model web search mode'),
     anthropicThinkingMode: value.anthropicThinkingMode,
     providerRouting: sanitizeProviderRouting(value.providerRouting),
     createdAt: value.createdAt,
@@ -720,13 +677,11 @@ function validateSkill(value: unknown): Skill {
   if (value.icon !== undefined && (typeof value.icon !== 'string' || value.icon.length > 50)) {
     throw new Error('Invalid skill icon')
   }
-  const entryFile = typeof value.entryFile === 'string' && value.entryFile.trim()
-    ? value.entryFile.trim()
-    : 'SKILL.md'
+  const entryFile = typeof value.entryFile === 'string' && value.entryFile.trim() ? value.entryFile.trim() : 'SKILL.md'
 
   let files: SkillFile[] = []
   if (Array.isArray(value.files) && value.files.length > 0) {
-    if (value.files.length > MAX_SKILL_FILES) throw new Error(t("Skill contains more files than the limit"))
+    if (value.files.length > MAX_SKILL_FILES) throw new Error(t('Skill contains more files than the limit'))
     files = value.files.map(validateSkillFile)
   } else if (typeof value.systemPrompt === 'string' && value.systemPrompt.trim()) {
     files = [
@@ -738,9 +693,10 @@ function validateSkill(value: unknown): Skill {
     ]
   }
 
-  const systemPrompt = typeof value.systemPrompt === 'string' && value.systemPrompt.trim()
-    ? value.systemPrompt.trim()
-    : files.find((f) => f.path === entryFile)?.content ?? files[0]?.content ?? ''
+  const systemPrompt =
+    typeof value.systemPrompt === 'string' && value.systemPrompt.trim()
+      ? value.systemPrompt.trim()
+      : (files.find((f) => f.path === entryFile)?.content ?? files[0]?.content ?? '')
 
   if (value.isBuiltIn !== undefined && typeof value.isBuiltIn !== 'boolean') {
     throw new Error('Invalid skill built-in flag')
@@ -870,11 +826,14 @@ function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefi
     requireNonEmptyString(item.id, 'tool execution id', 120)
     requireNonEmptyString(item.toolName, 'tool execution toolName', 200)
     const serverId = typeof item.serverId === 'string' && item.serverId.trim() ? item.serverId.trim() : undefined
-    const serverName = typeof item.serverName === 'string' && item.serverName.trim() ? item.serverName.trim() : undefined
+    const serverName =
+      typeof item.serverName === 'string' && item.serverName.trim() ? item.serverName.trim() : undefined
     if (!isRecord(item.args)) throw new Error('Invalid tool execution args')
     const result = typeof item.result === 'string' ? item.result.slice(0, 1_000_000) : undefined
     const isError = typeof item.isError === 'boolean' ? item.isError : undefined
-    const status = ['calling', 'awaiting-approval', 'executing', 'complete', 'denied', 'error'].includes(String(item.status))
+    const status = ['calling', 'awaiting-approval', 'executing', 'complete', 'denied', 'error'].includes(
+      String(item.status),
+    )
       ? (item.status as ToolCallExecution['status'])
       : 'complete'
     return {
@@ -899,33 +858,25 @@ function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefi
   })
 }
 
-function mergeLocalizedBuiltInSkill(
-  stored: Skill,
-  source: Skill,
-  localized: Skill,
-): Skill {
+function mergeLocalizedBuiltInSkill(stored: Skill, source: Skill, localized: Skill): Skill {
   const files = stored.files.map((storedFile) => {
     const sourceFile = source.files.find((file) => file.path === storedFile.path)
     const localizedFile = localized.files.find((file) => file.path === storedFile.path)
-    if (
-      sourceFile
-      && localizedFile
-      && isBundledMessageValue(storedFile.content, sourceFile.content)
-    ) {
+    if (sourceFile && localizedFile && isBundledMessageValue(storedFile.content, sourceFile.content)) {
       return { ...localizedFile }
     }
     return storedFile
   })
-  const sourcePrompt = source.systemPrompt
-    || source.files.find((file) => file.path === source.entryFile)?.content
-    || source.files[0]?.content
-  const localizedPrompt = localized.systemPrompt
-    || localized.files.find((file) => file.path === localized.entryFile)?.content
-    || localized.files[0]?.content
-  const systemPrompt = sourcePrompt
-    && localizedPrompt
-    && stored.systemPrompt
-    && isBundledMessageValue(stored.systemPrompt, sourcePrompt)
+  const sourcePrompt =
+    source.systemPrompt ||
+    source.files.find((file) => file.path === source.entryFile)?.content ||
+    source.files[0]?.content
+  const localizedPrompt =
+    localized.systemPrompt ||
+    localized.files.find((file) => file.path === localized.entryFile)?.content ||
+    localized.files[0]?.content
+  const systemPrompt =
+    sourcePrompt && localizedPrompt && stored.systemPrompt && isBundledMessageValue(stored.systemPrompt, sourcePrompt)
       ? localizedPrompt
       : stored.systemPrompt
   return {
@@ -938,9 +889,7 @@ function mergeLocalizedBuiltInSkill(
 }
 
 function isBundledMessageValue(value: string, messageKey: string): boolean {
-  return value === messageKey || APP_LANGUAGES.some((language) => (
-    resourceBundle(language)[messageKey] === value
-  ))
+  return value === messageKey || APP_LANGUAGES.some((language) => resourceBundle(language)[messageKey] === value)
 }
 
 function parseStoredSkillActivations(value: unknown): SkillActivation[] | undefined {
@@ -984,7 +933,12 @@ function parseStoredAgentTrace(value: unknown): import('../../shared/types').Age
         signature: typeof item.signature === 'string' ? item.signature.slice(0, 100_000) : undefined,
       }
     }
-    if (item.type === 'provider_item' && item.format === 'openai-responses' && isRecord(item.item) && item.item.type === 'reasoning') {
+    if (
+      item.type === 'provider_item' &&
+      item.format === 'openai-responses' &&
+      isRecord(item.item) &&
+      item.item.type === 'reasoning'
+    ) {
       return {
         type: 'provider_item',
         turn,
@@ -992,7 +946,13 @@ function parseStoredAgentTrace(value: unknown): import('../../shared/types').Age
         item: parseStoredJsonRecord(item.item, 500_000),
       }
     }
-    if (item.type === 'tool_call' && typeof item.callId === 'string' && typeof item.toolName === 'string' && typeof item.modelToolName === 'string' && isRecord(item.args)) {
+    if (
+      item.type === 'tool_call' &&
+      typeof item.callId === 'string' &&
+      typeof item.toolName === 'string' &&
+      typeof item.modelToolName === 'string' &&
+      isRecord(item.args)
+    ) {
       return {
         type: 'tool_call',
         turn,
@@ -1004,7 +964,12 @@ function parseStoredAgentTrace(value: unknown): import('../../shared/types').Age
         args: parseStoredJsonRecord(item.args, 200_000),
       }
     }
-    if (item.type === 'tool_result' && typeof item.callId === 'string' && typeof item.toolName === 'string' && typeof item.result === 'string') {
+    if (
+      item.type === 'tool_result' &&
+      typeof item.callId === 'string' &&
+      typeof item.toolName === 'string' &&
+      typeof item.result === 'string'
+    ) {
       return {
         type: 'tool_result',
         turn,
@@ -1026,22 +991,33 @@ function parseStoredAgentTrace(value: unknown): import('../../shared/types').Age
 function parseStoredAgentInterruption(value: unknown): AgentInterruption | undefined {
   if (value === undefined || value === null) return undefined
   if (!isRecord(value)) throw new Error('Invalid Agent interruption')
-  if (![
-    'rate_limit',
-    'network',
-    'timeout',
-    'cancelled',
-    'tool_turn_limit',
-    'output_limit',
-    'api_error',
-    'unknown',
-  ].includes(String(value.reason))) throw new Error('Invalid Agent interruption reason')
+  if (
+    ![
+      'rate_limit',
+      'network',
+      'timeout',
+      'cancelled',
+      'tool_turn_limit',
+      'output_limit',
+      'api_error',
+      'unknown',
+    ].includes(String(value.reason))
+  )
+    throw new Error('Invalid Agent interruption reason')
   requireNonEmptyString(value.message, 'Agent interruption message', 10_000)
   requireIsoDate(value.occurredAt, 'Agent interruption occurredAt')
-  if (value.status !== undefined && (!Number.isInteger(value.status) || Number(value.status) < 100 || Number(value.status) > 599)) {
+  if (
+    value.status !== undefined &&
+    (!Number.isInteger(value.status) || Number(value.status) < 100 || Number(value.status) > 599)
+  ) {
     throw new Error('Invalid Agent interruption status')
   }
-  if (value.retryAfterSeconds !== undefined && (!Number.isFinite(value.retryAfterSeconds) || Number(value.retryAfterSeconds) < 0 || Number(value.retryAfterSeconds) > 86_400)) {
+  if (
+    value.retryAfterSeconds !== undefined &&
+    (!Number.isFinite(value.retryAfterSeconds) ||
+      Number(value.retryAfterSeconds) < 0 ||
+      Number(value.retryAfterSeconds) > 86_400)
+  ) {
     throw new Error('Invalid Agent interruption retry delay')
   }
   return {
@@ -1060,15 +1036,37 @@ function parseStoredToolResultContent(value: unknown): import('../../shared/type
   if (!Array.isArray(value) || value.length > 100) throw new Error('Invalid tool result content')
   const parsed = value.flatMap((item): import('../../shared/types').McpToolResultContent[] => {
     if (!isRecord(item)) return []
-    if (item.type === 'text' && typeof item.text === 'string') return [{ type: 'text', text: item.text.slice(0, 100_000) }]
+    if (item.type === 'text' && typeof item.text === 'string')
+      return [{ type: 'text', text: item.text.slice(0, 100_000) }]
     if ((item.type === 'image' || item.type === 'audio') && typeof item.mimeType === 'string') {
-      return [{ type: item.type, mimeType: item.mimeType.slice(0, 100), data: typeof item.data === 'string' && item.data.length <= 2 * 1024 * 1024 ? item.data : undefined }]
+      return [
+        {
+          type: item.type,
+          mimeType: item.mimeType.slice(0, 100),
+          data: typeof item.data === 'string' && item.data.length <= 2 * 1024 * 1024 ? item.data : undefined,
+        },
+      ]
     }
     if (item.type === 'resource' && typeof item.uri === 'string') {
-      return [{ type: 'resource', uri: item.uri.slice(0, 2_000), mimeType: typeof item.mimeType === 'string' ? item.mimeType.slice(0, 100) : undefined, text: typeof item.text === 'string' ? item.text.slice(0, 100_000) : undefined }]
+      return [
+        {
+          type: 'resource',
+          uri: item.uri.slice(0, 2_000),
+          mimeType: typeof item.mimeType === 'string' ? item.mimeType.slice(0, 100) : undefined,
+          text: typeof item.text === 'string' ? item.text.slice(0, 100_000) : undefined,
+        },
+      ]
     }
     if (item.type === 'resource_link' && typeof item.uri === 'string' && typeof item.name === 'string') {
-      return [{ type: 'resource_link', uri: item.uri.slice(0, 2_000), name: item.name.slice(0, 300), description: typeof item.description === 'string' ? item.description.slice(0, 4_000) : undefined, mimeType: typeof item.mimeType === 'string' ? item.mimeType.slice(0, 100) : undefined }]
+      return [
+        {
+          type: 'resource_link',
+          uri: item.uri.slice(0, 2_000),
+          name: item.name.slice(0, 300),
+          description: typeof item.description === 'string' ? item.description.slice(0, 4_000) : undefined,
+          mimeType: typeof item.mimeType === 'string' ? item.mimeType.slice(0, 100) : undefined,
+        },
+      ]
     }
     return []
   })
@@ -1098,18 +1096,12 @@ function validateConversation(value: unknown): Conversation {
   const mcpServerIds = Array.isArray(value.mcpServerIds)
     ? value.mcpServerIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)
     : undefined
-  const webSearchMode = parseOptionalWebSearchMode(
-    value.webSearchMode,
-    'conversation web search mode',
-  )
-  const workingDirectory = typeof value.workingDirectory === 'string' && value.workingDirectory.trim()
-    ? normalizeConversationWorkingDirectory(value.workingDirectory)
-    : undefined
-  const messages = requireArray(
-    value.messages,
-    'messages',
-    MAX_MESSAGES_PER_CONVERSATION,
-  ).map((message) => {
+  const webSearchMode = parseOptionalWebSearchMode(value.webSearchMode, 'conversation web search mode')
+  const workingDirectory =
+    typeof value.workingDirectory === 'string' && value.workingDirectory.trim()
+      ? normalizeConversationWorkingDirectory(value.workingDirectory)
+      : undefined
+  const messages = requireArray(value.messages, 'messages', MAX_MESSAGES_PER_CONVERSATION).map((message) => {
     if (!isRecord(message)) throw new Error('Invalid message')
     requireNonEmptyString(message.id, 'message id')
     if (!['system', 'user', 'assistant'].includes(String(message.role))) {
@@ -1120,8 +1112,7 @@ function validateConversation(value: unknown): Conversation {
     }
     if (
       message.reasoning !== undefined &&
-      (typeof message.reasoning !== 'string' ||
-        message.reasoning.length > MAX_MESSAGE_CHARACTERS)
+      (typeof message.reasoning !== 'string' || message.reasoning.length > MAX_MESSAGE_CHARACTERS)
     ) {
       throw new Error('Invalid message reasoning')
     }
@@ -1133,7 +1124,8 @@ function validateConversation(value: unknown): Conversation {
     const toolExecutions = parseStoredToolExecutions(message.toolExecutions)
     const agentTrace = parseStoredAgentTrace(message.agentTrace)
     const interruption = parseStoredAgentInterruption(message.interruption)
-    if (interruption && message.role !== 'assistant') throw new Error('Only assistant messages can store Agent interruptions')
+    if (interruption && message.role !== 'assistant')
+      throw new Error('Only assistant messages can store Agent interruptions')
     const parentMessageId =
       message.parentMessageId === null
         ? null
@@ -1176,9 +1168,7 @@ function validateConversation(value: unknown): Conversation {
   requireIsoDate(value.createdAt, 'conversation createdAt')
   requireIsoDate(value.updatedAt, 'conversation updatedAt')
   const currentLeafId =
-    typeof value.currentLeafId === 'string' && value.currentLeafId.trim()
-      ? value.currentLeafId.trim()
-      : undefined
+    typeof value.currentLeafId === 'string' && value.currentLeafId.trim() ? value.currentLeafId.trim() : undefined
   return {
     id: value.id,
     title: value.title,
@@ -1210,25 +1200,19 @@ function sanitizeProviderRouting(value: unknown): ProviderRouting | undefined {
   if (value.zdr !== undefined && typeof value.zdr !== 'boolean') {
     throw new Error('Invalid provider ZDR setting')
   }
-  if (
-    value.dataCollection !== undefined &&
-    !['allow', 'deny'].includes(String(value.dataCollection))
-  ) {
+  if (value.dataCollection !== undefined && !['allow', 'deny'].includes(String(value.dataCollection))) {
     throw new Error('Invalid provider data-collection setting')
   }
-  if (
-    value.sort !== undefined &&
-    !['price', 'throughput', 'latency'].includes(String(value.sort))
-  ) {
+  if (value.sort !== undefined && !['price', 'throughput', 'latency'].includes(String(value.sort))) {
     throw new Error('Invalid provider sort setting')
   }
   return {
     order,
     only,
-    allowFallbacks: value.allowFallbacks as boolean | undefined,
-    requireParameters: value.requireParameters as boolean | undefined,
+    allowFallbacks: value.allowFallbacks,
+    requireParameters: value.requireParameters,
     dataCollection: value.dataCollection as ProviderRouting['dataCollection'],
-    zdr: value.zdr as boolean | undefined,
+    zdr: value.zdr,
     sort: value.sort as ProviderRouting['sort'],
   }
 }
@@ -1237,12 +1221,7 @@ function sanitizeProviderSlugs(value: unknown, label: string): string[] | undefi
   if (value === undefined) return undefined
   if (!Array.isArray(value) || value.length > 100) throw new Error(`Invalid ${label}`)
   return value.map((item) => {
-    if (
-      typeof item !== 'string' ||
-      !item ||
-      item.length > 100 ||
-      !/^[0-9A-Za-z._/-]+$/.test(item)
-    ) {
+    if (typeof item !== 'string' || !item || item.length > 100 || !/^[0-9A-Za-z._/-]+$/.test(item)) {
       throw new Error(`Invalid ${label}`)
     }
     return item
@@ -1261,10 +1240,10 @@ function toProviderView(provider: StoredProvider): ProviderView {
 function normalizeBaseUrl(value: string): string {
   const url = new URL(value.trim())
   if (!['https:', 'http:'].includes(url.protocol)) {
-    throw new Error(t("The provider URL must use HTTP or HTTPS."))
+    throw new Error(t('The provider URL must use HTTP or HTTPS.'))
   }
   if (url.protocol === 'http:' && !isLoopbackUrl(url.toString())) {
-    throw new Error(t("Remote provider URLs must use HTTPS; HTTP is allowed only for local loopback addresses."))
+    throw new Error(t('Remote provider URLs must use HTTPS; HTTP is allowed only for local loopback addresses.'))
   }
   url.username = ''
   url.password = ''
@@ -1290,10 +1269,10 @@ function sanitizeHeaders(value: Record<string, string>): Record<string, string> 
   for (const [rawName, rawValue] of entries) {
     const name = rawName.trim()
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
-      throw new Error(t("Request header not allowed: {value0}", { value0: name }))
+      throw new Error(t('Request header not allowed: {value0}', { value0: name }))
     }
     if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 4_096) {
-      throw new Error(t("The value of the request header {value0} is invalid.", { value0: name }))
+      throw new Error(t('The value of the request header {value0} is invalid.', { value0: name }))
     }
     output[name] = rawValue
   }
@@ -1316,20 +1295,17 @@ function sanitizeMcpHeaders(value: Record<string, string>): Record<string, strin
   for (const [rawName, rawValue] of entries) {
     const name = rawName.trim()
     if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || forbidden.has(name.toLowerCase())) {
-      throw new Error(t("MCP request header not allowed: {value0}", { value0: name }))
+      throw new Error(t('MCP request header not allowed: {value0}', { value0: name }))
     }
     if (typeof rawValue !== 'string' || /[\r\n]/.test(rawValue) || rawValue.length > 8_192) {
-      throw new Error(t("The MCP request header {value0} has an invalid value.", { value0: name }))
+      throw new Error(t('The MCP request header {value0} has an invalid value.', { value0: name }))
     }
     output[name] = rawValue
   }
   return output
 }
 
-function resolveMcpInputSecrets(
-  input: McpServerInput,
-  existing?: McpServerConfig,
-): McpServerInput {
+function resolveMcpInputSecrets(input: McpServerInput, existing?: McpServerConfig): McpServerInput {
   const mergeMasked = (
     incoming: Record<string, string> | undefined,
     stored: Record<string, string> | undefined,
@@ -1337,10 +1313,12 @@ function resolveMcpInputSecrets(
   ): Record<string, string> | undefined => {
     if (clear) return undefined
     if (incoming === undefined) return stored ? structuredClone(stored) : undefined
-    return Object.fromEntries(Object.entries(incoming).map(([key, value]) => [
-      key,
-      value === MCP_SECRET_MASK && stored?.[key] !== undefined ? stored[key] : value,
-    ]))
+    return Object.fromEntries(
+      Object.entries(incoming).map(([key, value]) => [
+        key,
+        value === MCP_SECRET_MASK && stored?.[key] !== undefined ? stored[key] : value,
+      ]),
+    )
   }
   return {
     ...input,
@@ -1350,9 +1328,8 @@ function resolveMcpInputSecrets(
 }
 
 function maskMcpServerSecrets(server: McpServerConfig): McpServerConfig {
-  const mask = (value?: Record<string, string>): Record<string, string> | undefined => value
-    ? Object.fromEntries(Object.keys(value).map((key) => [key, MCP_SECRET_MASK]))
-    : undefined
+  const mask = (value?: Record<string, string>): Record<string, string> | undefined =>
+    value ? Object.fromEntries(Object.keys(value).map((key) => [key, MCP_SECRET_MASK])) : undefined
   return {
     ...structuredClone(server),
     env: mask(server.env),
@@ -1360,9 +1337,7 @@ function maskMcpServerSecrets(server: McpServerConfig): McpServerConfig {
   }
 }
 
-function parseStoredAttachments(
-  value: unknown,
-): MessageAttachment[] | undefined {
+function parseStoredAttachments(value: unknown): MessageAttachment[] | undefined {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value)) throw new Error('Invalid message attachments')
   if (value.length > 20) throw new Error('Too many message attachments')
@@ -1373,18 +1348,10 @@ function parseStoredAttachments(
     requireNonEmptyString(item.id, 'attachment id', 120)
     requireNonEmptyString(item.name, 'attachment name', 300)
     requireNonEmptyString(item.mimeType, 'attachment mimeType', 100)
-    if (
-      typeof item.size !== 'number' ||
-      !Number.isFinite(item.size) ||
-      item.size < 0 ||
-      item.size > 50 * 1024 * 1024
-    ) {
+    if (typeof item.size !== 'number' || !Number.isFinite(item.size) || item.size < 0 || item.size > 50 * 1024 * 1024) {
       throw new Error('Invalid attachment size')
     }
-    if (
-      typeof item.type !== 'string' ||
-      !['image', 'document', 'text'].includes(item.type)
-    ) {
+    if (typeof item.type !== 'string' || !['image', 'document', 'text'].includes(item.type)) {
       throw new Error('Invalid attachment type')
     }
     if (typeof item.data !== 'string' || item.data.length > 40_000_000) {
@@ -1403,10 +1370,7 @@ function parseStoredAttachments(
 
 function attachmentCharacterCount(attachments?: MessageAttachment[]): number {
   if (!attachments?.length) return 0
-  return attachments.reduce(
-    (sum, att) => sum + att.data.length + att.name.length,
-    0,
-  )
+  return attachments.reduce((sum, att) => sum + att.data.length + att.name.length, 0)
 }
 
 function requireArray(value: unknown, label: string, maximum: number): unknown[] {
@@ -1414,21 +1378,13 @@ function requireArray(value: unknown, label: string, maximum: number): unknown[]
   return value
 }
 
-function requireNonEmptyString(
-  value: unknown,
-  label: string,
-  maximum = 1_000,
-): asserts value is string {
+function requireNonEmptyString(value: unknown, label: string, maximum = 1_000): asserts value is string {
   if (typeof value !== 'string' || !value.trim() || value.length > maximum) {
     throw new Error(`Invalid ${label}`)
   }
 }
 
-function requirePositiveInteger(
-  value: unknown,
-  label: string,
-  maximum: number,
-): asserts value is number {
+function requirePositiveInteger(value: unknown, label: string, maximum: number): asserts value is number {
   if (!Number.isInteger(value) || Number(value) <= 0 || Number(value) > maximum) {
     throw new Error(`Invalid ${label}`)
   }
@@ -1444,10 +1400,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export {
-  sanitizeHeaders,
-  sanitizeMcpHeaders,
-  normalizeBaseUrl,
-  sanitizeProviderRouting,
-}
-
+export { sanitizeHeaders, sanitizeMcpHeaders, normalizeBaseUrl, sanitizeProviderRouting }

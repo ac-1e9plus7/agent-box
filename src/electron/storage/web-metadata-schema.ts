@@ -8,10 +8,7 @@ const MAX_CITATION_CONTENT_CHARACTERS = 100_000
 const MAX_USAGE_VALUE = 1_000_000_000_000
 const MAX_CITATION_INDEX = 100_000_000
 
-export function parseOptionalWebSearchMode(
-  value: unknown,
-  label = 'web search mode',
-): WebSearchMode | undefined {
+export function parseOptionalWebSearchMode(value: unknown, label = 'web search mode'): WebSearchMode | undefined {
   if (value === undefined) return undefined
   if (!['off', 'auto', 'native'].includes(String(value))) {
     throw new Error(`Invalid ${label}`)
@@ -31,16 +28,8 @@ export function parseStoredCitations(value: unknown): WebCitation[] | undefined 
 export function parseWebCitation(value: unknown): WebCitation {
   if (!isRecord(value)) throw new Error('Invalid web citation')
   const url = normalizeCitationUrl(value.url)
-  const title = optionalBoundedString(
-    value.title,
-    MAX_CITATION_TITLE_CHARACTERS,
-    'citation title',
-  )
-  const content = optionalBoundedString(
-    value.content,
-    MAX_CITATION_CONTENT_CHARACTERS,
-    'citation content',
-  )
+  const title = optionalBoundedString(value.title, MAX_CITATION_TITLE_CHARACTERS, 'citation title')
+  const content = optionalBoundedString(value.content, MAX_CITATION_CONTENT_CHARACTERS, 'citation content')
   const startIndex = optionalBoundedInteger(value.startIndex, 'citation start index')
   const endIndex = optionalBoundedInteger(value.endIndex, 'citation end index')
   if (startIndex !== undefined && endIndex !== undefined && endIndex < startIndex) {
@@ -76,31 +65,19 @@ export function parseStoredTokenUsage(value: unknown): TokenUsage | undefined {
     inputTokens: optionalUsageInteger(value.inputTokens, 'input token usage'),
     outputTokens: optionalUsageInteger(value.outputTokens, 'output token usage'),
     reasoningTokens: optionalUsageInteger(value.reasoningTokens, 'reasoning token usage'),
-    webSearchRequests: optionalUsageInteger(
-      value.webSearchRequests,
-      'web search request usage',
-    ),
+    webSearchRequests: optionalUsageInteger(value.webSearchRequests, 'web search request usage'),
     totalTokens: optionalUsageInteger(value.totalTokens, 'total token usage'),
   }) as TokenUsage
   return Object.keys(usage).length ? usage : undefined
 }
 
 export function isValidTokenUsageValue(value: unknown): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isInteger(value) &&
-    value >= 0 &&
-    value <= MAX_USAGE_VALUE
-  )
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_USAGE_VALUE
 }
 
 export function citationCharacterCount(citations?: WebCitation[]): number {
   return (citations ?? []).reduce(
-    (total, citation) =>
-      total +
-      citation.url.length +
-      (citation.title?.length ?? 0) +
-      (citation.content?.length ?? 0),
+    (total, citation) => total + citation.url.length + (citation.title?.length ?? 0) + (citation.content?.length ?? 0),
     0,
   )
 }
@@ -134,26 +111,17 @@ export function takeChangedWebCitations(
     }
     const previous = state.byUrl.get(sanitized.url)
     const merged = previous
-      ? removeUndefined({
+      ? (removeUndefined({
           url: sanitized.url,
           title: sanitized.title ?? previous.citation.title,
           content: sanitized.content ?? previous.citation.content,
           startIndex: sanitized.startIndex ?? previous.citation.startIndex,
           endIndex: sanitized.endIndex ?? previous.citation.endIndex,
-        }) as WebCitation
+        }) as WebCitation)
       : sanitized
-    const fingerprint = JSON.stringify([
-      merged.url,
-      merged.title,
-      merged.content,
-      merged.startIndex,
-      merged.endIndex,
-    ])
+    const fingerprint = JSON.stringify([merged.url, merged.title, merged.content, merged.startIndex, merged.endIndex])
     if (previous?.fingerprint === fingerprint) continue
-    if (
-      !previous &&
-      state.byUrl.size >= MAX_CITATIONS_PER_MESSAGE
-    ) {
+    if (!previous && state.byUrl.size >= MAX_CITATIONS_PER_MESSAGE) {
       continue
     }
     if (state.variants >= MAX_CITATION_VARIANTS_PER_STREAM) continue
@@ -164,11 +132,7 @@ export function takeChangedWebCitations(
   return fresh
 }
 
-function optionalBoundedString(
-  value: unknown,
-  maximum: number,
-  label: string,
-): string | undefined {
+function optionalBoundedString(value: unknown, maximum: number, label: string): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string' || value.length > maximum) {
     throw new Error(`Invalid ${label}`)
@@ -193,9 +157,7 @@ function optionalUsageInteger(value: unknown, label: string): number | undefined
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as Partial<T>
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

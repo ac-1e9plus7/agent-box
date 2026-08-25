@@ -31,38 +31,27 @@ export function toRemoteModel(value: unknown): RemoteModel | undefined {
     ),
     supportsReasoning:
       Boolean(reasoning) ||
-      supported.some((parameter) =>
-        ['reasoning', 'reasoning_effort', 'include_reasoning'].includes(parameter),
-      ),
+      supported.some((parameter) => ['reasoning', 'reasoning_effort', 'include_reasoning'].includes(parameter)),
     supportedReasoningEfforts: efforts,
   }) as unknown as RemoteModel
 }
 
 function firstBoundedString(maximum: number, ...values: unknown[]): string | undefined {
   return values.find(
-    (value): value is string =>
-      typeof value === 'string' && value.length > 0 && value.length <= maximum,
+    (value): value is string => typeof value === 'string' && value.length > 0 && value.length <= maximum,
   )
 }
 
 function firstPositiveNumber(...values: unknown[]): number | undefined {
-  return values.find(
-    (value): value is number =>
-      typeof value === 'number' && Number.isFinite(value) && value > 0,
-  )
+  return values.find((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0)
 }
 
 function isReasoningEffort(value: unknown): value is ReasoningEffort {
-  return (
-    typeof value === 'string' &&
-    ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value)
-  )
+  return typeof value === 'string' && ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value)
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as Partial<T>
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

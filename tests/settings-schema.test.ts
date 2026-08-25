@@ -31,24 +31,34 @@ describe('settings schema migration', () => {
 
   it('normalizes a display-only nickname and avatar', () => {
     const avatar = 'data:image/webp;base64,UklGRg=='
-    expect(normalizeAppSettings({
-      ...legacySettings,
-      userNickname: '  小明  ',
-      userAvatar: avatar,
-    })).toMatchObject({
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        userNickname: '  小明  ',
+        userAvatar: avatar,
+      }),
+    ).toMatchObject({
       userNickname: '小明',
       userAvatar: avatar,
     })
   })
 
   it('rejects invalid or oversized display profile fields', () => {
-    expect(() => normalizeAppSettings({ ...legacySettings, userNickname: 'a'.repeat(51) })).toThrow('昵称不能超过 50 个字符')
-    expect(() => normalizeAppSettings({ ...legacySettings, userNickname: '第一行\n第二行' })).toThrow('昵称不能超过 50 个字符')
-    expect(() => normalizeAppSettings({ ...legacySettings, userAvatar: 'https://example.com/avatar.png' })).toThrow('头像数据过大或格式无效')
-    expect(() => normalizeAppSettings({
-      ...legacySettings,
-      userAvatar: `data:image/webp;base64,${'A'.repeat(MAX_USER_AVATAR_DATA_URL_LENGTH)}`,
-    })).toThrow('头像数据过大或格式无效')
+    expect(() => normalizeAppSettings({ ...legacySettings, userNickname: 'a'.repeat(51) })).toThrow(
+      '昵称不能超过 50 个字符',
+    )
+    expect(() => normalizeAppSettings({ ...legacySettings, userNickname: '第一行\n第二行' })).toThrow(
+      '昵称不能超过 50 个字符',
+    )
+    expect(() => normalizeAppSettings({ ...legacySettings, userAvatar: 'https://example.com/avatar.png' })).toThrow(
+      '头像数据过大或格式无效',
+    )
+    expect(() =>
+      normalizeAppSettings({
+        ...legacySettings,
+        userAvatar: `data:image/webp;base64,${'A'.repeat(MAX_USER_AVATAR_DATA_URL_LENGTH)}`,
+      }),
+    ).toThrow('头像数据过大或格式无效')
   })
 
   it('defaults legacy settings to thirty Agent tool turns', () => {
@@ -95,14 +105,16 @@ describe('settings schema migration', () => {
   })
 
   it('accepts a custom cross-platform shell and argument template', () => {
-    expect(normalizeAppSettings({
-      ...legacySettings,
-      integratedTerminalShell: {
-        mode: 'custom',
-        executable: '/usr/bin/nu',
-        args: ['-c', '{command}'],
-      },
-    }).integratedTerminalShell).toEqual({
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        integratedTerminalShell: {
+          mode: 'custom',
+          executable: '/usr/bin/nu',
+          args: ['-c', '{command}'],
+        },
+      }).integratedTerminalShell,
+    ).toEqual({
       mode: 'custom',
       executable: '/usr/bin/nu',
       args: ['-c', '{command}'],
@@ -110,10 +122,12 @@ describe('settings schema migration', () => {
   })
 
   it('rejects an empty custom integrated terminal shell', () => {
-    expect(() => normalizeAppSettings({
-      ...legacySettings,
-      integratedTerminalShell: { mode: 'custom', executable: '', args: [] },
-    })).toThrow('自定义终端 Shell 可执行文件不能为空')
+    expect(() =>
+      normalizeAppSettings({
+        ...legacySettings,
+        integratedTerminalShell: { mode: 'custom', executable: '', args: [] },
+      }),
+    ).toThrow('自定义终端 Shell 可执行文件不能为空')
   })
 
   it('defaults approval waiting to five minutes', () => {
@@ -121,24 +135,30 @@ describe('settings schema migration', () => {
   })
 
   it('accepts approval waiting without a timeout', () => {
-    expect(normalizeAppSettings({
-      ...legacySettings,
-      toolApprovalTimeoutMode: 'never',
-    }).toolApprovalTimeoutMode).toBe('never')
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        toolApprovalTimeoutMode: 'never',
+      }).toolApprovalTimeoutMode,
+    ).toBe('never')
   })
 
   it('migrates the legacy never-confirm policy to Full Access', () => {
-    expect(normalizeAppSettings({
-      ...legacySettings,
-      mcpToolApprovalPolicy: 'never',
-    }).mcpToolApprovalPolicy).toBe('full-access')
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        mcpToolApprovalPolicy: 'never',
+      }).mcpToolApprovalPolicy,
+    ).toBe('full-access')
   })
 
   it('preserves an explicit Full Access policy', () => {
-    expect(normalizeAppSettings({
-      ...legacySettings,
-      mcpToolApprovalPolicy: 'full-access',
-    }).mcpToolApprovalPolicy).toBe('full-access')
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        mcpToolApprovalPolicy: 'full-access',
+      }).mcpToolApprovalPolicy,
+    ).toBe('full-access')
   })
 })
 
@@ -173,9 +193,9 @@ describe('proxy settings', () => {
   })
 
   it('rejects an empty url in custom mode', () => {
-    expect(() =>
-      normalizeAppSettings({ ...legacySettings, proxy: { mode: 'custom', url: '' } }),
-    ).toThrow('代理地址不能为空')
+    expect(() => normalizeAppSettings({ ...legacySettings, proxy: { mode: 'custom', url: '' } })).toThrow(
+      '代理地址不能为空',
+    )
   })
 
   it('rejects a remote http proxy', () => {
@@ -197,20 +217,18 @@ describe('proxy settings', () => {
   })
 
   it('rejects a malformed proxy url', () => {
-    expect(() =>
-      normalizeAppSettings({ ...legacySettings, proxy: { mode: 'custom', url: 'not a url' } }),
-    ).toThrow('代理地址格式无效')
+    expect(() => normalizeAppSettings({ ...legacySettings, proxy: { mode: 'custom', url: 'not a url' } })).toThrow(
+      '代理地址格式无效',
+    )
   })
 
   it('rejects an unknown proxy mode', () => {
-    expect(() =>
-      normalizeAppSettings({ ...legacySettings, proxy: { mode: 'system', url: '' } }),
-    ).toThrow('Invalid proxy mode')
+    expect(() => normalizeAppSettings({ ...legacySettings, proxy: { mode: 'system', url: '' } })).toThrow(
+      'Invalid proxy mode',
+    )
   })
 
   it('rejects a non-object proxy config', () => {
-    expect(() => normalizeAppSettings({ ...legacySettings, proxy: 'http://127.0.0.1' })).toThrow(
-      'Invalid proxy',
-    )
+    expect(() => normalizeAppSettings({ ...legacySettings, proxy: 'http://127.0.0.1' })).toThrow('Invalid proxy')
   })
 })

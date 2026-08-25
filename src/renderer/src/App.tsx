@@ -26,31 +26,16 @@ import type { SettingsSavePayload } from './components/SettingsDialog'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
 import { promptSuggestions } from './defaults'
-import type {
-  ChatMessage,
-  Conversation,
-  ModelConfig,
-  ProviderConfig,
-  SettingsSection,
-  WebSearchMode
-} from './types'
-import {
-  getActiveMessageChain,
-  getAncestorsForRegeneration,
-} from '../../shared/conversation-tree'
+import type { ChatMessage, Conversation, ModelConfig, ProviderConfig, SettingsSection, WebSearchMode } from './types'
+import { getActiveMessageChain, getAncestorsForRegeneration } from '../../shared/conversation-tree'
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
 import { runStreamWithReplay } from './stream-helper'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
-import { interruptionFromStreamEvent, resolveNaturalAgentResumeMessageId } from './agent-continuation'
-import {
-  cleanGeneratedTitle,
-  cleanManualTitle,
-  firstUserQuestion,
-  TITLE_SYSTEM_PROMPT
-} from './title'
+import { resolveNaturalAgentResumeMessageId } from './agent-continuation'
+import { cleanGeneratedTitle, cleanManualTitle, firstUserQuestion, TITLE_SYSTEM_PROMPT } from './title'
 import { languageFromSystemLocale, setLanguage } from '../../shared/i18n'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 import {
   toStoredConversation,
   toUiConversation,
@@ -83,8 +68,8 @@ const emptySettings: AppSettings = {
     jdk: { mode: 'auto', home: '' },
     go: { mode: 'auto', executable: '', root: '' },
     php: { mode: 'auto', executable: '' },
-    python: { mode: 'auto', executable: '', environment: '', condaExecutable: 'conda' }
-  }
+    python: { mode: 'auto', executable: '', environment: '', condaExecutable: 'conda' },
+  },
 }
 
 interface SendOptions {
@@ -99,13 +84,12 @@ function createId(prefix: string): string {
 
 function makeTitle(content: string): string {
   const normalized = content.replace(/\s+/g, ' ').trim()
-  return normalized.length > 24 ? `${normalized.slice(0, 24)}…` : normalized || t("conversation.newPlaceholder")
+  return normalized.length > 24 ? `${normalized.slice(0, 24)}…` : normalized || t('conversation.newPlaceholder')
 }
 
 function normalizeError(error: unknown): string {
-  return error instanceof Error ? error.message : t("An unknown error occurred. Try again later.")
+  return error instanceof Error ? error.message : t('An unknown error occurred. Try again later.')
 }
-
 
 export default function App(): JSX.Element {
   const [settings, setSettings] = useState<AppSettings>(emptySettings)
@@ -149,10 +133,10 @@ export default function App(): JSX.Element {
   }, [])
 
   const handleMissingConversationModel = useCallback((): void => {
-      setNewConversationOpen(false)
-      setSettingsSection('models')
-      setSettingsOpen(true)
-      showToast(t("Please add a model first."))
+    setNewConversationOpen(false)
+    setSettingsSection('models')
+    setSettingsOpen(true)
+    showToast(t('Please add a model first.'))
   }, [showToast])
 
   const {
@@ -178,42 +162,45 @@ export default function App(): JSX.Element {
   })
 
   const visibleMessages = useMemo(
-    () => (activeConversation ? getActiveMessageChain(activeConversation) : []).filter((message) => message.role !== 'system'),
-    [activeConversation]
+    () =>
+      (activeConversation ? getActiveMessageChain(activeConversation) : []).filter(
+        (message) => message.role !== 'system',
+      ),
+    [activeConversation],
   )
 
-  const contextProjection = useMemo(() => activeModel ? projectContext(
-    visibleMessages,
-    draft,
-    settings,
-    activeModel,
-    attachments
-  ) : undefined, [activeModel, attachments, draft, settings, visibleMessages])
+  const contextProjection = useMemo(
+    () => (activeModel ? projectContext(visibleMessages, draft, settings, activeModel, attachments) : undefined),
+    [activeModel, attachments, draft, settings, visibleMessages],
+  )
 
   const openNewConversationDialog = useCallback((): void => {
     setNewConversationOpen(true)
     setMobileSidebarOpen(false)
   }, [])
 
-  const handleNewConversationInWorkspace = useCallback(async (workingDirectory: string): Promise<void> => {
-    const preserveComposer = !activeConversation
-    const created = await createConversation({
-      modelId: activeModelId,
-      workingDirectory,
-    })
-    if (!created) return
-    setActiveModelId(created.modelId)
-    setAgentMode(Boolean(created.agentMode))
-    setReasoningEnabled(Boolean(created.reasoningEnabled))
-    setWebSearchMode(created.webSearchMode ?? 'off')
-    if (!preserveComposer) {
-      setDraft('')
-      setAttachments([])
-    }
-    setQuery('')
-    setMobileSidebarOpen(false)
-    setNewConversationOpen(false)
-  }, [activeConversation, activeModelId, createConversation])
+  const handleNewConversationInWorkspace = useCallback(
+    async (workingDirectory: string): Promise<void> => {
+      const preserveComposer = !activeConversation
+      const created = await createConversation({
+        modelId: activeModelId,
+        workingDirectory,
+      })
+      if (!created) return
+      setActiveModelId(created.modelId)
+      setAgentMode(Boolean(created.agentMode))
+      setReasoningEnabled(Boolean(created.reasoningEnabled))
+      setWebSearchMode(created.webSearchMode ?? 'off')
+      if (!preserveComposer) {
+        setDraft('')
+        setAttachments([])
+      }
+      setQuery('')
+      setMobileSidebarOpen(false)
+      setNewConversationOpen(false)
+    },
+    [activeConversation, activeModelId, createConversation],
+  )
 
   const handleChooseNewConversationDirectory = useCallback(async (): Promise<void> => {
     try {
@@ -222,15 +209,20 @@ export default function App(): JSX.Element {
       )
       if (selected) await handleNewConversationInWorkspace(selected)
     } catch (error) {
-      showToast(t("Could not select a working directory: {value0}", { value0: normalizeError(error) }))
+      showToast(t('Could not select a working directory: {value0}', { value0: normalizeError(error) }))
     }
-  }, [activeConversation?.workingDirectory, handleNewConversationInWorkspace, settings.defaultWorkingDirectory, showToast])
+  }, [
+    activeConversation?.workingDirectory,
+    handleNewConversationInWorkspace,
+    settings.defaultWorkingDirectory,
+    showToast,
+  ])
 
   const bootstrap = useCallback(async (): Promise<void> => {
     setLoading(true)
     setBootstrapError('')
     try {
-      if (!window.agentbox) throw new Error(t("The secure bridge failed to load. Restart the app."))
+      if (!window.agentbox) throw new Error(t('The secure bridge failed to load. Restart the app.'))
       const [
         nextSettings,
         providerViews,
@@ -246,11 +238,11 @@ export default function App(): JSX.Element {
         window.agentbox.conversations.list(),
         window.agentbox.skills.list(),
         window.agentbox.mcp.listServers(),
-        window.agentbox.mcp.listTools()
+        window.agentbox.mcp.listTools(),
       ])
       const uiProviders: ProviderConfig[] = providerViews.map((provider) => ({
         ...provider,
-        isBuiltIn: provider.id === 'openrouter'
+        isBuiltIn: provider.id === 'openrouter',
       }))
       const uiConversations = conversationViews.map(toUiConversation)
       setSettings(nextSettings)
@@ -262,24 +254,28 @@ export default function App(): JSX.Element {
       setMcpTools(initialMcpTools)
 
       const initialConversation = uiConversations[0]
-      const initialModel = modelViews.find((model) => model.id === initialConversation?.modelId)
-        ?? modelViews.find((model) => model.id === nextSettings.defaultModelId)
-        ?? modelViews[0]
+      const initialModel =
+        modelViews.find((model) => model.id === initialConversation?.modelId) ??
+        modelViews.find((model) => model.id === nextSettings.defaultModelId) ??
+        modelViews[0]
       const initialProvider = uiProviders.find((provider) => provider.id === initialModel?.providerId)
       hydrateConversations(uiConversations, initialConversation?.id)
       setActiveModelId(initialModel?.id ?? '')
       setAgentMode(initialConversation?.agentMode ?? nextSettings.defaultAgentMode ?? false)
       setReasoningEnabled(
-        initialConversation?.reasoningEnabled
-          ?? Boolean(initialModel?.supportsReasoning && (
-            initialModel.defaultReasoningEnabled || nextSettings.defaultReasoningEnabled
-          ))
+        initialConversation?.reasoningEnabled ??
+          Boolean(
+            initialModel?.supportsReasoning &&
+            (initialModel.defaultReasoningEnabled || nextSettings.defaultReasoningEnabled),
+          ),
       )
-      setWebSearchMode(effectiveWebSearchMode(
-        initialModel,
-        initialProvider,
-        initialConversation ? initialConversation.webSearchMode ?? 'off' : initialModel?.defaultWebSearchMode
-      ))
+      setWebSearchMode(
+        effectiveWebSearchMode(
+          initialModel,
+          initialProvider,
+          initialConversation ? (initialConversation.webSearchMode ?? 'off') : initialModel?.defaultWebSearchMode,
+        ),
+      )
     } catch (error) {
       setBootstrapError(normalizeError(error))
     } finally {
@@ -300,90 +296,104 @@ export default function App(): JSX.Element {
     document.documentElement.dataset.theme = settings.theme
   }, [settings.theme])
 
-  useEffect(() => () => {
-    window.clearTimeout(toastTimerRef.current)
-  }, [])
+  useEffect(
+    () => () => {
+      window.clearTimeout(toastTimerRef.current)
+    },
+    [],
+  )
 
-  const maybeGenerateTitle = useCallback(async (conversation: Conversation): Promise<void> => {
-    const modelId = settings.titleGenerationModelId || conversation.modelId
-    const model = models.find((item) => item.id === modelId)
-    if (!model) return
-    const rawQuestion = firstUserQuestion(conversation.messages)
-    if (!rawQuestion) return
-    const question = rawQuestion.length > 2000 ? rawQuestion.slice(0, 2000) + '\n...' : rawQuestion
-    // Guard against duplicate generation or overwriting manual renames.
-    if (autoRenamingRef.current.has(conversation.id) || manualRenamedRef.current.has(conversation.id)) return
-    autoRenamingRef.current.add(conversation.id)
+  const maybeGenerateTitle = useCallback(
+    async (conversation: Conversation): Promise<void> => {
+      const modelId = settings.titleGenerationModelId || conversation.modelId
+      const model = models.find((item) => item.id === modelId)
+      if (!model) return
+      const rawQuestion = firstUserQuestion(conversation.messages)
+      if (!rawQuestion) return
+      const question = rawQuestion.length > 2000 ? rawQuestion.slice(0, 2000) + '\n...' : rawQuestion
+      // Guard against duplicate generation or overwriting manual renames.
+      if (autoRenamingRef.current.has(conversation.id) || manualRenamedRef.current.has(conversation.id)) return
+      autoRenamingRef.current.add(conversation.id)
 
-    let unsubscribe: (() => void) | undefined
-    let collected = ''
-    let settled = false
-    const finish = (): void => {
-      if (settled) return
-      settled = true
-      unsubscribe?.()
-    }
-
-    const processEvent = (event: StreamEvent): void => {
-      if (event.type === 'text-delta') {
-        collected += event.delta
-        return
+      let unsubscribe: (() => void) | undefined
+      let collected = ''
+      let settled = false
+      const finish = (): void => {
+        if (settled) return
+        settled = true
+        unsubscribe?.()
       }
-      if (event.type === 'done') {
-        finish()
-        const title = cleanGeneratedTitle(collected)
-        if (!title) return
-        const current = conversationsRef.current.find((item) => item.id === conversation.id)
-        // Only overwrite if the user has not manually renamed it in the meantime.
-        if (current && !manualRenamedRef.current.has(conversation.id)) {
-          const renamed = { ...current, title, updatedAt: new Date().toISOString() }
-          replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
-          void persistConversation(renamed)
+
+      const processEvent = (event: StreamEvent): void => {
+        if (event.type === 'text-delta') {
+          collected += event.delta
+          return
         }
-        return
+        if (event.type === 'done') {
+          finish()
+          const title = cleanGeneratedTitle(collected)
+          if (!title) return
+          const current = conversationsRef.current.find((item) => item.id === conversation.id)
+          // Only overwrite if the user has not manually renamed it in the meantime.
+          if (current && !manualRenamedRef.current.has(conversation.id)) {
+            const renamed = { ...current, title, updatedAt: new Date().toISOString() }
+            replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
+            void persistConversation(renamed)
+          }
+          return
+        }
+        if (event.type === 'error') {
+          finish()
+        }
       }
-      if (event.type === 'error') {
+
+      try {
+        const result = await runStreamWithReplay<ChatRequest>(
+          (request) => window.agentbox.chat.stream(request),
+          (listener) => window.agentbox.chat.onEvent(listener),
+          {
+            conversationId: conversation.id,
+            modelId: model.id,
+            messages: [
+              {
+                id: 'title-system',
+                role: 'system',
+                content: TITLE_SYSTEM_PROMPT,
+                createdAt: new Date(0).toISOString(),
+              },
+              { id: 'title-user', role: 'user', content: question, createdAt: new Date(0).toISOString() },
+            ],
+            reasoningEnabled: false,
+            webSearchMode: 'off',
+            maxOutputTokens: 32,
+          },
+          processEvent,
+        )
+
+        unsubscribe = result.unsubscribe
+        // Safety net: give up after 20s regardless of stream state.
+        window.setTimeout(() => finish(), 20_000)
+      } catch {
         finish()
       }
-    }
+    },
+    [conversationsRef, models, persistConversation, replaceConversations, settings.titleGenerationModelId],
+  )
 
-    try {
-      const result = await runStreamWithReplay(
-        window.agentbox.chat.stream,
-        window.agentbox.chat.onEvent,
-        {
-          conversationId: conversation.id,
-          modelId: model.id,
-          messages: [
-            { id: 'title-system', role: 'system', content: TITLE_SYSTEM_PROMPT, createdAt: new Date(0).toISOString() },
-            { id: 'title-user', role: 'user', content: question, createdAt: new Date(0).toISOString() },
-          ],
-          reasoningEnabled: false,
-          webSearchMode: 'off',
-          maxOutputTokens: 32,
-        },
-        processEvent
-      )
-      
-      unsubscribe = result.unsubscribe
-      // Safety net: give up after 20s regardless of stream state.
-      window.setTimeout(() => finish(), 20_000)
-    } catch {
-      finish()
-    }
-  }, [models, persistConversation, replaceConversations, settings.titleGenerationModelId])
-
-  const renameConversation = useCallback((conversationId: string, rawTitle: string): void => {
-    const title = cleanManualTitle(rawTitle)
-    if (!title) return
-    const current = conversationsRef.current.find((item) => item.id === conversationId)
-    if (!current || current.title === title) return
-    // A manual rename marks the conversation so auto-generation won't override it.
-    manualRenamedRef.current.add(conversationId)
-    const renamed = { ...current, title, updatedAt: new Date().toISOString() }
-    replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
-    void persistConversation(renamed)
-  }, [persistConversation, replaceConversations])
+  const renameConversation = useCallback(
+    (conversationId: string, rawTitle: string): void => {
+      const title = cleanManualTitle(rawTitle)
+      if (!title) return
+      const current = conversationsRef.current.find((item) => item.id === conversationId)
+      if (!current || current.title === title) return
+      // A manual rename marks the conversation so auto-generation won't override it.
+      manualRenamedRef.current.add(conversationId)
+      const renamed = { ...current, title, updatedAt: new Date().toISOString() }
+      replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
+      void persistConversation(renamed)
+    },
+    [conversationsRef, persistConversation, replaceConversations],
+  )
 
   const {
     cancelAllStreams,
@@ -401,10 +411,7 @@ export default function App(): JSX.Element {
     showToast,
   })
 
-  const isCurrentStreaming = Boolean(
-    activeConversationId && streamingConversationIds.has(activeConversationId),
-  )
-
+  const isCurrentStreaming = Boolean(activeConversationId && streamingConversationIds.has(activeConversationId))
 
   const handleSelectConversation = (conversationId: string): void => {
     const conversation = conversationsRef.current.find((item) => item.id === conversationId)
@@ -426,7 +433,9 @@ export default function App(): JSX.Element {
     manualRenamedRef.current.delete(conversationId)
     try {
       await window.agentbox.conversations.remove(conversationId)
-      const next = replaceConversations((current) => current.filter((conversation) => conversation.id !== conversationId))
+      const next = replaceConversations((current) =>
+        current.filter((conversation) => conversation.id !== conversationId),
+      )
       if (activeConversationId === conversationId) {
         const nextConversation = next[0]
         setActiveConversationId(nextConversation?.id ?? '')
@@ -436,14 +445,16 @@ export default function App(): JSX.Element {
         setActiveModelId(nextModelId)
         setAgentMode(nextConversation?.agentMode ?? settings.defaultAgentMode ?? false)
         setReasoningEnabled(Boolean(nextConversation?.reasoningEnabled ?? settings.defaultReasoningEnabled))
-        setWebSearchMode(effectiveWebSearchMode(
-          nextModel,
-          nextProvider,
-          nextConversation ? nextConversation.webSearchMode ?? 'off' : nextModel?.defaultWebSearchMode
-        ))
+        setWebSearchMode(
+          effectiveWebSearchMode(
+            nextModel,
+            nextProvider,
+            nextConversation ? (nextConversation.webSearchMode ?? 'off') : nextModel?.defaultWebSearchMode,
+          ),
+        )
       }
     } catch (error) {
-      showToast(t("Could not delete: {value0}", { value0: normalizeError(error) }))
+      showToast(t('Could not delete: {value0}', { value0: normalizeError(error) }))
     }
   }
 
@@ -464,9 +475,11 @@ export default function App(): JSX.Element {
         modelId,
         reasoningEnabled: model.supportsReasoning && model.defaultReasoningEnabled,
         webSearchMode: nextWebSearchMode,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
       await persistConversation(nextConversation)
     }
   }
@@ -478,34 +491,46 @@ export default function App(): JSX.Element {
       const nextConversation: Conversation = {
         ...activeConversation,
         agentMode: nextMode,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
       void persistConversation(nextConversation)
     }
   }
 
-  const handleMcpServerSelectionChange = useCallback((serverIds: string[]): void => {
-    if (!activeConversation) return
-    const nextConversation: Conversation = {
-      ...activeConversation,
-      mcpServerIds: serverIds,
-      updatedAt: new Date().toISOString()
-    }
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    void persistConversation(nextConversation)
-  }, [activeConversation, persistConversation, replaceConversations])
+  const handleMcpServerSelectionChange = useCallback(
+    (serverIds: string[]): void => {
+      if (!activeConversation) return
+      const nextConversation: Conversation = {
+        ...activeConversation,
+        mcpServerIds: serverIds,
+        updatedAt: new Date().toISOString(),
+      }
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
+      void persistConversation(nextConversation)
+    },
+    [activeConversation, persistConversation, replaceConversations],
+  )
 
-  const handleSkillSelectionChange = useCallback((skillIds: string[]): void => {
-    if (!activeConversation) return
-    const nextConversation: Conversation = {
-      ...activeConversation,
-      skillIds: skillIds.length > 0 ? skillIds : undefined,
-      updatedAt: new Date().toISOString()
-    }
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-    void persistConversation(nextConversation)
-  }, [activeConversation, persistConversation, replaceConversations])
+  const handleSkillSelectionChange = useCallback(
+    (skillIds: string[]): void => {
+      if (!activeConversation) return
+      const nextConversation: Conversation = {
+        ...activeConversation,
+        skillIds: skillIds.length > 0 ? skillIds : undefined,
+        updatedAt: new Date().toISOString(),
+      }
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
+      void persistConversation(nextConversation)
+    },
+    [activeConversation, persistConversation, replaceConversations],
+  )
 
   const handleChangeWorkingDirectory = useCallback(async (): Promise<Conversation | undefined> => {
     if (!activeConversation) return undefined
@@ -519,10 +544,12 @@ export default function App(): JSX.Element {
         workingDirectory: selected,
         updatedAt: new Date().toISOString(),
       }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
-      return await persistConversation(nextConversation) ? nextConversation : undefined
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
+      return (await persistConversation(nextConversation)) ? nextConversation : undefined
     } catch (error) {
-      showToast(t("Could not select a working directory: {value0}", { value0: normalizeError(error) }))
+      showToast(t('Could not select a working directory: {value0}', { value0: normalizeError(error) }))
       return undefined
     }
   }, [activeConversation, persistConversation, replaceConversations, settings.defaultWorkingDirectory, showToast])
@@ -535,9 +562,11 @@ export default function App(): JSX.Element {
       const nextConversation = {
         ...activeConversation,
         reasoningEnabled: nextEnabled,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
       void persistConversation(nextConversation)
     }
   }
@@ -570,10 +599,7 @@ export default function App(): JSX.Element {
 
   const handleUpsertMcpServer = useCallback(async (input: McpServerInput): Promise<McpServerConfig> => {
     const saved = await window.agentbox.mcp.upsertServer(input)
-    const [servers, tools] = await Promise.all([
-      window.agentbox.mcp.listServers(),
-      window.agentbox.mcp.listTools()
-    ])
+    const [servers, tools] = await Promise.all([window.agentbox.mcp.listServers(), window.agentbox.mcp.listTools()])
     setMcpServers(servers)
     setMcpTools(tools)
     return saved
@@ -581,20 +607,14 @@ export default function App(): JSX.Element {
 
   const handleRemoveMcpServer = useCallback(async (id: string): Promise<void> => {
     await window.agentbox.mcp.removeServer(id)
-    const [servers, tools] = await Promise.all([
-      window.agentbox.mcp.listServers(),
-      window.agentbox.mcp.listTools()
-    ])
+    const [servers, tools] = await Promise.all([window.agentbox.mcp.listServers(), window.agentbox.mcp.listTools()])
     setMcpServers(servers)
     setMcpTools(tools)
   }, [])
 
   const handleToggleMcpServer = useCallback(async (id: string, enabled: boolean): Promise<McpServerConfig> => {
     const updated = await window.agentbox.mcp.toggleServer(id, enabled)
-    const [servers, tools] = await Promise.all([
-      window.agentbox.mcp.listServers(),
-      window.agentbox.mcp.listTools()
-    ])
+    const [servers, tools] = await Promise.all([window.agentbox.mcp.listServers(), window.agentbox.mcp.listTools()])
     setMcpServers(servers)
     setMcpTools(tools)
     return updated
@@ -610,26 +630,33 @@ export default function App(): JSX.Element {
     return tools
   }, [])
 
-  const handleTestTerminalShell = useCallback((config: AppSettings['integratedTerminalShell']) => (
-    window.agentbox.terminal.testShell(config)
-  ), [])
+  const handleTestTerminalShell = useCallback(
+    (config: AppSettings['integratedTerminalShell']) => window.agentbox.terminal.testShell(config),
+    [],
+  )
 
-  const handleSelectDirectory = useCallback((initialPath?: string) => (
-    window.agentbox.workspace.selectDirectory(initialPath)
-  ), [])
+  const handleSelectDirectory = useCallback(
+    (initialPath?: string) => window.agentbox.workspace.selectDirectory(initialPath),
+    [],
+  )
 
-  const handleTestRuntime = useCallback((kind: Parameters<typeof window.agentbox.runtimes.test>[0], runtimes: AppSettings['developerRuntimes'], workingDirectory?: string) => (
-    window.agentbox.runtimes.test(kind, runtimes, workingDirectory)
-  ), [])
+  const handleTestRuntime = useCallback(
+    (
+      kind: Parameters<typeof window.agentbox.runtimes.test>[0],
+      runtimes: AppSettings['developerRuntimes'],
+      workingDirectory?: string,
+    ) => window.agentbox.runtimes.test(kind, runtimes, workingDirectory),
+    [],
+  )
 
-  const handleListCondaEnvironments = useCallback((condaExecutable: string) => (
-    window.agentbox.runtimes.listCondaEnvironments(condaExecutable)
-  ), [])
-
+  const handleListCondaEnvironments = useCallback(
+    (condaExecutable: string) => window.agentbox.runtimes.listCondaEnvironments(condaExecutable),
+    [],
+  )
 
   const handleWebSearchModeChange = (mode: WebSearchMode): void => {
     if (mode !== 'off' && !webSearchAvailable) {
-      showToast(t("Web search is available only with OpenRouter connections."))
+      showToast(t('Web search is available only with OpenRouter connections.'))
       return
     }
     setWebSearchMode(mode)
@@ -637,9 +664,11 @@ export default function App(): JSX.Element {
       const nextConversation: Conversation = {
         ...activeConversation,
         webSearchMode: mode,
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
       }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
       void persistConversation(nextConversation)
     }
   }
@@ -648,11 +677,17 @@ export default function App(): JSX.Element {
     if (webSearchMode === 'off' || webSearchAvailable) return true
     setWebSearchMode('off')
     if (activeConversation) {
-      const nextConversation = { ...activeConversation, webSearchMode: 'off' as const, updatedAt: new Date().toISOString() }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      const nextConversation = {
+        ...activeConversation,
+        webSearchMode: 'off' as const,
+        updatedAt: new Date().toISOString(),
+      }
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
       void persistConversation(nextConversation)
     }
-    showToast(t("The current model or API format does not support web search, so web search was turned off."))
+    showToast(t('The current model or API format does not support web search, so web search was turned off.'))
     return false
   }, [activeConversation, persistConversation, replaceConversations, showToast, webSearchAvailable, webSearchMode])
 
@@ -660,34 +695,37 @@ export default function App(): JSX.Element {
     if (!activeProvider || (!activeProvider.hasApiKey && !activeProvider.apiKeyOptional)) {
       setSettingsSection('providers')
       setSettingsOpen(true)
-      showToast(t("Configure an API key for the current provider first."))
+      showToast(t('Configure an API key for the current provider first.'))
       return false
     }
     return true
   }, [activeProvider, showToast])
 
-  const buildChatRequest = useCallback((
-    conversation: Conversation,
-    messages: Message[],
-    options?: Pick<ChatRequest, 'allowContextTrimming' | 'resumeFromMessageId'>,
-  ): ChatRequest => {
-    if (!activeModel) throw new Error(t("The current model is unavailable."))
-    return {
-      conversationId: conversation.id,
-      modelId: activeModel.id,
-      messages,
-      agentMode: conversation.agentMode ?? agentMode,
-      skillIds: conversation.skillIds,
-      mcpServerIds: conversation.mcpServerIds,
-      workingDirectory: conversation.workingDirectory,
-      resumeFromMessageId: options?.resumeFromMessageId,
-      reasoningEnabled,
-      webSearchMode,
-      reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
-      maxOutputTokens: activeModel.maxOutputTokens,
-      allowContextTrimming: options?.allowContextTrimming,
-    }
-  }, [activeModel, agentMode, reasoningEnabled, settings.defaultReasoningEffort, webSearchMode])
+  const buildChatRequest = useCallback(
+    (
+      conversation: Conversation,
+      messages: Message[],
+      options?: Pick<ChatRequest, 'allowContextTrimming' | 'resumeFromMessageId'>,
+    ): ChatRequest => {
+      if (!activeModel) throw new Error(t('The current model is unavailable.'))
+      return {
+        conversationId: conversation.id,
+        modelId: activeModel.id,
+        messages,
+        agentMode: conversation.agentMode ?? agentMode,
+        skillIds: conversation.skillIds,
+        mcpServerIds: conversation.mcpServerIds,
+        workingDirectory: conversation.workingDirectory,
+        resumeFromMessageId: options?.resumeFromMessageId,
+        reasoningEnabled,
+        webSearchMode,
+        reasoningEffort: activeModel.defaultReasoningEffort ?? settings.defaultReasoningEffort,
+        maxOutputTokens: activeModel.maxOutputTokens,
+        allowContextTrimming: options?.allowContextTrimming,
+      }
+    },
+    [activeModel, agentMode, reasoningEnabled, settings.defaultReasoningEffort, webSearchMode],
+  )
 
   const handleSend = async (allowContextTrimming = false, options?: SendOptions): Promise<void> => {
     const usesExplicitContent = options?.content !== undefined
@@ -698,12 +736,12 @@ export default function App(): JSX.Element {
     if (activeConversation && streamingConversationIds.has(activeConversation.id)) return
     if (!activeConversation) {
       openNewConversationDialog()
-      showToast(t("Please select a working directory for the new conversation first."))
+      showToast(t('Please select a working directory for the new conversation first.'))
       return
     }
     if (!activeConversation.workingDirectory) {
       const assignedConversation = await handleChangeWorkingDirectory()
-      if (assignedConversation) showToast(t("The working directory is set. Send again."))
+      if (assignedConversation) showToast(t('The working directory is set. Send again.'))
       return
     }
 
@@ -714,18 +752,19 @@ export default function App(): JSX.Element {
     const activeChain = getActiveMessageChain(conversation)
     const lastActiveMessage = activeChain[activeChain.length - 1]
     const explicitResumeMessage = options?.resumeFromMessageId
-      ? lastActiveMessage?.role === 'assistant'
-        && lastActiveMessage.id === options.resumeFromMessageId
-        && Boolean(lastActiveMessage.interruption)
+      ? lastActiveMessage?.role === 'assistant' &&
+        lastActiveMessage.id === options.resumeFromMessageId &&
+        Boolean(lastActiveMessage.interruption)
         ? lastActiveMessage
         : undefined
       : undefined
     if (options?.resumeFromMessageId && !explicitResumeMessage) {
-      showToast(t("Only the last interrupted Agent response on the current branch can be resumed."))
+      showToast(t('Only the last interrupted Agent response on the current branch can be resumed.'))
       return
     }
-    const resumeFromMessageId = explicitResumeMessage?.id
-      ?? resolveNaturalAgentResumeMessageId(activeChain, content, currentAttachments.length > 0)
+    const resumeFromMessageId =
+      explicitResumeMessage?.id ??
+      resolveNaturalAgentResumeMessageId(activeChain, content, currentAttachments.length > 0)
     const sendProjection = usesExplicitContent
       ? projectContext(visibleMessages, content, settings, activeModel, currentAttachments)
       : contextProjection
@@ -745,7 +784,7 @@ export default function App(): JSX.Element {
       parentMessageId: lastActiveMessage ? lastActiveMessage.id : null,
       attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       createdAt: timestamp,
-      status: 'complete'
+      status: 'complete',
     }
     const assistantMessage: ChatMessage = {
       id: createId('message'),
@@ -755,22 +794,28 @@ export default function App(): JSX.Element {
       parentMessageId: userMessage.id,
       createdAt: timestamp,
       modelId: activeModel.id,
-      status: 'streaming'
+      status: 'streaming',
     }
-    const fallbackTitle = content || (currentAttachments[0] ? t("[File] {value0}", { value0: currentAttachments[0].name }) : t("conversation.newPlaceholder"))
+    const fallbackTitle =
+      content ||
+      (currentAttachments[0]
+        ? t('[File] {value0}', { value0: currentAttachments[0].name })
+        : t('conversation.newPlaceholder'))
     const nextConversation: Conversation = {
       ...conversation,
       title: conversation.messages.length === 0 ? makeTitle(fallbackTitle) : conversation.title,
       modelId: activeModel.id,
       reasoningEnabled,
-      agentMode: resumeFromMessageId ? true : conversation.agentMode ?? agentMode,
+      agentMode: resumeFromMessageId ? true : (conversation.agentMode ?? agentMode),
       webSearchMode,
       messages: [...conversation.messages, userMessage, assistantMessage],
       currentLeafId: assistantMessage.id,
-      updatedAt: timestamp
+      updatedAt: timestamp,
     }
 
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    replaceConversations((current) =>
+      current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+    )
     if (!options?.preserveComposer) {
       setDraft('')
       setAttachments([])
@@ -784,17 +829,15 @@ export default function App(): JSX.Element {
     prepareStream(streamRegistration)
 
     const requestMessages: Message[] = [...activeChain, userMessage].map(
-      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
+      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message,
     )
 
     const persisted = await persistConversation({
       ...nextConversation,
-      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id)
+      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id),
     })
     if (!persisted) {
-      replaceConversations((current) => current.map((item) => (
-        item.id === conversation.id ? conversation : item
-      )))
+      replaceConversations((current) => current.map((item) => (item.id === conversation.id ? conversation : item)))
       if (!options?.preserveComposer) {
         setDraft(content)
         setAttachments(currentAttachments)
@@ -814,7 +857,7 @@ export default function App(): JSX.Element {
 
   const handleResumeAgentExecution = async (assistantMessageId: string): Promise<void> => {
     await handleSend(false, {
-      content: t("Continue where you left off"),
+      content: t('Continue where you left off'),
       preserveComposer: true,
       resumeFromMessageId: assistantMessageId,
     })
@@ -825,9 +868,12 @@ export default function App(): JSX.Element {
     await stopStream(targetConvId)
   }
 
-  const handleToolApproval = useCallback(async (callId: string, approved: boolean): Promise<void> => {
-    await resolveToolApproval(activeConversationId, callId, approved)
-  }, [activeConversationId, resolveToolApproval])
+  const handleToolApproval = useCallback(
+    async (callId: string, approved: boolean): Promise<void> => {
+      await resolveToolApproval(activeConversationId, callId, approved)
+    },
+    [activeConversationId, resolveToolApproval],
+  )
 
   const handleRegenerate = async (targetAssistantId?: string, allowContextTrimming = false): Promise<void> => {
     if (!activeModel || !activeConversation || streamingConversationIds.has(activeConversation.id)) return
@@ -836,7 +882,7 @@ export default function App(): JSX.Element {
     let targetMsg: ChatMessage | undefined
     if (targetAssistantId) {
       targetMsg = activeConversation.messages.find(
-        (message) => message.id === targetAssistantId && message.role === 'assistant'
+        (message) => message.id === targetAssistantId && message.role === 'assistant',
       )
     }
     if (!targetMsg) {
@@ -849,10 +895,7 @@ export default function App(): JSX.Element {
     }
     if (!targetMsg) return
 
-    const { ancestors, parentUserMessage } = getAncestorsForRegeneration(
-      activeConversation.messages,
-      targetMsg.id
-    )
+    const { ancestors, parentUserMessage } = getAncestorsForRegeneration(activeConversation.messages, targetMsg.id)
     if (!parentUserMessage || ancestors.length === 0) return
 
     const projection = projectContext(ancestors, '', settings, activeModel)
@@ -872,7 +915,7 @@ export default function App(): JSX.Element {
       parentMessageId: targetMsg.parentMessageId,
       createdAt: timestamp,
       modelId: activeModel.id,
-      status: 'streaming'
+      status: 'streaming',
     }
     const nextConversation: Conversation = {
       ...activeConversation,
@@ -881,10 +924,12 @@ export default function App(): JSX.Element {
       webSearchMode,
       messages: [...activeConversation.messages, assistantMessage],
       currentLeafId: assistantMessage.id,
-      updatedAt: timestamp
+      updatedAt: timestamp,
     }
 
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    replaceConversations((current) =>
+      current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+    )
     const streamRegistration: StreamRegistration = {
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id,
@@ -893,17 +938,17 @@ export default function App(): JSX.Element {
     prepareStream(streamRegistration)
 
     const requestMessages: Message[] = ancestors.map(
-      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
+      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message,
     )
 
     const persisted = await persistConversation({
       ...nextConversation,
-      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id)
+      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id),
     })
     if (!persisted) {
-      replaceConversations((current) => current.map((item) => (
-        item.id === activeConversation.id ? activeConversation : item
-      )))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === activeConversation.id ? activeConversation : item)),
+      )
       discardStream(nextConversation.id)
       return
     }
@@ -916,16 +961,22 @@ export default function App(): JSX.Element {
     )
   }
 
-  const handleSwitchVersion = useCallback((targetMessageId: string): void => {
-    if (!activeConversation || streamingConversationIds.has(activeConversation.id)) return
-    switchActiveBranch(targetMessageId)
-  }, [activeConversation, streamingConversationIds, switchActiveBranch])
+  const handleSwitchVersion = useCallback(
+    (targetMessageId: string): void => {
+      if (!activeConversation || streamingConversationIds.has(activeConversation.id)) return
+      switchActiveBranch(targetMessageId)
+    },
+    [activeConversation, streamingConversationIds, switchActiveBranch],
+  )
 
-  const handleDeleteMessage = useCallback(async (messageId: string): Promise<void> => {
-    if (!activeConversation) return
-    await cancelConversationStream(activeConversation.id)
-    deleteActiveMessageBranch(messageId)
-  }, [activeConversation, cancelConversationStream, deleteActiveMessageBranch])
+  const handleDeleteMessage = useCallback(
+    async (messageId: string): Promise<void> => {
+      if (!activeConversation) return
+      await cancelConversationStream(activeConversation.id)
+      deleteActiveMessageBranch(messageId)
+    },
+    [activeConversation, cancelConversationStream, deleteActiveMessageBranch],
+  )
 
   const handleEditMessage = async (messageId: string, nextContent: string, regenerate: boolean): Promise<boolean> => {
     const content = nextContent.trim()
@@ -939,10 +990,12 @@ export default function App(): JSX.Element {
       const timestamp = new Date().toISOString()
       const nextConversation: Conversation = {
         ...activeConversation,
-        messages: messages.map((message) => message.id === messageId ? { ...message, content } : message),
-        updatedAt: timestamp
+        messages: messages.map((message) => (message.id === messageId ? { ...message, content } : message)),
+        updatedAt: timestamp,
       }
-      replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
       void persistConversation(nextConversation)
       return true
     }
@@ -961,7 +1014,7 @@ export default function App(): JSX.Element {
       parentMessageId: targetUserMsg.parentMessageId,
       attachments: targetUserMsg.attachments,
       createdAt: timestamp,
-      status: 'complete'
+      status: 'complete',
     }
 
     const historyForPrompt = [...ancestors, newUserMessage]
@@ -981,7 +1034,7 @@ export default function App(): JSX.Element {
       parentMessageId: newUserMessage.id,
       createdAt: timestamp,
       modelId: activeModel.id,
-      status: 'streaming'
+      status: 'streaming',
     }
 
     const nextConversation: Conversation = {
@@ -991,10 +1044,12 @@ export default function App(): JSX.Element {
       webSearchMode,
       messages: [...messages, newUserMessage, assistantMessage],
       currentLeafId: assistantMessage.id,
-      updatedAt: timestamp
+      updatedAt: timestamp,
     }
 
-    replaceConversations((current) => current.map((item) => item.id === nextConversation.id ? nextConversation : item))
+    replaceConversations((current) =>
+      current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+    )
     const streamRegistration: StreamRegistration = {
       conversationId: nextConversation.id,
       assistantMessageId: assistantMessage.id,
@@ -1003,25 +1058,22 @@ export default function App(): JSX.Element {
     prepareStream(streamRegistration)
 
     const requestMessages: Message[] = historyForPrompt.map(
-      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message
+      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message,
     )
 
     const persisted = await persistConversation({
       ...nextConversation,
-      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id)
+      messages: nextConversation.messages.filter((message) => message.id !== assistantMessage.id),
     })
     if (!persisted) {
-      replaceConversations((current) => current.map((item) => (
-        item.id === activeConversation.id ? activeConversation : item
-      )))
+      replaceConversations((current) =>
+        current.map((item) => (item.id === activeConversation.id ? activeConversation : item)),
+      )
       discardStream(nextConversation.id)
       return false
     }
 
-    return launchPreparedStream(
-      streamRegistration,
-      buildChatRequest(nextConversation, requestMessages),
-    )
+    return launchPreparedStream(streamRegistration, buildChatRequest(nextConversation, requestMessages))
   }
 
   const saveSettings = async (payload: SettingsSavePayload): Promise<void> => {
@@ -1041,7 +1093,7 @@ export default function App(): JSX.Element {
         apiFormat: provider.apiFormat,
         defaultHeaders: provider.defaultHeaders,
         ...(apiKey && !clearApiKey ? { apiKey } : {}),
-        ...(clearApiKey ? { clearApiKey: true } : {})
+        ...(clearApiKey ? { clearApiKey: true } : {}),
       }
       const saved = await window.agentbox.providers.upsert(input)
       providerIdMap.set(provider.id, saved.id)
@@ -1066,7 +1118,7 @@ export default function App(): JSX.Element {
         defaultReasoningEffort: model.defaultReasoningEffort,
         defaultWebSearchMode: effectiveWebSearchMode(model, modelProvider, model.defaultWebSearchMode),
         anthropicThinkingMode: model.anthropicThinkingMode,
-        providerRouting: model.providerRouting
+        providerRouting: model.providerRouting,
       }
       const saved = await window.agentbox.models.upsert(input)
       modelIdMap.set(model.id, saved.id)
@@ -1079,38 +1131,54 @@ export default function App(): JSX.Element {
       if (!mappedModelId) return conversation
       const mappedModel = savedModels.find((model) => model.id === mappedModelId)
       const mappedProvider = savedProviders.find((provider) => provider.id === mappedModel?.providerId)
-      const nextWebSearchMode = effectiveWebSearchMode(
-        mappedModel,
-        mappedProvider,
-        conversation.webSearchMode ?? 'off'
-      )
-      const changed = mappedModelId !== conversation.modelId || nextWebSearchMode !== (conversation.webSearchMode ?? 'off')
+      const nextWebSearchMode = effectiveWebSearchMode(mappedModel, mappedProvider, conversation.webSearchMode ?? 'off')
+      const changed =
+        mappedModelId !== conversation.modelId || nextWebSearchMode !== (conversation.webSearchMode ?? 'off')
       return changed
-        ? { ...conversation, modelId: mappedModelId, webSearchMode: nextWebSearchMode, updatedAt: new Date().toISOString() }
+        ? {
+            ...conversation,
+            modelId: mappedModelId,
+            webSearchMode: nextWebSearchMode,
+            updatedAt: new Date().toISOString(),
+          }
         : conversation
     })
-    await Promise.all(updatedConversations.map((conversation) => (
-      conversation.modelId ? window.agentbox.conversations.save(toStoredConversation(conversation)) : Promise.resolve()
-    )))
+    await Promise.all(
+      updatedConversations.map((conversation) =>
+        conversation.modelId
+          ? window.agentbox.conversations.save(toStoredConversation(conversation))
+          : Promise.resolve(),
+      ),
+    )
 
-    const keptModelIds = new Set(payload.models.filter((model) => existingModelIds.has(model.id)).map((model) => model.id))
+    const keptModelIds = new Set(
+      payload.models.filter((model) => existingModelIds.has(model.id)).map((model) => model.id),
+    )
     for (const model of models) {
       if (!keptModelIds.has(model.id)) await window.agentbox.models.remove(model.id)
     }
-    const keptProviderIds = new Set(payload.providers.filter((provider) => existingProviderIds.has(provider.id)).map((provider) => provider.id))
+    const keptProviderIds = new Set(
+      payload.providers.filter((provider) => existingProviderIds.has(provider.id)).map((provider) => provider.id),
+    )
     for (const provider of providers) {
       if (!keptProviderIds.has(provider.id)) await window.agentbox.providers.remove(provider.id)
     }
 
-    const nextDefaultModelId = modelIdMap.get(payload.preferences.defaultModelId ?? '')
-      ?? (savedModels.some((model) => model.id === payload.preferences.defaultModelId) ? payload.preferences.defaultModelId : fallbackModelId)
+    const nextDefaultModelId =
+      modelIdMap.get(payload.preferences.defaultModelId ?? '') ??
+      (savedModels.some((model) => model.id === payload.preferences.defaultModelId)
+        ? payload.preferences.defaultModelId
+        : fallbackModelId)
     const nextTitleGenerationModelId = payload.preferences.titleGenerationModelId
-      ? (modelIdMap.get(payload.preferences.titleGenerationModelId) ?? (savedModels.some((model) => model.id === payload.preferences.titleGenerationModelId) ? payload.preferences.titleGenerationModelId : undefined))
+      ? (modelIdMap.get(payload.preferences.titleGenerationModelId) ??
+        (savedModels.some((model) => model.id === payload.preferences.titleGenerationModelId)
+          ? payload.preferences.titleGenerationModelId
+          : undefined))
       : undefined
     const savedSettings = await window.agentbox.settings.update({
       ...payload.preferences,
       defaultModelId: nextDefaultModelId,
-      titleGenerationModelId: nextTitleGenerationModelId
+      titleGenerationModelId: nextTitleGenerationModelId,
     })
     setLanguage(savedSettings.language)
     setProviders(savedProviders)
@@ -1118,25 +1186,30 @@ export default function App(): JSX.Element {
     setSettings(savedSettings)
     hydrateConversations(updatedConversations, activeConversationId)
 
-    const nextActiveModel = modelIdMap.get(activeModelId)
-      ?? (savedModels.some((model) => model.id === activeModelId) ? activeModelId : fallbackModelId)
+    const nextActiveModel =
+      modelIdMap.get(activeModelId) ??
+      (savedModels.some((model) => model.id === activeModelId) ? activeModelId : fallbackModelId)
     setActiveModelId(nextActiveModel ?? '')
     const nextActiveModelConfig = savedModels.find((model) => model.id === nextActiveModel)
     const nextActiveProvider = savedProviders.find((provider) => provider.id === nextActiveModelConfig?.providerId)
     const nextActiveConversation = updatedConversations.find((conversation) => conversation.id === activeConversationId)
-    setWebSearchMode(effectiveWebSearchMode(
-      nextActiveModelConfig,
-      nextActiveProvider,
-      nextActiveConversation ? nextActiveConversation.webSearchMode ?? 'off' : nextActiveModelConfig?.defaultWebSearchMode
-    ))
-    showToast(t("Settings saved."))
+    setWebSearchMode(
+      effectiveWebSearchMode(
+        nextActiveModelConfig,
+        nextActiveProvider,
+        nextActiveConversation
+          ? (nextActiveConversation.webSearchMode ?? 'off')
+          : nextActiveModelConfig?.defaultWebSearchMode,
+      ),
+    )
+    showToast(t('Settings saved.'))
     if (languageChanged) window.setTimeout(() => window.location.reload(), 150)
   }
 
   const testProvider = async (
     provider: ProviderConfig,
     apiKeyInput: string,
-    clearApiKey: boolean
+    clearApiKey: boolean,
   ): Promise<boolean> => {
     try {
       const isPersisted = providers.some((item) => item.id === provider.id)
@@ -1148,7 +1221,7 @@ export default function App(): JSX.Element {
         apiFormat: provider.apiFormat,
         defaultHeaders: provider.defaultHeaders,
         ...(apiKeyInput.trim() && !clearApiKey ? { apiKey: apiKeyInput.trim() } : {}),
-        ...(clearApiKey ? { clearApiKey: true } : {})
+        ...(clearApiKey ? { clearApiKey: true } : {}),
       })
       showToast(result.message)
       return result.ok
@@ -1169,25 +1242,33 @@ export default function App(): JSX.Element {
     clearConversationState()
     const fallbackModel = models.find((model) => model.id === settings.defaultModelId) ?? models[0]
     setActiveModelId(fallbackModel?.id ?? '')
-    setReasoningEnabled(Boolean(fallbackModel?.supportsReasoning && (
-      fallbackModel.defaultReasoningEnabled || settings.defaultReasoningEnabled
-    )))
-    setWebSearchMode(effectiveWebSearchMode(
-      fallbackModel,
-      providers.find((provider) => provider.id === fallbackModel?.providerId),
-      fallbackModel?.defaultWebSearchMode,
-    ))
+    setReasoningEnabled(
+      Boolean(
+        fallbackModel?.supportsReasoning && (fallbackModel.defaultReasoningEnabled || settings.defaultReasoningEnabled),
+      ),
+    )
+    setWebSearchMode(
+      effectiveWebSearchMode(
+        fallbackModel,
+        providers.find((provider) => provider.id === fallbackModel?.providerId),
+        fallbackModel?.defaultWebSearchMode,
+      ),
+    )
     setDraft('')
-    showToast(t("All conversation data was cleared."))
+    showToast(t('All conversation data was cleared.'))
   }
 
   const handleExportBackup = async (input: ExportBackupInput): Promise<ExportBackupResult> => {
     const result = await window.agentbox.data.exportBackup(input)
     if (!result.canceled) {
-      showToast(t(
-        result.mode === 'deep' ? "Exported a deep backup of {count} conversations." : "Exported a shallow backup of {count} conversations.",
-        { count: result.conversationCount },
-      ))
+      showToast(
+        t(
+          result.mode === 'deep'
+            ? 'Exported a deep backup of {count} conversations.'
+            : 'Exported a shallow backup of {count} conversations.',
+          { count: result.conversationCount },
+        ),
+      )
     }
     return result
   }
@@ -1195,22 +1276,26 @@ export default function App(): JSX.Element {
   const discoverModels = async (providerId: string) => {
     try {
       const discovered = await window.agentbox.models.discover(providerId)
-      showToast(t("Fetched {value0} models.", { value0: discovered.length }))
+      showToast(t('Fetched {value0} models.', { value0: discovered.length }))
       return discovered
     } catch (error) {
       const message = normalizeError(error)
       showToast(message)
-      throw new Error(message)
+      throw new Error(message, { cause: error })
     }
   }
 
   if (loading) {
     return (
       <main className="app-loading">
-        <span className="loading-mark"><Icon name="app" size={34} /></span>
+        <span className="loading-mark">
+          <Icon name="app" size={34} />
+        </span>
         <h1>AgentBox</h1>
-        <div className="loading-line"><i /></div>
-        <p>{t("Unlocking local data…")}</p>
+        <div className="loading-line">
+          <i />
+        </div>
+        <p>{t('Unlocking local data…')}</p>
       </main>
     )
   }
@@ -1218,10 +1303,15 @@ export default function App(): JSX.Element {
   if (bootstrapError) {
     return (
       <main className="fatal-state">
-        <span><Icon name="lock" size={30} /></span>
-        <h1>{t("Unable to open local data")}</h1>
+        <span>
+          <Icon name="lock" size={30} />
+        </span>
+        <h1>{t('Unable to open local data')}</h1>
         <p>{bootstrapError}</p>
-        <button onClick={() => void bootstrap()}><Icon name="refresh" size={16} />{t("Try again")}</button>
+        <button onClick={() => void bootstrap()}>
+          <Icon name="refresh" size={16} />
+          {t('Try again')}
+        </button>
       </main>
     )
   }
@@ -1250,7 +1340,7 @@ export default function App(): JSX.Element {
       <main className="chat-workspace">
         <Topbar
           activeModel={activeModel}
-          activeTitle={activeConversation?.title ?? t("conversation.newPlaceholder")}
+          activeTitle={activeConversation?.title ?? t('conversation.newPlaceholder')}
           agentMode={agentMode}
           enabledSkillsCount={skills.filter((skill) => skill.enabled).length}
           selectedSkillsCount={activeConversation?.skillIds?.length ?? 0}
@@ -1262,14 +1352,13 @@ export default function App(): JSX.Element {
           onModelChange={(modelId) => void handleModelChange(modelId)}
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
           onOpenSettings={() => openSettings('models')}
-          onOpenSkillsSettings={() => openSettings('skills')}
           onRenameConversation={(title) => activeConversation && renameConversation(activeConversation.id, title)}
           onRestoreSidebar={() => setSidebarCollapsed(false)}
           onToggleAgentMode={handleToggleAgentMode}
           onToggleReasoning={handleToggleReasoning}
-          onChangeWorkingDirectory={activeConversation
-            ? () => void handleChangeWorkingDirectory()
-            : openNewConversationDialog}
+          onChangeWorkingDirectory={
+            activeConversation ? () => void handleChangeWorkingDirectory() : openNewConversationDialog
+          }
         />
 
         <section className="chat-stage">
@@ -1372,7 +1461,12 @@ export default function App(): JSX.Element {
         />
       )}
 
-      {toast && <div className="toast" role="status"><Icon name="info" size={16} /><span>{toast}</span></div>}
+      {toast && (
+        <div className="toast" role="status">
+          <Icon name="info" size={16} />
+          <span>{toast}</span>
+        </div>
+      )}
     </div>
   )
 }

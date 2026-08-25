@@ -1,15 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import {
-  lstat,
-  mkdir,
-  readlink,
-  realpath,
-  readdir,
-  rename,
-  rm,
-  stat,
-} from 'node:fs/promises'
+import { lstat, mkdir, readlink, realpath, readdir, rename, rm, stat } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { finished } from 'node:stream/promises'
 import { Readable, Writable } from 'node:stream'
@@ -22,7 +13,7 @@ import type {
   ExportBackupResult,
   Message,
 } from '../../shared/types'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const BACKUP_FORMAT = 'agentbox-backup'
 const BACKUP_FORMAT_VERSION = 1
@@ -108,20 +99,16 @@ export interface CreateBackupArchiveOptions {
   createdAt?: Date
 }
 
-export async function createBackupArchive(
-  options: CreateBackupArchiveOptions,
-): Promise<ExportBackupResult> {
+export async function createBackupArchive(options: CreateBackupArchiveOptions): Promise<ExportBackupResult> {
   const input = normalizeExportBackupInput(options.input)
-  if (!isAbsolute(options.outputPath)) throw new Error(t("The backup file path is invalid."))
+  if (!isAbsolute(options.outputPath)) throw new Error(t('The backup file path is invalid.'))
 
   const outputPath = resolve(options.outputPath)
   const createdAt = options.createdAt ?? new Date()
   const conversations = structuredClone(options.conversations)
   const conversationIndex = buildConversationIndex(conversations)
   const warnings: string[] = []
-  const workspaces = input.mode === 'deep'
-    ? await collectWorkspaces(conversations, outputPath, warnings)
-    : []
+  const workspaces = input.mode === 'deep' ? await collectWorkspaces(conversations, outputPath, warnings) : []
   const manifest = buildManifest({
     appInfo: options.appInfo,
     conversationIndex,
@@ -134,19 +121,14 @@ export async function createBackupArchive(
   })
 
   await mkdir(dirname(outputPath), { recursive: true })
-  const temporaryPath = join(
-    dirname(outputPath),
-    `.${basename(outputPath)}.${process.pid}.${randomUUID()}.partial`,
-  )
+  const temporaryPath = join(dirname(outputPath), `.${basename(outputPath)}.${process.pid}.${randomUUID()}.partial`)
   const outputStream = createWriteStream(temporaryPath, { flags: 'wx', mode: 0o600 })
   const outputWriter = {
     writable: Writable.toWeb(outputStream) as WritableStream<Uint8Array>,
     size: 0,
   }
   const zipWriter = new ZipWriter(outputWriter, {
-    ...(input.password
-      ? { password: input.password, encryptionStrength: 3 as const }
-      : {}),
+    ...(input.password ? { password: input.password, encryptionStrength: 3 as const } : {}),
     level: ARCHIVE_COMPRESSION_LEVEL,
     useWebWorkers: false,
   })
@@ -157,12 +139,16 @@ export async function createBackupArchive(
     await addTextEntry(
       zipWriter,
       'conversations/index.json',
-      JSON.stringify({
-        format: 'agentbox-conversation-index',
-        formatVersion: 1,
-        createdAt: createdAt.toISOString(),
-        conversations: conversationIndex,
-      }, null, 2),
+      JSON.stringify(
+        {
+          format: 'agentbox-conversation-index',
+          formatVersion: 1,
+          createdAt: createdAt.toISOString(),
+          conversations: conversationIndex,
+        },
+        null,
+        2,
+      ),
       createdAt,
     )
 
@@ -228,22 +214,22 @@ export async function createBackupArchive(
   } catch (error) {
     outputStream.destroy()
     await rm(temporaryPath, { force: true }).catch(() => undefined)
-    throw new Error(t("Could not create the backup. The incomplete ZIP file was not retained."), { cause: error })
+    throw new Error(t('Could not create the backup. The incomplete ZIP file was not retained.'), { cause: error })
   }
 }
 
 export function normalizeExportBackupInput(input: ExportBackupInput): ExportBackupInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new Error(t("Invalid backup option."))
+    throw new Error(t('Invalid backup option.'))
   }
   if (input.mode !== 'shallow' && input.mode !== 'deep') {
-    throw new Error(t("Backup mode is invalid."))
+    throw new Error(t('Backup mode is invalid.'))
   }
   if (input.password !== undefined && typeof input.password !== 'string') {
-    throw new Error(t("The backup password is invalid."))
+    throw new Error(t('The backup password is invalid.'))
   }
   if ((input.password?.length ?? 0) > MAX_BACKUP_PASSWORD_LENGTH) {
-    throw new Error(t("The backup password cannot exceed {value0} characters.", { value0: MAX_BACKUP_PASSWORD_LENGTH }))
+    throw new Error(t('The backup password cannot exceed {value0} characters.', { value0: MAX_BACKUP_PASSWORD_LENGTH }))
   }
   return {
     mode: input.mode,
@@ -289,7 +275,11 @@ async function collectWorkspaces(
     const sourcePath = conversation.workingDirectory?.trim()
     if (!sourcePath) continue
     if (!isAbsolute(sourcePath)) {
-      throw new Error(t("The working directory for conversation “{value0}” is not a valid absolute path.", { value0: conversation.title }))
+      throw new Error(
+        t('The working directory for conversation “{value0}” is not a valid absolute path.', {
+          value0: conversation.title,
+        }),
+      )
     }
 
     let resolvedPath: string
@@ -298,9 +288,15 @@ async function collectWorkspaces(
       const workspaceStats = await lstat(resolvedPath)
       if (!workspaceStats.isDirectory()) throw new Error('not a directory')
     } catch (error) {
-      throw new Error(t("Could not read the working directory for conversation “{value0}”: {value1}", { value0: conversation.title, value1: sourcePath }), {
-        cause: error,
-      })
+      throw new Error(
+        t('Could not read the working directory for conversation “{value0}”: {value1}', {
+          value0: conversation.title,
+          value1: sourcePath,
+        }),
+        {
+          cause: error,
+        },
+      )
     }
 
     const key = pathComparisonKey(resolvedPath)
@@ -329,12 +325,7 @@ async function collectWorkspaces(
   const collected = [...workspaces.values()]
   for (const [index, workspace] of collected.entries()) {
     workspace.archivePath = `workspaces/workspace-${String(index + 1).padStart(4, '0')}/`
-    workspace.entries = await walkWorkspace(
-      workspace.resolvedPath,
-      workspace.archivePath,
-      excludedPaths,
-      warnings,
-    )
+    workspace.entries = await walkWorkspace(workspace.resolvedPath, workspace.archivePath, excludedPaths, warnings)
     for (const entry of workspace.entries) {
       if (entry.kind === 'file') {
         workspace.fileCount += 1
@@ -400,7 +391,7 @@ async function walkWorkspace(
           modifiedAt: normalizeArchiveDate(entryStats.mtime),
         })
       } else {
-        warnings.push(t("Skipped a special file that could not be added to the ZIP: {value0}", { value0: sourcePath }))
+        warnings.push(t('Skipped a special file that could not be added to the ZIP: {value0}', { value0: sourcePath }))
       }
     }
   }
@@ -463,49 +454,63 @@ function buildManifest(input: {
 
 function createBackupReadme(manifest: BackupManifest): string {
   const protection = manifest.encryption.enabled
-    ? t("File contents are encrypted using WinZip AES-256 (AE-2). The ZIP standard does not encrypt entry names.")
-    : t("This backup is not password-protected; every file in the archive is plaintext.")
+    ? t('File contents are encrypted using WinZip AES-256 (AE-2). The ZIP standard does not encrypt entry names.')
+    : t('This backup is not password-protected; every file in the archive is plaintext.')
   const workspaceSummary = manifest.workspaces.included
-    ? t("The deep backup includes {value0} unique conversation working directories.", { value0: manifest.workspaces.count })
-    : t("A shallow backup does not include conversation working directories.")
+    ? t('The deep backup includes {value0} unique conversation working directories.', {
+        value0: manifest.workspaces.count,
+      })
+    : t('A shallow backup does not include conversation working directories.')
   return [
-    t("AgentBox conversation backup"),
+    t('AgentBox conversation backup'),
     '=================',
     '',
-    t("Exported at: {value0}", { value0: manifest.createdAt }),
-    t("Backup mode: {value0}", { value0: t(manifest.mode === 'deep' ? "Deep backup" : "Shallow backup") }),
-    t("Conversation count: {value0}", { value0: manifest.conversations.count }),
+    t('Exported at: {value0}', { value0: manifest.createdAt }),
+    t('Backup mode: {value0}', { value0: t(manifest.mode === 'deep' ? 'Deep backup' : 'Shallow backup') }),
+    t('Conversation count: {value0}', { value0: manifest.conversations.count }),
     protection,
     workspaceSummary,
     '',
-    t("Content description"),
+    t('Content description'),
     '--------',
-    t("- manifest.json: Machine-readable backup format, schema, version, item counts, and working-directory mappings."),
-    t("- conversations/index.json: Conversation index."),
-    t("- conversations/*.json: Complete, lossless conversation data, including all branches, attachments, and Agent records."),
-    t("- conversations/*.md: Human-readable conversation transcripts."),
-    t("- workspaces/*: Included only in deep backups. Symbolic links are stored as link entries and are not followed outside the working directory."),
+    t('- manifest.json: Machine-readable backup format, schema, version, item counts, and working-directory mappings.'),
+    t('- conversations/index.json: Conversation index.'),
+    t(
+      '- conversations/*.json: Complete, lossless conversation data, including all branches, attachments, and Agent records.',
+    ),
+    t('- conversations/*.md: Human-readable conversation transcripts.'),
+    t(
+      '- workspaces/*: Included only in deep backups. Symbolic links are stored as link entries and are not followed outside the working directory.',
+    ),
     '',
-    t("Security notes"),
+    t('Security notes'),
     '--------',
-    t("- The export package does not contain API keys, authentication credentials, vault master keys, or app configurations."),
-    t("- JSON, Markdown, and workspace files are stored as plaintext inside the ZIP. They are encrypted only when an export password is set."),
-    t("- Treat unencrypted backups as sensitive data and store the export password securely. AgentBox does not save or recover export passwords."),
+    t(
+      '- The export package does not contain API keys, authentication credentials, vault master keys, or app configurations.',
+    ),
+    t(
+      '- JSON, Markdown, and workspace files are stored as plaintext inside the ZIP. They are encrypted only when an export password is set.',
+    ),
+    t(
+      '- Treat unencrypted backups as sensitive data and store the export password securely. AgentBox does not save or recover export passwords.',
+    ),
     '',
   ].join('\n')
 }
 
 function conversationToMarkdown(conversation: Conversation): string {
   const lines = [
-    `# ${conversation.title || t("Untitled conversation")}`,
+    `# ${conversation.title || t('Untitled conversation')}`,
     '',
-    t("- Conversation ID: {value0}", { value0: conversation.id }),
-    t("- Model ID: {value0}", { value0: conversation.modelId }),
-    t("- Created at: {value0}", { value0: conversation.createdAt }),
-    t("- Updated at: {value0}", { value0: conversation.updatedAt }),
-    t("- Working directory: {value0}", { value0: conversation.workingDirectory || t("None") }),
-    t("- Messages: {value0}", { value0: conversation.messages.length }),
-    t("- Branches: Messages from every branch of the conversation tree are listed below in storage order. Parent message IDs preserve the branch structure."),
+    t('- Conversation ID: {value0}', { value0: conversation.id }),
+    t('- Model ID: {value0}', { value0: conversation.modelId }),
+    t('- Created at: {value0}', { value0: conversation.createdAt }),
+    t('- Updated at: {value0}', { value0: conversation.updatedAt }),
+    t('- Working directory: {value0}', { value0: conversation.workingDirectory || t('None') }),
+    t('- Messages: {value0}', { value0: conversation.messages.length }),
+    t(
+      '- Branches: Messages from every branch of the conversation tree are listed below in storage order. Parent message IDs preserve the branch structure.',
+    ),
     '',
     '---',
     '',
@@ -518,55 +523,57 @@ function conversationToMarkdown(conversation: Conversation): string {
 }
 
 function messageToMarkdown(message: Message): string[] {
-  const roleLabel = message.role === 'user'
-    ? t("User")
-    : message.role === 'assistant'
-      ? t("Assistant")
-      : t("System")
+  const roleLabel = message.role === 'user' ? t('User') : message.role === 'assistant' ? t('Assistant') : t('System')
   const lines = [
     `## ${roleLabel} · ${message.createdAt}`,
     '',
-    t("- Message ID: {value0}", { value0: message.id }),
-    t("- Parent message ID: {value0}", { value0: message.parentMessageId ?? t("None") }),
-    ...(message.modelId ? [t("- Model ID: {value0}", { value0: message.modelId })] : []),
+    t('- Message ID: {value0}', { value0: message.id }),
+    t('- Parent message ID: {value0}', { value0: message.parentMessageId ?? t('None') }),
+    ...(message.modelId ? [t('- Model ID: {value0}', { value0: message.modelId })] : []),
     '',
-    message.content || t("(no content)"),
+    message.content || t('(no content)'),
     '',
   ]
 
   if (message.reasoning) {
-    lines.push(t("### Reasoning"), '', message.reasoning, '')
+    lines.push(t('### Reasoning'), '', message.reasoning, '')
   }
   if (message.attachments?.length) {
-    lines.push(t("### Attachments"), '')
+    lines.push(t('### Attachments'), '')
     for (const attachment of message.attachments) {
-      lines.push(t("- {name} ({mimeType}, {size} bytes)", {
-        name: escapeMarkdownText(attachment.name),
-        mimeType: attachment.mimeType,
-        size: attachment.size,
-      }))
+      lines.push(
+        t('- {name} ({mimeType}, {size} bytes)', {
+          name: escapeMarkdownText(attachment.name),
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+        }),
+      )
     }
-    lines.push('', t("Raw attachment data is stored in the corresponding full JSON file."), '')
+    lines.push('', t('Raw attachment data is stored in the corresponding full JSON file.'), '')
   }
   if (message.citations?.length) {
-    lines.push(t("### Sources"), '')
+    lines.push(t('### Sources'), '')
     for (const citation of message.citations) {
-      lines.push(t("- {title}: {url}", {
-        title: escapeMarkdownText(citation.title || citation.url),
-        url: citation.url,
-      }))
+      lines.push(
+        t('- {title}: {url}', {
+          title: escapeMarkdownText(citation.title || citation.url),
+          url: citation.url,
+        }),
+      )
     }
     lines.push('')
   }
   if (message.toolExecutions?.length) {
-    lines.push(t("### Agent tool records ({value0} items)", { value0: message.toolExecutions.length }), '')
+    lines.push(t('### Agent tool records ({value0} items)', { value0: message.toolExecutions.length }), '')
     for (const execution of message.toolExecutions) {
-      lines.push(t("- {toolName}: {status}", {
-        toolName: escapeMarkdownText(execution.toolName),
-        status: execution.status,
-      }))
+      lines.push(
+        t('- {toolName}: {status}', {
+          toolName: escapeMarkdownText(execution.toolName),
+          status: execution.status,
+        }),
+      )
     }
-    lines.push('', t("Full parameters, results, and the Agent trace are stored in the corresponding JSON file."), '')
+    lines.push('', t('Full parameters, results, and the Agent trace are stored in the corresponding JSON file.'), '')
   }
   lines.push('---', '')
   return lines
@@ -615,7 +622,8 @@ async function replaceFile(temporaryPath: string, outputPath: string): Promise<v
       if (error.code === 'ENOENT') return undefined
       throw error
     })
-    if (existing?.isDirectory()) throw new Error(t("The selected backup path is a directory and cannot be written to a ZIP file."))
+    if (existing?.isDirectory())
+      throw new Error(t('The selected backup path is a directory and cannot be written to a ZIP file.'))
     if (existing) {
       await rename(outputPath, displacedPath)
       displaced = true

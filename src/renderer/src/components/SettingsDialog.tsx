@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
+import type { AppPreferences, ModelConfig, ProviderConfig, SettingsSection } from '../types'
 import type {
-  AppPreferences,
-  ModelConfig,
-  ProviderConfig,
-  SettingsSection
-} from '../types'
-import type { BackupMode, CondaEnvironmentListResult, DeveloperRuntimeKind, DeveloperRuntimeSettings, ExportBackupInput, ExportBackupResult, IntegratedTerminalShellConfig, McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition, RemoteModel, RuntimeTestResult, Skill, SkillInput, TerminalShellTestResult } from '../../../shared/types'
+  BackupMode,
+  CondaEnvironmentListResult,
+  DeveloperRuntimeKind,
+  DeveloperRuntimeSettings,
+  ExportBackupInput,
+  ExportBackupResult,
+  IntegratedTerminalShellConfig,
+  McpServerConfig,
+  McpServerInput,
+  McpServerTestResult,
+  McpToolDefinition,
+  RemoteModel,
+  RuntimeTestResult,
+  Skill,
+  SkillInput,
+  TerminalShellTestResult,
+} from '../../../shared/types'
 import { validateAvatarSourceFile } from '../avatar-helper'
 import { AvatarCropDialog } from './AvatarCropDialog'
 import { Icon } from './Icon'
@@ -53,19 +65,23 @@ interface SettingsDialogProps {
   onListMcpTools?: (serverId?: string) => Promise<McpToolDefinition[]>
   onTestTerminalShell?: (config: IntegratedTerminalShellConfig) => Promise<TerminalShellTestResult>
   onSelectDirectory?: (initialPath?: string) => Promise<string | undefined>
-  onTestRuntime?: (kind: DeveloperRuntimeKind, settings: DeveloperRuntimeSettings, workingDirectory?: string) => Promise<RuntimeTestResult>
+  onTestRuntime?: (
+    kind: DeveloperRuntimeKind,
+    settings: DeveloperRuntimeSettings,
+    workingDirectory?: string,
+  ) => Promise<RuntimeTestResult>
   onListCondaEnvironments?: (condaExecutable: string) => Promise<CondaEnvironmentListResult>
 }
 
 const settingsNav: Array<{ id: SettingsSection; label: string; icon: Parameters<typeof Icon>[0]['name'] }> = [
-  { id: 'general', label: t("General"), icon: 'settings' },
-  { id: 'runtimes', label: t("Developer runtimes"), icon: 'code' },
-  { id: 'skills', label: t("Agent skills"), icon: 'bot' },
-  { id: 'mcp', label: t("MCP tools"), icon: 'tool' },
-  { id: 'models', label: t("Model"), icon: 'sparkles' },
-  { id: 'providers', label: t("Provider"), icon: 'globe' },
-  { id: 'security', label: t("Data and security"), icon: 'shield' },
-  { id: 'about', label: t("About"), icon: 'info' }
+  { id: 'general', label: t('General'), icon: 'settings' },
+  { id: 'runtimes', label: t('Developer runtimes'), icon: 'code' },
+  { id: 'skills', label: t('Agent skills'), icon: 'bot' },
+  { id: 'mcp', label: t('MCP tools'), icon: 'tool' },
+  { id: 'models', label: t('Model'), icon: 'sparkles' },
+  { id: 'providers', label: t('Provider'), icon: 'globe' },
+  { id: 'security', label: t('Data and security'), icon: 'shield' },
+  { id: 'about', label: t('About'), icon: 'info' },
 ]
 
 export function SettingsDialog({
@@ -118,18 +134,15 @@ export function SettingsDialog({
   const [testingTerminalShell, setTestingTerminalShell] = useState(false)
   const [avatarCropSource, setAvatarCropSource] = useState<string | null>(null)
   const [avatarInputError, setAvatarInputError] = useState('')
-
+  const integratedTerminalShellArgs = preferenceDraft.integratedTerminalShell.args.join('\0')
 
   useEffect(() => {
     setTerminalShellTest(null)
   }, [
     preferenceDraft.integratedTerminalShell.mode,
     preferenceDraft.integratedTerminalShell.executable,
-    preferenceDraft.integratedTerminalShell.args.join('\0'),
+    integratedTerminalShellArgs,
   ])
-
-
-
 
   const confirmClearData = async (): Promise<void> => {
     if (!onClearData) return
@@ -140,7 +153,7 @@ export function SettingsDialog({
       setClearConfirming(false)
       closeDialog()
     } catch (error) {
-      setClearError(error instanceof Error ? error.message : t("Could not clear the data. Try again."))
+      setClearError(error instanceof Error ? error.message : t('Could not clear the data. Try again.'))
     } finally {
       setClearing(false)
     }
@@ -149,7 +162,7 @@ export function SettingsDialog({
   const exportBackup = async (): Promise<void> => {
     if (!onExportBackup || backupExporting) return
     if (backupPassword !== backupPasswordConfirmation) {
-      setBackupError(t("The backup passwords do not match."))
+      setBackupError(t('The backup passwords do not match.'))
       return
     }
 
@@ -167,7 +180,7 @@ export function SettingsDialog({
         setBackupResult(result)
       }
     } catch (error) {
-      setBackupError(error instanceof Error ? error.message : t("Could not export the backup. Try again."))
+      setBackupError(error instanceof Error ? error.message : t('Could not export the backup. Try again.'))
     } finally {
       setBackupExporting(false)
     }
@@ -208,9 +221,12 @@ export function SettingsDialog({
     setAvatarInputError('')
   }, [initialSection, models, open, preferences, providers])
 
-  useEffect(() => () => {
-    if (avatarCropSource) URL.revokeObjectURL(avatarCropSource)
-  }, [avatarCropSource])
+  useEffect(
+    () => () => {
+      if (avatarCropSource) URL.revokeObjectURL(avatarCropSource)
+    },
+    [avatarCropSource],
+  )
 
   const selectAvatarFile = (file: File | undefined): void => {
     if (!file) return
@@ -219,10 +235,9 @@ export function SettingsDialog({
       setAvatarInputError('')
       setAvatarCropSource(URL.createObjectURL(file))
     } catch (error) {
-      setAvatarInputError(error instanceof Error ? error.message : t("Unable to read avatar image."))
+      setAvatarInputError(error instanceof Error ? error.message : t('Unable to read avatar image.'))
     }
   }
-
 
   useEffect(() => {
     if (!open) return
@@ -235,21 +250,28 @@ export function SettingsDialog({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [avatarCropSource, closeDialog, open])
 
-  const providersRequiringNewKey = useMemo(() => providerDrafts.filter((provider) => {
-    const original = providers.find((item) => item.id === provider.id)
-    if (!original?.hasApiKey) return false
-    const credentialScopeChanged = original.baseUrl !== provider.baseUrl || original.kind !== provider.kind
-    return credentialScopeChanged
-      && !(apiKeyInputs[provider.id] ?? '').trim()
-      && !clearApiKeyIds.includes(provider.id)
-  }), [apiKeyInputs, clearApiKeyIds, providerDrafts, providers])
+  const providersRequiringNewKey = useMemo(
+    () =>
+      providerDrafts.filter((provider) => {
+        const original = providers.find((item) => item.id === provider.id)
+        if (!original?.hasApiKey) return false
+        const credentialScopeChanged = original.baseUrl !== provider.baseUrl || original.kind !== provider.kind
+        return (
+          credentialScopeChanged && !(apiKeyInputs[provider.id] ?? '').trim() && !clearApiKeyIds.includes(provider.id)
+        )
+      }),
+    [apiKeyInputs, clearApiKeyIds, providerDrafts, providers],
+  )
 
   if (!open) return null
 
-
   const save = async (): Promise<void> => {
     if (providersRequiringNewKey.length > 0) {
-      setSaveError(t("The connection address or type of \"{value0}\" has changed, please re-enter the API key.", { value0: providersRequiringNewKey[0]?.name ?? t("Provider") }))
+      setSaveError(
+        t('The connection address or type of "{value0}" has changed, please re-enter the API key.', {
+          value0: providersRequiringNewKey[0]?.name ?? t('Provider'),
+        }),
+      )
       return
     }
     setSaving(true)
@@ -260,12 +282,12 @@ export function SettingsDialog({
         providers: providerDrafts,
         preferences: preferenceDraft,
         apiKeyInputs,
-        clearApiKeyIds
+        clearApiKeyIds,
       })
       setApiKeyInputs({})
       closeDialog()
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : t("Saving failed. Check the configuration and try again."))
+      setSaveError(error instanceof Error ? error.message : t('Saving failed. Check the configuration and try again.'))
     } finally {
       setSaving(false)
     }
@@ -282,7 +304,7 @@ export function SettingsDialog({
         ok: false,
         platform: 'unknown',
         latencyMs: 0,
-        message: error instanceof Error ? error.message : t("Shell test failed"),
+        message: error instanceof Error ? error.message : t('Shell test failed'),
       })
     } finally {
       setTestingTerminalShell(false)
@@ -293,18 +315,22 @@ export function SettingsDialog({
     return onSelectDirectory ? onSelectDirectory(current || undefined) : undefined
   }
 
-
-
   const backupProtectionEnabled = backupResult?.encrypted ?? Boolean(backupPassword)
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.currentTarget === event.target) closeDialog()
-    }}>
-      <section className="settings-dialog" role="dialog" aria-modal="true" aria-label={t("Settings")}>
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.currentTarget === event.target) closeDialog()
+      }}
+    >
+      <section className="settings-dialog" role="dialog" aria-modal="true" aria-label={t('Settings')}>
         <aside className="settings-sidebar">
           <div className="settings-brand">
-            <span className="brand-mark"><Icon name="app" size={21} /></span>
+            <span className="brand-mark">
+              <Icon name="app" size={21} />
+            </span>
             <span>AgentBox</span>
           </div>
           <nav>
@@ -321,7 +347,10 @@ export function SettingsDialog({
           </nav>
           <div className="settings-secure-note">
             <Icon name="lock" size={15} />
-            <span><strong>{t("Privacy first")}</strong><small>{t("Keys and data stay on this device")}</small></span>
+            <span>
+              <strong>{t('Privacy first')}</strong>
+              <small>{t('Keys and data stay on this device')}</small>
+            </span>
           </div>
         </aside>
 
@@ -329,16 +358,26 @@ export function SettingsDialog({
           <header className="settings-header">
             <div>
               <h2>{settingsNav.find((item) => item.id === activeSection)?.label}</h2>
-              <p>{activeSection === 'general' && t("Adjust AgentBox preferences")}</p>
-              <p>{activeSection === 'runtimes' && t("Configure the default JDK, Go, PHP, and Python environments for projects")}</p>
-              <p>{activeSection === 'skills' && t("Manage, install, and customize Agent Skills")}</p>
-              <p>{activeSection === 'mcp' && t("Connect and manage external tool servers through the Model Context Protocol (MCP)")}</p>
-              <p>{activeSection === 'models' && t("Configure model capabilities, context windows and request formats")}</p>
-              <p>{activeSection === 'providers' && t("Manage API endpoints and access keys")}</p>
-              <p>{activeSection === 'security' && t("Learn about local encryption and system secure storage")}</p>
-              <p>{activeSection === 'about' && t("About AgentBox and system information")}</p>
+              <p>{activeSection === 'general' && t('Adjust AgentBox preferences')}</p>
+              <p>
+                {activeSection === 'runtimes' &&
+                  t('Configure the default JDK, Go, PHP, and Python environments for projects')}
+              </p>
+              <p>{activeSection === 'skills' && t('Manage, install, and customize Agent Skills')}</p>
+              <p>
+                {activeSection === 'mcp' &&
+                  t('Connect and manage external tool servers through the Model Context Protocol (MCP)')}
+              </p>
+              <p>
+                {activeSection === 'models' && t('Configure model capabilities, context windows and request formats')}
+              </p>
+              <p>{activeSection === 'providers' && t('Manage API endpoints and access keys')}</p>
+              <p>{activeSection === 'security' && t('Learn about local encryption and system secure storage')}</p>
+              <p>{activeSection === 'about' && t('About AgentBox and system information')}</p>
             </div>
-            <button className="icon-button" aria-label={t("Close settings")} onClick={closeDialog}><Icon name="close" /></button>
+            <button className="icon-button" aria-label={t('Close settings')} onClick={closeDialog}>
+              <Icon name="close" />
+            </button>
           </header>
 
           <div className="settings-content">
@@ -350,7 +389,6 @@ export function SettingsDialog({
                 models={models}
                 preferenceDraft={preferenceDraft}
                 selectAvatarFile={selectAvatarFile}
-                setAvatarInputError={setAvatarInputError}
                 setPreferenceDraft={setPreferenceDraft}
                 terminalShellTest={terminalShellTest}
                 testTerminalShell={testTerminalShell}
@@ -375,7 +413,7 @@ export function SettingsDialog({
                 onUpsertSkill={onUpsertSkill}
               />
             )}
-            
+
             {activeSection === 'mcp' && (
               <McpTab
                 mcpServers={mcpServers}
@@ -438,19 +476,23 @@ export function SettingsDialog({
                 setClearError={setClearError}
               />
             )}
-            {activeSection === 'about' && (
-              <AboutTab />
-            )}
+            {activeSection === 'about' && <AboutTab />}
           </div>
 
           <footer className="settings-footer">
             <span className={saveError ? 'settings-save-error' : ''}>
-              {saveError || t("Changes are stored securely on this device")}
+              {saveError || t('Changes are stored securely on this device')}
             </span>
             <div>
-              <button className="secondary-button" onClick={closeDialog}>{t("Cancel")}</button>
-              <button className="primary-button" disabled={saving || providersRequiringNewKey.length > 0} onClick={save}>
-                {saving ? t("Saving…") : t("Save changes")}
+              <button className="secondary-button" onClick={closeDialog}>
+                {t('Cancel')}
+              </button>
+              <button
+                className="primary-button"
+                disabled={saving || providersRequiringNewKey.length > 0}
+                onClick={save}
+              >
+                {saving ? t('Saving…') : t('Save changes')}
               </button>
             </div>
           </footer>

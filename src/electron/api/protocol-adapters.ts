@@ -4,7 +4,7 @@ import {
   MAX_CITATION_VARIANTS_PER_STREAM,
   parseWebCitation,
 } from '../storage/web-metadata-schema'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 export interface ProtocolErrorData {
   message: string
@@ -36,15 +36,10 @@ export interface ParsedProtocolEvent {
 export function parseChatCompletionEvent(value: unknown): ParsedProtocolEvent {
   if (!isRecord(value)) return {}
   if (isRecord(value.error)) return { error: payloadError(value.error) }
-  const choice =
-    Array.isArray(value.choices) && isRecord(value.choices[0])
-      ? value.choices[0]
-      : undefined
+  const choice = Array.isArray(value.choices) && isRecord(value.choices[0]) ? value.choices[0] : undefined
   const delta = choice && isRecord(choice.delta) ? choice.delta : undefined
   const message = choice && isRecord(choice.message) ? choice.message : undefined
-  const text =
-    extractChatDeltaText(delta?.content) ??
-    (typeof delta?.refusal === 'string' ? delta.refusal : undefined)
+  const text = extractChatDeltaText(delta?.content) ?? (typeof delta?.refusal === 'string' ? delta.refusal : undefined)
   let reasoning =
     typeof delta?.reasoning === 'string'
       ? delta.reasoning
@@ -63,15 +58,17 @@ export function parseChatCompletionEvent(value: unknown): ParsedProtocolEvent {
 
   const toolCallDeltas = Array.isArray(delta?.tool_calls)
     ? delta.tool_calls.flatMap((value, fallbackIndex) => {
-      if (!isRecord(value)) return []
-      const func = isRecord(value.function) ? value.function : undefined
-      return [{
-        index: typeof value.index === 'number' ? value.index : fallbackIndex,
-        id: typeof value.id === 'string' ? value.id : undefined,
-        name: typeof func?.name === 'string' ? func.name : undefined,
-        argumentsDelta: typeof func?.arguments === 'string' ? func.arguments : undefined,
-      }]
-    })
+        if (!isRecord(value)) return []
+        const func = isRecord(value.function) ? value.function : undefined
+        return [
+          {
+            index: typeof value.index === 'number' ? value.index : fallbackIndex,
+            id: typeof value.id === 'string' ? value.id : undefined,
+            name: typeof func?.name === 'string' ? func.name : undefined,
+            argumentsDelta: typeof func?.arguments === 'string' ? func.arguments : undefined,
+          },
+        ]
+      })
     : []
 
   return {
@@ -80,15 +77,11 @@ export function parseChatCompletionEvent(value: unknown): ParsedProtocolEvent {
     citations: citations.length ? citations : undefined,
     toolCallDeltas: toolCallDeltas.length ? toolCallDeltas : undefined,
     usage: parseUsage(value.usage),
-    finishReason:
-      typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
+    finishReason: typeof choice?.finish_reason === 'string' ? choice.finish_reason : undefined,
   }
 }
 
-export function parseResponsesEvent(
-  value: unknown,
-  sseEvent?: string,
-): ParsedProtocolEvent {
+export function parseResponsesEvent(value: unknown, sseEvent?: string): ParsedProtocolEvent {
   if (!isRecord(value)) return {}
   const type = typeof value.type === 'string' ? value.type : sseEvent
   if (type === 'error' || type === 'response.failed') {
@@ -98,10 +91,7 @@ export function parseResponsesEvent(
         ? value.response.error
         : value
     return {
-      error: payloadError(
-        error,
-        typeof value.error_type === 'string' ? value.error_type : undefined,
-      ),
+      error: payloadError(error, typeof value.error_type === 'string' ? value.error_type : undefined),
     }
   }
 
@@ -110,11 +100,7 @@ export function parseResponsesEvent(
   const citations = extractResponsesCitations(value, response)
   const deltaRecord = isRecord(value.delta) ? value.delta : undefined
   const delta =
-    typeof value.delta === 'string'
-      ? value.delta
-      : typeof deltaRecord?.text === 'string'
-        ? deltaRecord.text
-        : undefined
+    typeof value.delta === 'string' ? value.delta : typeof deltaRecord?.text === 'string' ? deltaRecord.text : undefined
   if (type === 'response.output_text.delta' || type === 'response.content_part.delta') {
     const part = isRecord(value.part) ? value.part : undefined
     return {
@@ -127,34 +113,32 @@ export function parseResponsesEvent(
   }
   if (type === 'response.function_call_arguments.delta') {
     return {
-      toolCallDeltas: [{
-        index: typeof value.output_index === 'number' ? value.output_index : undefined,
-        itemId: typeof value.item_id === 'string' ? value.item_id : undefined,
-        argumentsDelta: typeof value.delta === 'string' ? value.delta : undefined,
-      }],
+      toolCallDeltas: [
+        {
+          index: typeof value.output_index === 'number' ? value.output_index : undefined,
+          itemId: typeof value.item_id === 'string' ? value.item_id : undefined,
+          argumentsDelta: typeof value.delta === 'string' ? value.delta : undefined,
+        },
+      ],
     }
   }
   if (type === 'response.output_item.added' && isRecord(value.item)) {
     const item = value.item
     if (item.type === 'function_call') {
       return {
-        toolCallDeltas: [{
-          index: typeof value.output_index === 'number' ? value.output_index : undefined,
-          itemId: typeof item.id === 'string' ? item.id : undefined,
-          id: typeof item.call_id === 'string'
-            ? item.call_id
-            : typeof item.id === 'string' ? item.id : undefined,
-          name: typeof item.name === 'string' ? item.name : undefined,
-          argumentsDelta: typeof item.arguments === 'string' ? item.arguments : undefined,
-        }],
+        toolCallDeltas: [
+          {
+            index: typeof value.output_index === 'number' ? value.output_index : undefined,
+            itemId: typeof item.id === 'string' ? item.id : undefined,
+            id: typeof item.call_id === 'string' ? item.call_id : typeof item.id === 'string' ? item.id : undefined,
+            name: typeof item.name === 'string' ? item.name : undefined,
+            argumentsDelta: typeof item.arguments === 'string' ? item.arguments : undefined,
+          },
+        ],
       }
     }
   }
-  if (
-    type === 'response.output_item.done' &&
-    isRecord(value.item) &&
-    value.item.type === 'reasoning'
-  ) {
+  if (type === 'response.output_item.done' && isRecord(value.item) && value.item.type === 'reasoning') {
     return { responseOutputItem: value.item }
   }
   if (typeof type === 'string' && type.startsWith('response.reasoning') && delta) {
@@ -165,11 +149,7 @@ export function parseResponsesEvent(
     // surface empty reasoning.
     return { reasoning: delta, citations: citations.length ? citations : undefined }
   }
-  if (
-    type === 'response.completed' ||
-    type === 'response.done' ||
-    type === 'response.incomplete'
-  ) {
+  if (type === 'response.completed' || type === 'response.done' || type === 'response.incomplete') {
     const incompleteDetails = isRecord(response?.incomplete_details)
       ? response.incomplete_details
       : isRecord(value.incomplete_details)
@@ -183,22 +163,19 @@ export function parseResponsesEvent(
         typeof incompleteDetails?.reason === 'string'
           ? incompleteDetails.reason
           : typeof response?.status === 'string'
-          ? response.status
-          : typeof value.status === 'string'
-            ? value.status
-            : 'completed',
+            ? response.status
+            : typeof value.status === 'string'
+              ? value.status
+              : 'completed',
     }
   }
   return removeUndefined({
     usage,
     citations: citations.length ? citations : undefined,
-  }) as ParsedProtocolEvent
+  })
 }
 
-export function parseAnthropicEvent(
-  value: unknown,
-  sseEvent?: string,
-): ParsedProtocolEvent {
+export function parseAnthropicEvent(value: unknown, sseEvent?: string): ParsedProtocolEvent {
   if (!isRecord(value)) return {}
   const type = typeof value.type === 'string' ? value.type : sseEvent
   if (type === 'error') {
@@ -222,30 +199,25 @@ export function parseAnthropicEvent(
     }
     if (block.type === 'tool_use') {
       return {
-        toolCallDeltas: [{
-          index: typeof value.index === 'number' ? value.index : 0,
-          id: typeof block.id === 'string' ? block.id : undefined,
-          name: typeof block.name === 'string' ? block.name : undefined,
-        }],
+        toolCallDeltas: [
+          {
+            index: typeof value.index === 'number' ? value.index : 0,
+            id: typeof block.id === 'string' ? block.id : undefined,
+            name: typeof block.name === 'string' ? block.name : undefined,
+          },
+        ],
       }
     }
   }
   if (type === 'content_block_delta' && isRecord(value.delta)) {
-    const citations = extractWebCitations(
-      value.delta.citations,
-      value.delta.citation,
-      value.citations,
-    )
+    const citations = extractWebCitations(value.delta.citations, value.delta.citation, value.citations)
     if (value.delta.type === 'text_delta' && typeof value.delta.text === 'string') {
       return {
         text: value.delta.text,
         citations: citations.length ? citations : undefined,
       }
     }
-    if (
-      value.delta.type === 'thinking_delta' &&
-      typeof value.delta.thinking === 'string'
-    ) {
+    if (value.delta.type === 'thinking_delta' && typeof value.delta.thinking === 'string') {
       return {
         reasoning: value.delta.thinking,
         anthropicThinkingDelta: {
@@ -264,10 +236,12 @@ export function parseAnthropicEvent(
     }
     if (value.delta.type === 'input_json_delta' && typeof value.delta.partial_json === 'string') {
       return {
-        toolCallDeltas: [{
-          index: typeof value.index === 'number' ? value.index : 0,
-          argumentsDelta: value.delta.partial_json,
-        }],
+        toolCallDeltas: [
+          {
+            index: typeof value.index === 'number' ? value.index : 0,
+            argumentsDelta: value.delta.partial_json,
+          },
+        ],
       }
     }
     if (citations.length) return { citations }
@@ -279,8 +253,7 @@ export function parseAnthropicEvent(
     const delta = isRecord(value.delta) ? value.delta : undefined
     return {
       usage: parseUsage(value.usage),
-      finishReason:
-        typeof delta?.stop_reason === 'string' ? delta.stop_reason : undefined,
+      finishReason: typeof delta?.stop_reason === 'string' ? delta.stop_reason : undefined,
     }
   }
   if (type === 'message_stop') {
@@ -289,7 +262,7 @@ export function parseAnthropicEvent(
       completed: true,
       usage: parseUsage(value.usage),
       citations: citations.length ? citations : undefined,
-    }) as ParsedProtocolEvent
+    })
   }
   const citations = extractWebCitations(value.citations, value.citation)
   if (citations.length) return { citations }
@@ -298,12 +271,8 @@ export function parseAnthropicEvent(
 
 export function parseUsage(value: unknown): TokenUsage | undefined {
   if (!isRecord(value)) return undefined
-  const outputDetails = isRecord(value.output_tokens_details)
-    ? value.output_tokens_details
-    : undefined
-  const completionDetails = isRecord(value.completion_tokens_details)
-    ? value.completion_tokens_details
-    : undefined
+  const outputDetails = isRecord(value.output_tokens_details) ? value.output_tokens_details : undefined
+  const completionDetails = isRecord(value.completion_tokens_details) ? value.completion_tokens_details : undefined
   const serverToolUse = isRecord(value.server_tool_use) ? value.server_tool_use : undefined
   const usage = removeUndefined({
     inputTokens: firstNumber(value.input_tokens, value.prompt_tokens),
@@ -367,10 +336,7 @@ export function extractWebCitations(...sources: unknown[]): WebCitation[] {
   return citations
 }
 
-function extractResponsesCitations(
-  value: Record<string, unknown>,
-  response?: Record<string, unknown>,
-): WebCitation[] {
+function extractResponsesCitations(value: Record<string, unknown>, response?: Record<string, unknown>): WebCitation[] {
   const part = isRecord(value.part) ? value.part : undefined
   const delta = isRecord(value.delta) ? value.delta : undefined
   const sources: unknown[] = [
@@ -403,12 +369,7 @@ function collectOutputAnnotationSources(value: unknown, sources: unknown[]): voi
     if (Array.isArray(entry.content)) {
       for (const content of entry.content) {
         if (!isRecord(content)) continue
-        sources.push(
-          content.annotation,
-          content.annotations,
-          content.citation,
-          content.citations,
-        )
+        sources.push(content.annotation, content.annotations, content.citation, content.citations)
       }
     }
   }
@@ -419,11 +380,7 @@ function toWebCitation(annotation: unknown): WebCitation | undefined {
   const nested = isRecord(annotation.url_citation) ? annotation.url_citation : undefined
   const source = nested ?? annotation
   const annotationType =
-    typeof annotation.type === 'string'
-      ? annotation.type
-      : typeof source.type === 'string'
-        ? source.type
-        : undefined
+    typeof annotation.type === 'string' ? annotation.type : typeof source.type === 'string' ? source.type : undefined
   if (
     !nested &&
     annotationType !== 'url_citation' &&
@@ -450,24 +407,20 @@ function toWebCitation(annotation: unknown): WebCitation | undefined {
   }
 }
 
-function payloadError(
-  value: Record<string, unknown>,
-  fallbackCode?: string,
-): ProtocolErrorData {
+function payloadError(value: Record<string, unknown>, fallbackCode?: string): ProtocolErrorData {
   const metadata = isRecord(value.metadata) ? value.metadata : undefined
   return removeUndefined({
-    message:
-      typeof value.message === 'string' ? value.message : t("The model provider returned an error."),
+    message: typeof value.message === 'string' ? value.message : t('The model provider returned an error.'),
     code:
       typeof value.error_type === 'string'
         ? value.error_type
         : typeof metadata?.error_type === 'string'
           ? metadata.error_type
-        : typeof value.code === 'string'
-          ? value.code
-          : typeof value.type === 'string'
-            ? value.type
-            : fallbackCode,
+          : typeof value.code === 'string'
+            ? value.code
+            : typeof value.type === 'string'
+              ? value.type
+              : fallbackCode,
     status: typeof value.status === 'number' ? value.status : undefined,
   }) as ProtocolErrorData
 }
@@ -477,9 +430,7 @@ function firstNumber(...values: unknown[]): number | undefined {
 }
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as Partial<T>
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

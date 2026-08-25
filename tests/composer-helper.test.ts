@@ -13,7 +13,7 @@ describe('handleComposerKeyDown', () => {
     canSend: true,
     draft: 'Hello world',
     selectionStart: 11,
-    selectionEnd: 11
+    selectionEnd: 11,
   }
 
   describe('when sendOnEnter is true', () => {
@@ -33,13 +33,13 @@ describe('handleComposerKeyDown', () => {
         ctrlKey: true,
         draft: 'Line1',
         selectionStart: 5,
-        selectionEnd: 5
+        selectionEnd: 5,
       })
 
       expect(action).toEqual({
         type: 'newline',
         nextDraft: 'Line1\n',
-        nextCursor: 6
+        nextCursor: 6,
       })
     })
 
@@ -49,13 +49,13 @@ describe('handleComposerKeyDown', () => {
         metaKey: true,
         draft: 'Hello world',
         selectionStart: 5,
-        selectionEnd: 5
+        selectionEnd: 5,
       })
 
       expect(action).toEqual({
         type: 'newline',
         nextDraft: 'Hello\n world',
-        nextCursor: 6
+        nextCursor: 6,
       })
     })
 
@@ -65,13 +65,13 @@ describe('handleComposerKeyDown', () => {
         ctrlKey: true,
         draft: 'Hello REPLACE world',
         selectionStart: 6,
-        selectionEnd: 13
+        selectionEnd: 13,
       })
 
       expect(action).toEqual({
         type: 'newline',
         nextDraft: 'Hello \n world',
-        nextCursor: 7
+        nextCursor: 7,
       })
     })
 

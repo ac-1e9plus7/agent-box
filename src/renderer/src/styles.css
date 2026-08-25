@@ -27,8 +27,18 @@
   --radius-lg: 18px;
   --sidebar-width: 272px;
   --content-width: 860px;
-  --font-mono: 'Cascadia Code', 'Cascadia Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono:
+    'Cascadia Code', 'Cascadia Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -146,7 +156,7 @@ input:disabled,
 textarea:disabled,
 select:disabled {
   cursor: not-allowed;
-  opacity: .52;
+  opacity: 0.52;
 }
 
 ::selection {
@@ -193,7 +203,9 @@ select:disabled {
   border-radius: 9px;
   color: var(--text-secondary);
   background: transparent;
-  transition: color 140ms ease, background 140ms ease;
+  transition:
+    color 140ms ease,
+    background 140ms ease;
   -webkit-app-region: no-drag;
 }
 
@@ -214,7 +226,9 @@ select:disabled {
   overflow: hidden;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
-  transition: transform 180ms ease, opacity 150ms ease;
+  transition:
+    transform 180ms ease,
+    opacity 150ms ease;
 }
 
 .sidebar.is-collapsed {
@@ -249,7 +263,7 @@ select:disabled {
   gap: 9px;
   font-size: 16px;
   font-weight: 700;
-  letter-spacing: -.25px;
+  letter-spacing: -0.25px;
 }
 
 .brand-mark {
@@ -261,7 +275,9 @@ select:disabled {
   border-radius: 10px;
   color: #f8fbf6;
   background: linear-gradient(145deg, #6d8a6b, #405743);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), 0 2px 6px rgb(38 63 40 / 18%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 22%),
+    0 2px 6px rgb(38 63 40 / 18%);
 }
 
 .brand-mark svg {
@@ -274,7 +290,7 @@ select:disabled {
   font-size: 11px;
   font-style: normal;
   font-weight: 600;
-  letter-spacing: .2px;
+  letter-spacing: 0.2px;
   text-transform: uppercase;
 }
 
@@ -298,7 +314,10 @@ select:disabled {
   font-size: 13px;
   font-weight: 600;
   text-align: left;
-  transition: border 140ms ease, background 140ms ease, transform 140ms ease;
+  transition:
+    border 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
 }
 
 .new-chat-button:hover {
@@ -307,7 +326,7 @@ select:disabled {
 }
 
 .new-chat-button:active {
-  transform: scale(.985);
+  transform: scale(0.985);
 }
 
 .new-chat-button kbd {
@@ -328,7 +347,9 @@ select:disabled {
   border-radius: 9px;
   color: var(--text-tertiary);
   background: color-mix(in srgb, var(--surface), transparent 40%);
-  transition: border 140ms ease, background 140ms ease;
+  transition:
+    border 140ms ease,
+    background 140ms ease;
 }
 
 .search-box:focus-within {
@@ -351,7 +372,7 @@ select:disabled {
 }
 
 .search-box input::-webkit-search-cancel-button {
-  opacity: .5;
+  opacity: 0.5;
 }
 
 .conversation-nav {
@@ -386,7 +407,7 @@ select:disabled {
   color: var(--text-tertiary);
   font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: .6px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
 }
 
@@ -407,7 +428,10 @@ select:disabled {
   color: var(--text-tertiary);
   background: transparent;
   opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .conversation-group-heading:hover .workspace-new-chat,
@@ -463,7 +487,9 @@ select:disabled {
   align-items: center;
   border-radius: 8px;
   color: var(--text-secondary);
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .conversation-item:hover,
@@ -518,7 +544,10 @@ select:disabled {
   color: var(--text-tertiary);
   background: color-mix(in srgb, var(--sidebar-active), transparent 4%);
   opacity: 0;
-  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .conversation-item:hover .conversation-action,
@@ -725,7 +754,7 @@ select:disabled {
   min-width: 0;
   font-size: 13.5px;
   font-weight: 600;
-  letter-spacing: -.1px;
+  letter-spacing: -0.1px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -771,7 +800,9 @@ select:disabled {
   border-radius: 10px;
   background: var(--surface-raised);
   box-shadow: var(--shadow-sm);
-  transition: border 140ms ease, background 140ms ease;
+  transition:
+    border 140ms ease,
+    background 140ms ease;
 }
 
 .model-select:hover {
@@ -807,7 +838,7 @@ select:disabled {
   color: var(--text-tertiary);
   font-size: 8.5px;
   font-weight: 600;
-  letter-spacing: .45px;
+  letter-spacing: 0.45px;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -954,8 +985,14 @@ select:disabled {
 }
 
 @keyframes message-in {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .message-avatar {
@@ -1029,7 +1066,10 @@ select:disabled {
 }
 
 @keyframes pulse {
-  50% { opacity: .35; transform: scale(.8); }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
 }
 
 .message-body {
@@ -1055,7 +1095,7 @@ select:disabled {
 .message-body h4 {
   margin: 19px 0 8px;
   line-height: 1.35;
-  letter-spacing: -.25px;
+  letter-spacing: -0.25px;
 }
 
 .message-body h1:first-child,
@@ -1065,10 +1105,18 @@ select:disabled {
   margin-top: 0;
 }
 
-.message-body h1 { font-size: 19px; }
-.message-body h2 { font-size: 17px; }
-.message-body h3 { font-size: 15px; }
-.message-body h4 { font-size: 14px; }
+.message-body h1 {
+  font-size: 19px;
+}
+.message-body h2 {
+  font-size: 17px;
+}
+.message-body h3 {
+  font-size: 15px;
+}
+.message-body h4 {
+  font-size: 14px;
+}
 
 .message-body ul,
 .message-body ol {
@@ -1630,7 +1678,9 @@ select:disabled {
   border: 1px solid var(--border-strong);
   border-radius: 15px 5px 15px 15px;
   background: var(--surface-raised);
-  box-shadow: 0 8px 28px rgb(25 31 24 / 7%), 0 1px 3px rgb(25 31 24 / 5%);
+  box-shadow:
+    0 8px 28px rgb(25 31 24 / 7%),
+    0 1px 3px rgb(25 31 24 / 5%);
 }
 
 .user-bubble-editing:focus-within {
@@ -1793,12 +1843,24 @@ select:disabled {
   animation: typing 1.15s ease-in-out infinite;
 }
 
-.typing-indicator i:nth-child(2) { animation-delay: 140ms; }
-.typing-indicator i:nth-child(3) { animation-delay: 280ms; }
+.typing-indicator i:nth-child(2) {
+  animation-delay: 140ms;
+}
+.typing-indicator i:nth-child(3) {
+  animation-delay: 280ms;
+}
 
 @keyframes typing {
-  0%, 60%, 100% { opacity: .3; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-3px); }
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 /* Empty chat */
@@ -1824,7 +1886,9 @@ select:disabled {
   border-radius: 18px;
   color: #f8fbf6;
   background: linear-gradient(145deg, #789477, #415b45);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 20%), 0 10px 24px rgb(46 75 49 / 18%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 20%),
+    0 10px 24px rgb(46 75 49 / 18%);
 }
 
 .welcome-eyebrow {
@@ -1839,7 +1903,7 @@ select:disabled {
   margin: 5px 0;
   font-size: clamp(24px, 3vw, 32px);
   font-weight: 600;
-  letter-spacing: -.8px;
+  letter-spacing: -0.8px;
 }
 
 .welcome-subtitle {
@@ -1868,7 +1932,10 @@ select:disabled {
   background: color-mix(in srgb, var(--surface-raised), transparent 12%);
   box-shadow: var(--shadow-sm);
   text-align: left;
-  transition: transform 150ms ease, border 150ms ease, background 150ms ease;
+  transition:
+    transform 150ms ease,
+    border 150ms ease,
+    background 150ms ease;
 }
 
 .suggestion-card:hover {
@@ -1918,7 +1985,9 @@ select:disabled {
   color: var(--text-tertiary);
   opacity: 0;
   transform: translateX(-3px);
-  transition: opacity 150ms ease, transform 150ms ease;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
 }
 
 .suggestion-card:hover .suggestion-arrow {
@@ -1942,8 +2011,12 @@ select:disabled {
   border: 1px solid var(--border-strong);
   border-radius: 17px;
   background: var(--surface-raised);
-  box-shadow: 0 8px 28px rgb(25 31 24 / 7%), 0 1px 3px rgb(25 31 24 / 5%);
-  transition: border 150ms ease, box-shadow 150ms ease;
+  box-shadow:
+    0 8px 28px rgb(25 31 24 / 7%),
+    0 1px 3px rgb(25 31 24 / 5%);
+  transition:
+    border 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .composer.has-context-error {
@@ -1952,7 +2025,9 @@ select:disabled {
 
 .composer.has-context-error:focus-within {
   border-color: var(--danger);
-  box-shadow: 0 10px 34px rgb(25 31 24 / 10%), 0 0 0 3px color-mix(in srgb, var(--danger), transparent 90%);
+  box-shadow:
+    0 10px 34px rgb(25 31 24 / 10%),
+    0 0 0 3px color-mix(in srgb, var(--danger), transparent 90%);
 }
 
 .context-notice {
@@ -1996,7 +2071,9 @@ select:disabled {
 
 .composer:focus-within {
   border-color: color-mix(in srgb, var(--accent), transparent 45%);
-  box-shadow: 0 10px 34px rgb(25 31 24 / 10%), 0 0 0 3px color-mix(in srgb, var(--accent), transparent 90%);
+  box-shadow:
+    0 10px 34px rgb(25 31 24 / 10%),
+    0 0 0 3px color-mix(in srgb, var(--accent), transparent 90%);
 }
 
 .composer textarea {
@@ -2113,7 +2190,7 @@ select:disabled {
   color: var(--text-tertiary);
   background: var(--surface-soft);
   cursor: not-allowed;
-  opacity: .62;
+  opacity: 0.62;
 }
 
 .web-search-pill > span {
@@ -2204,7 +2281,10 @@ select:disabled {
   color: #fff;
   background: var(--accent);
   box-shadow: 0 2px 6px color-mix(in srgb, var(--accent), transparent 65%);
-  transition: background 140ms ease, transform 140ms ease, opacity 140ms ease;
+  transition:
+    background 140ms ease,
+    transform 140ms ease,
+    opacity 140ms ease;
 }
 
 .send-button:hover:not(:disabled) {
@@ -2213,7 +2293,7 @@ select:disabled {
 }
 
 .send-button:active:not(:disabled) {
-  transform: scale(.95);
+  transform: scale(0.95);
 }
 
 .send-button:disabled {
@@ -2251,8 +2331,12 @@ select:disabled {
 }
 
 @keyframes backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .new-conversation-dialog {
@@ -2265,7 +2349,7 @@ select:disabled {
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow-md);
-  animation: dialog-in 190ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: dialog-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .new-conversation-header {
@@ -2330,7 +2414,10 @@ select:disabled {
   color: var(--text);
   background: var(--surface-soft);
   text-align: left;
-  transition: border-color 130ms ease, background 130ms ease, transform 130ms ease;
+  transition:
+    border-color 130ms ease,
+    background 130ms ease,
+    transform 130ms ease;
 }
 
 .workspace-choice-card:hover {
@@ -2406,7 +2493,7 @@ select:disabled {
   color: var(--text-tertiary);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: .5px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
@@ -2481,12 +2568,18 @@ select:disabled {
   border-radius: 19px;
   background: var(--surface);
   box-shadow: var(--shadow-md);
-  animation: dialog-in 190ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: dialog-in 190ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @keyframes dialog-in {
-  from { opacity: 0; transform: translateY(8px) scale(.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .settings-sidebar {
@@ -2584,7 +2677,7 @@ select:disabled {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  letter-spacing: -.3px;
+  letter-spacing: -0.3px;
 }
 
 .settings-header p {
@@ -2790,7 +2883,7 @@ select:disabled {
   border-radius: 16px;
   background: var(--surface);
   box-shadow: var(--shadow-md);
-  animation: dialog-in 180ms cubic-bezier(.2, .8, .2, 1) both;
+  animation: dialog-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 .avatar-crop-header {
@@ -2853,8 +2946,21 @@ select:disabled {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, transparent 33.1%, rgb(255 255 255 / 35%) 33.2% 33.5%, transparent 33.6% 66.4%, rgb(255 255 255 / 35%) 66.5% 66.8%, transparent 66.9%),
-    linear-gradient(transparent 33.1%, rgb(255 255 255 / 35%) 33.2% 33.5%, transparent 33.6% 66.4%, rgb(255 255 255 / 35%) 66.5% 66.8%, transparent 66.9%);
+    linear-gradient(
+      90deg,
+      transparent 33.1%,
+      rgb(255 255 255 / 35%) 33.2% 33.5%,
+      transparent 33.6% 66.4%,
+      rgb(255 255 255 / 35%) 66.5% 66.8%,
+      transparent 66.9%
+    ),
+    linear-gradient(
+      transparent 33.1%,
+      rgb(255 255 255 / 35%) 33.2% 33.5%,
+      transparent 33.6% 66.4%,
+      rgb(255 255 255 / 35%) 66.5% 66.8%,
+      transparent 66.9%
+    );
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
   opacity: 0;
   transition: opacity 120ms ease;
@@ -2908,7 +3014,7 @@ select:disabled {
   color: var(--text-tertiary);
   font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: .7px;
+  letter-spacing: 0.7px;
   text-transform: uppercase;
 }
 
@@ -3057,7 +3163,7 @@ select:disabled {
 }
 
 .settings-toggle.is-disabled {
-  opacity: .45;
+  opacity: 0.45;
 }
 
 .system-prompt-field {
@@ -3320,7 +3426,9 @@ select:disabled {
   color: var(--text-secondary);
   background: var(--surface-soft);
   text-align: left;
-  transition: border 140ms ease, background 140ms ease;
+  transition:
+    border 140ms ease,
+    background 140ms ease;
 }
 
 .context-policy-options > button:hover {
@@ -3544,7 +3652,9 @@ select:disabled {
   color: var(--accent-text);
   background: color-mix(in srgb, var(--accent-soft), transparent 24%);
   text-align: left;
-  transition: border 140ms ease, background 140ms ease;
+  transition:
+    border 140ms ease,
+    background 140ms ease;
 }
 
 .cliproxy-preset-button:hover {
@@ -3796,7 +3906,9 @@ select:disabled {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface-soft);
-  transition: border 140ms ease, box-shadow 140ms ease;
+  transition:
+    border 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .token-stepper:focus-within {
@@ -3812,7 +3924,9 @@ select:disabled {
   place-items: center;
   color: var(--text-secondary);
   background: transparent;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .token-stepper > button:first-child {
@@ -4296,10 +4410,14 @@ select:disabled {
   border: 1.5px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  animation: spin .7s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .encryption-hero {
   display: flex;
@@ -4609,7 +4727,7 @@ select:disabled {
 }
 
 .danger-button:disabled {
-  opacity: .52;
+  opacity: 0.52;
 }
 
 .about-panel {
@@ -4636,7 +4754,7 @@ select:disabled {
 .about-panel h2 {
   margin: 17px 0 3px;
   font-size: 22px;
-  letter-spacing: -.4px;
+  letter-spacing: -0.4px;
 }
 
 .about-panel > p {
@@ -4651,7 +4769,11 @@ select:disabled {
   border-radius: 9px;
   color: var(--text-tertiary);
   background: var(--surface-soft);
-  font: 8.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    8.5px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
 }
 
 .about-links {
@@ -4735,7 +4857,9 @@ select:disabled {
   background: var(--surface-raised);
   color: var(--text);
   font-size: 11.5px;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .skills-search-box input:focus {
@@ -4819,7 +4943,10 @@ select:disabled {
   border-radius: 12px;
   background: var(--surface-raised);
   box-shadow: 0 2px 8px rgb(0 0 0 / 4%);
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    border-color 140ms ease;
 }
 
 .skill-card:hover {
@@ -4828,7 +4955,7 @@ select:disabled {
 }
 
 .skill-card.is-disabled {
-  opacity: .65;
+  opacity: 0.65;
   background: var(--surface-soft);
 }
 
@@ -4981,7 +5108,9 @@ select:disabled {
   color: var(--text-tertiary);
   font-size: 10px;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
 }
 
 .skill-prompt-header-btn:hover {
@@ -5320,8 +5449,12 @@ select:disabled {
 }
 
 @keyframes loading-slide {
-  from { transform: translateX(0); }
-  to { transform: translateX(122%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(122%);
+  }
 }
 
 .fatal-state > span {
@@ -5369,8 +5502,14 @@ select:disabled {
 }
 
 @keyframes toast-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 860px) {
@@ -5427,7 +5566,9 @@ select:disabled {
 /* File attachments & Multimodal */
 .composer-wrap.is-drag-over .composer {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent), transparent 80%), 0 10px 34px rgb(25 31 24 / 15%);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent), transparent 80%),
+    0 10px 34px rgb(25 31 24 / 15%);
 }
 
 .composer-attachments {
@@ -5550,7 +5691,9 @@ select:disabled {
   overflow: hidden;
   background: var(--surface-raised);
   cursor: pointer;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .message-attachment-image-card:hover {
@@ -5821,12 +5964,11 @@ select:disabled {
   *::before,
   *::after {
     scroll-behavior: auto !important;
-    animation-duration: .01ms !important;
+    animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
-
 
 /* ==========================================================================
    MCP (Model Context Protocol) Settings & Tools Styles

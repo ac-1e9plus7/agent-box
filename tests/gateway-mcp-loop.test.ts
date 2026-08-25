@@ -98,58 +98,70 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
 
     // Turn 1 SSE: Model outputs tool call
-    const turn1Chunk1 = 'data: ' + JSON.stringify({
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                id: 'call_calc_999',
-                type: 'function',
-                function: { name: 'calculate_sum', arguments: '{"a": 20, ' },
-              },
-            ],
+    const turn1Chunk1 =
+      'data: ' +
+      JSON.stringify({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_calc_999',
+                  type: 'function',
+                  function: { name: 'calculate_sum', arguments: '{"a": 20, ' },
+                },
+              ],
+            },
           },
-        },
-      ],
-    }) + '\n\n'
+        ],
+      }) +
+      '\n\n'
 
-    const turn1Chunk2 = 'data: ' + JSON.stringify({
-      choices: [
-        {
-          delta: {
-            tool_calls: [
-              {
-                index: 0,
-                function: { arguments: '"b": 22}' },
-              },
-            ],
+    const turn1Chunk2 =
+      'data: ' +
+      JSON.stringify({
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  function: { arguments: '"b": 22}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
           },
-          finish_reason: 'tool_calls',
-        },
-      ],
-    }) + '\n\n'
+        ],
+      }) +
+      '\n\n'
 
     const turn1Chunk3 = 'data: [DONE]\n\n'
 
     // Turn 2 SSE: Model outputs final answer text
-    const turn2Chunk1 = 'data: ' + JSON.stringify({
-      choices: [
-        {
-          delta: { content: 'The calculation result is 42.' },
-        },
-      ],
-    }) + '\n\n'
+    const turn2Chunk1 =
+      'data: ' +
+      JSON.stringify({
+        choices: [
+          {
+            delta: { content: 'The calculation result is 42.' },
+          },
+        ],
+      }) +
+      '\n\n'
 
-    const turn2Chunk2 = 'data: ' + JSON.stringify({
-      choices: [
-        {
-          delta: {},
-          finish_reason: 'stop',
-        },
-      ],
-    }) + '\n\n'
+    const turn2Chunk2 =
+      'data: ' +
+      JSON.stringify({
+        choices: [
+          {
+            delta: {},
+            finish_reason: 'stop',
+          },
+        ],
+      }) +
+      '\n\n'
 
     const turn2Chunk3 = 'data: [DONE]\n\n'
 
@@ -167,7 +179,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       events.push(event)
     }
 
-    const createdModel = repo.listModels().find(m => m.remoteId === 'test/auto-model')!
+    const createdModel = repo.listModels().find((m) => m.remoteId === 'test/auto-model')!
     const request: ChatRequest = {
       conversationId: 'conv-test-1',
       modelId: createdModel.id,
@@ -185,7 +197,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
 
     await gateway.stream('req-mcp-loop-1', request, emit)
 
-    const errEvent = events.find(e => e.type === 'error')
+    const errEvent = events.find((e) => e.type === 'error')
     if (errEvent) {
       console.error('GATEWAY ERROR EVENT:', errEvent)
     }
@@ -198,9 +210,10 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     expect(events.some((e) => e.type === 'tool-call-args' && e.delta.includes('"b": 22}'))).toBe(true)
     expect(events.some((e) => e.type === 'tool-call-complete' && (e as any).args.a === 20)).toBe(true)
     expect(events.some((e) => e.type === 'tool-result' && (e as any).result === 'Sum is: 42')).toBe(true)
-    expect(events.some((e) => e.type === 'text-delta' && (e as any).delta === 'The calculation result is 42.')).toBe(true)
+    expect(events.some((e) => e.type === 'text-delta' && (e as any).delta === 'The calculation result is 42.')).toBe(
+      true,
+    )
     expect(events.some((e) => e.type === 'done')).toBe(true)
-
   })
 
   it('lets the model load a skill on demand without executing MCP', async () => {
@@ -224,13 +237,24 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
 
     const events: StreamEvent[] = []
-    await gateway.stream('req-skill-loader', {
-      conversationId: 'conversation-skill-loader',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-skill-loader', role: 'user', content: 'Choose a specialist workflow if needed.', createdAt: new Date().toISOString() }],
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-skill-loader',
+      {
+        conversationId: 'conversation-skill-loader',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-skill-loader',
+            role: 'user',
+            content: 'Choose a specialist workflow if needed.',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(fetchCount).toBe(2)
     expect(execute).not.toHaveBeenCalled()
@@ -240,7 +264,9 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       skill: { id: 'translator-polyglot', name: '专业多语言精翻与本地化', source: 'model', turn: 1 },
     })
     expect(JSON.stringify(requestBodies[1])).toContain('三步翻译法')
-    expect(events.some((event) => event.type === 'tool-result' && event.callId === 'call-load-skill' && !event.isError)).toBe(true)
+    expect(
+      events.some((event) => event.type === 'tool-result' && event.callId === 'call-load-skill' && !event.isError),
+    ).toBe(true)
   })
 
   it('executes approved built-in JavaScript and returns the real result to the model', async () => {
@@ -263,17 +289,28 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
 
     const events: StreamEvent[] = []
-    await gateway.stream('req-run-code', {
-      conversationId: 'conversation-run-code',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-run-code', role: 'user', content: '请运行代码验证 6 * 7', createdAt: new Date().toISOString() }],
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-run-code',
+      {
+        conversationId: 'conversation-run-code',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          { id: 'user-run-code', role: 'user', content: '请运行代码验证 6 * 7', createdAt: new Date().toISOString() },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(fetchCount).toBe(2)
     expect(executeMcp).not.toHaveBeenCalled()
-    expect(events.some((event) => event.type === 'tool-result' && event.callId === 'call-run-code' && event.result === '42' && !event.isError)).toBe(true)
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'tool-result' && event.callId === 'call-run-code' && event.result === '42' && !event.isError,
+      ),
+    ).toBe(true)
     expect(events.some((event) => event.type === 'text-delta' && event.delta.includes('42'))).toBe(true)
   })
 
@@ -301,21 +338,37 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
 
     const events: StreamEvent[] = []
-    await gateway.stream('req-run-terminal', {
-      conversationId: 'conversation-run-terminal',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-run-terminal', role: 'user', content: '请通过终端输出 terminal-42', createdAt: new Date().toISOString() }],
-      workingDirectory: tempDirectory,
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-run-terminal',
+      {
+        conversationId: 'conversation-run-terminal',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-run-terminal',
+            role: 'user',
+            content: '请通过终端输出 terminal-42',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        workingDirectory: tempDirectory,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(fetchCount).toBe(2)
     expect(executeMcp).not.toHaveBeenCalled()
-    expect(events.some((event) => event.type === 'tool-result'
-      && event.callId === 'call-run-terminal'
-      && event.result.includes(tempDirectory)
-      && !event.isError)).toBe(true)
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'tool-result' &&
+          event.callId === 'call-run-terminal' &&
+          event.result.includes(tempDirectory) &&
+          !event.isError,
+      ),
+    ).toBe(true)
   })
 
   it('writes and reads workspace files without shell escaping', async () => {
@@ -345,25 +398,41 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
 
     const events: StreamEvent[] = []
-    await gateway.stream('req-workspace-file', {
-      conversationId: 'conversation-workspace-file',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-workspace-file', role: 'user', content: '请将代码写入 generated/example.ts 并复核', createdAt: new Date().toISOString() }],
-      workingDirectory: tempDirectory,
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-workspace-file',
+      {
+        conversationId: 'conversation-workspace-file',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-workspace-file',
+            role: 'user',
+            content: '请将代码写入 generated/example.ts 并复核',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        workingDirectory: tempDirectory,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(fetchCount).toBe(3)
     expect(executeMcp).not.toHaveBeenCalled()
     expect(readFileSync(join(tempDirectory, 'generated', 'example.ts'), 'utf8')).toBe(content)
-    expect(events.some((event) => event.type === 'tool-result'
-      && event.callId === 'call-write-file'
-      && !event.isError)).toBe(true)
-    expect(events.some((event) => event.type === 'tool-result'
-      && event.callId === 'call-read-file'
-      && event.result.includes('console.log("你好", template)')
-      && !event.isError)).toBe(true)
+    expect(
+      events.some((event) => event.type === 'tool-result' && event.callId === 'call-write-file' && !event.isError),
+    ).toBe(true)
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'tool-result' &&
+          event.callId === 'call-read-file' &&
+          event.result.includes('console.log("你好", template)') &&
+          !event.isError,
+      ),
+    ).toBe(true)
   })
 
   it('replays an interrupted Agent checkpoint when the user continues', async () => {
@@ -379,29 +448,45 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
 
     const checkpointId = 'assistant-interrupted-checkpoint'
     const events: StreamEvent[] = []
-    await gateway.stream('req-resume-checkpoint', {
-      conversationId: 'conversation-resume-checkpoint',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [
-        { id: 'user-original', role: 'user', content: 'Create the project files', createdAt: new Date().toISOString() },
-        {
-          id: checkpointId,
-          role: 'assistant',
-          content: 'Created the first file.',
-          agentTrace: [
-            { type: 'tool_call', turn: 1, callId: 'write-one', toolName: 'write_file', modelToolName: 'agentbox_write_file', args: { path: 'one.ts', content: 'export {}' } },
-            { type: 'tool_result', turn: 1, callId: 'write-one', toolName: 'write_file', result: 'file written' },
-          ],
-          interruption: { reason: 'network', message: 'network disconnected', occurredAt: new Date().toISOString() },
-          createdAt: new Date().toISOString(),
-        },
-        { id: 'user-resume', role: 'user', content: '继续', createdAt: new Date().toISOString() },
-      ],
-      workingDirectory: tempDirectory,
-      resumeFromMessageId: checkpointId,
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-resume-checkpoint',
+      {
+        conversationId: 'conversation-resume-checkpoint',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-original',
+            role: 'user',
+            content: 'Create the project files',
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: checkpointId,
+            role: 'assistant',
+            content: 'Created the first file.',
+            agentTrace: [
+              {
+                type: 'tool_call',
+                turn: 1,
+                callId: 'write-one',
+                toolName: 'write_file',
+                modelToolName: 'agentbox_write_file',
+                args: { path: 'one.ts', content: 'export {}' },
+              },
+              { type: 'tool_result', turn: 1, callId: 'write-one', toolName: 'write_file', result: 'file written' },
+            ],
+            interruption: { reason: 'network', message: 'network disconnected', occurredAt: new Date().toISOString() },
+            createdAt: new Date().toISOString(),
+          },
+          { id: 'user-resume', role: 'user', content: '继续', createdAt: new Date().toISOString() },
+        ],
+        workingDirectory: tempDirectory,
+        resumeFromMessageId: checkpointId,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(requestBody).toContain('从中断现场继续')
     expect(requestBody).toContain('file written')
@@ -412,18 +497,20 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
   it('waits for explicit approval before executing a sensitive tool', async () => {
     vi.useFakeTimers()
     await repo.updateSettings({ mcpToolApprovalPolicy: 'always' })
-    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
-      name: 'send_email',
-      modelName: 'mcp_mail_send_email',
-      description: 'Send an email',
-      inputSchema: {
-        type: 'object',
-        properties: { to: { type: 'string' } },
-        required: ['to'],
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'send_email',
+        modelName: 'mcp_mail_send_email',
+        description: 'Send an email',
+        inputSchema: {
+          type: 'object',
+          properties: { to: { type: 'string' } },
+          required: ['to'],
+        },
+        serverId: 'mail-server',
+        serverName: 'Mail',
       },
-      serverId: 'mail-server',
-      serverName: 'Mail',
-    }])
+    ])
     const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
       result: 'sent',
       isError: false,
@@ -449,16 +536,27 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       resolveApproval = resolve
     })
     const events: StreamEvent[] = []
-    const stream = gateway.stream('req-approval', {
-      conversationId: 'conversation-approval',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-approval', role: 'user', content: 'Use send_email to contact a@example.com', createdAt: new Date().toISOString() }],
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => {
-      events.push(event)
-      if (event.type === 'tool-approval-required') resolveApproval(event)
-    })
+    const stream = gateway.stream(
+      'req-approval',
+      {
+        conversationId: 'conversation-approval',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-approval',
+            role: 'user',
+            content: 'Use send_email to contact a@example.com',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => {
+        events.push(event)
+        if (event.type === 'tool-approval-required') resolveApproval(event)
+      },
+    )
 
     const approvalEvent = await approval
     expect(execute).not.toHaveBeenCalled()
@@ -476,20 +574,23 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
   it('can wait for tool approval indefinitely until the user decides', async () => {
     vi.useFakeTimers()
     const controller = new AbortController()
-    const waitForToolApproval = (gateway as unknown as {
-      waitForToolApproval: (
-        requestId: string,
-        callId: string,
-        signal: AbortSignal,
-        timeoutMode: 'five-minutes' | 'never',
-      ) => Promise<boolean>
-    }).waitForToolApproval.bind(gateway)
+    const waitForToolApproval = (
+      gateway as unknown as {
+        waitForToolApproval: (
+          requestId: string,
+          callId: string,
+          signal: AbortSignal,
+          timeoutMode: 'five-minutes' | 'never',
+        ) => Promise<boolean>
+      }
+    ).waitForToolApproval.bind(gateway)
     let settled = false
-    const waiting = waitForToolApproval('req-no-timeout', 'call-no-timeout', controller.signal, 'never')
-      .then((approved) => {
+    const waiting = waitForToolApproval('req-no-timeout', 'call-no-timeout', controller.signal, 'never').then(
+      (approved) => {
         settled = true
         return approved
-      })
+      },
+    )
 
     await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1_000)
     expect(settled).toBe(false)
@@ -499,14 +600,16 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
 
   it('executes at most thirty tool turns by default and always emits a terminal event', async () => {
     await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
-    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
-      name: 'loop_tool',
-      modelName: 'mcp_loop_tool',
-      description: 'Loop tool',
-      inputSchema: { type: 'object', properties: {} },
-      serverId: 'loop-server',
-      serverName: 'Loop',
-    }])
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'loop_tool',
+        modelName: 'mcp_loop_tool',
+        description: 'Loop tool',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'loop-server',
+        serverName: 'Loop',
+      },
+    ])
     const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
       result: 'continue',
       isError: false,
@@ -521,13 +624,19 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       ])
     })
     const events: StreamEvent[] = []
-    await gateway.stream('req-loop-limit', {
-      conversationId: 'conversation-loop-limit',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-loop', role: 'user', content: 'Use loop_tool repeatedly', createdAt: new Date().toISOString() }],
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-loop-limit',
+      {
+        conversationId: 'conversation-loop-limit',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          { id: 'user-loop', role: 'user', content: 'Use loop_tool repeatedly', createdAt: new Date().toISOString() },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(fetchCount).toBe(31)
     expect(execute).toHaveBeenCalledTimes(30)
@@ -536,14 +645,16 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
 
   it('respects a user-configured Agent tool turn limit', async () => {
     await repo.updateSettings({ agentToolTurnLimit: 2, mcpToolApprovalPolicy: 'full-access' })
-    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([{
-      name: 'configured_loop_tool',
-      modelName: 'mcp_configured_loop_tool',
-      description: 'Configured loop tool',
-      inputSchema: { type: 'object', properties: {} },
-      serverId: 'configured-loop-server',
-      serverName: 'Configured Loop',
-    }])
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'configured_loop_tool',
+        modelName: 'mcp_configured_loop_tool',
+        description: 'Configured loop tool',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'configured-loop-server',
+        serverName: 'Configured Loop',
+      },
+    ])
     const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
       result: 'continue',
       isError: false,
@@ -559,13 +670,24 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     })
 
     const events: StreamEvent[] = []
-    await gateway.stream('req-configured-loop-limit', {
-      conversationId: 'conversation-configured-loop-limit',
-      modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
-      messages: [{ id: 'user-configured-loop', role: 'user', content: 'Use configured_loop_tool repeatedly', createdAt: new Date().toISOString() }],
-      agentMode: true,
-      reasoningEnabled: false,
-    }, (event) => events.push(event))
+    await gateway.stream(
+      'req-configured-loop-limit',
+      {
+        conversationId: 'conversation-configured-loop-limit',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-configured-loop',
+            role: 'user',
+            content: 'Use configured_loop_tool repeatedly',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
 
     expect(fetchCount).toBe(3)
     expect(execute).toHaveBeenCalledTimes(2)

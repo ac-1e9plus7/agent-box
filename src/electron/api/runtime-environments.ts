@@ -9,7 +9,7 @@ import type {
   RuntimeTestResult,
 } from '../../shared/types'
 import { normalizeRuntimePathInput } from '../runtime-path'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 export interface ResolvedRuntime {
   kind: DeveloperRuntimeKind
@@ -28,7 +28,12 @@ export async function resolveDeveloperRuntime(
   settings: DeveloperRuntimeSettings,
   workingDirectory?: string,
 ): Promise<ResolvedRuntime | undefined> {
-  const cacheKey = JSON.stringify([kind, settings[kind], kind === 'python' ? workingDirectory || '' : '', process.platform])
+  const cacheKey = JSON.stringify([
+    kind,
+    settings[kind],
+    kind === 'python' ? workingDirectory || '' : '',
+    process.platform,
+  ])
   let cached = runtimeCache.get(cacheKey)
   if (!cached) {
     cached = resolveRuntimeUncached(kind, settings, workingDirectory)
@@ -55,7 +60,9 @@ export async function testDeveloperRuntime(
     : {
         kind,
         ok: false,
-        message: t("No usable {value0} runtime was found. Check auto-detection or specify a path.", { value0: runtimeDisplayName(kind) }),
+        message: t('No usable {value0} runtime was found. Check auto-detection or specify a path.', {
+          value0: runtimeDisplayName(kind),
+        }),
       }
 }
 
@@ -85,7 +92,9 @@ export async function buildDeveloperEnvironment(
       env.VIRTUAL_ENV = python.environmentPath
     }
   }
-  env[pathKey] = [...new Set(pathEntries), env[pathKey] || ''].filter(Boolean).join(process.platform === 'win32' ? ';' : ':')
+  env[pathKey] = [...new Set(pathEntries), env[pathKey] || '']
+    .filter(Boolean)
+    .join(process.platform === 'win32' ? ';' : ':')
   return env
 }
 
@@ -96,9 +105,7 @@ export function pythonExecutableInEnvironment(environmentPath: string, platform:
 }
 
 export function pythonExecutableInCondaEnvironment(environmentPath: string, platform: NodeJS.Platform): string {
-  return platform === 'win32'
-    ? win32.join(environmentPath, 'python.exe')
-    : posix.join(environmentPath, 'bin', 'python')
+  return platform === 'win32' ? win32.join(environmentPath, 'python.exe') : posix.join(environmentPath, 'bin', 'python')
 }
 
 export async function listCondaEnvironments(condaExecutableInput: string): Promise<CondaEnvironmentListResult> {
@@ -110,7 +117,9 @@ export async function listCondaEnvironments(condaExecutableInput: string): Promi
       ok: false,
       condaExecutable,
       environments: [],
-      message: detail ? t("Unable to read Conda environment: {value0}", { value0: detail }) : t("No usable Conda executable was found."),
+      message: detail
+        ? t('Unable to read Conda environment: {value0}', { value0: detail })
+        : t('No usable Conda executable was found.'),
     }
   }
 
@@ -120,16 +129,17 @@ export async function listCondaEnvironments(condaExecutableInput: string): Promi
       ok: true,
       condaExecutable,
       environments,
-      message: environments.length > 0
-        ? t("{value0} Conda environments found.", { value0: environments.length })
-        : t("Conda is available but returned no environments."),
+      message:
+        environments.length > 0
+          ? t('{value0} Conda environments found.', { value0: environments.length })
+          : t('Conda is available but returned no environments.'),
     }
   } catch {
     return {
       ok: false,
       condaExecutable,
       environments: [],
-      message: t("Conda returned an environment list that could not be parsed."),
+      message: t('Conda returned an environment list that could not be parsed.'),
     }
   }
 }
@@ -143,13 +153,11 @@ export function parseCondaEnvironments(output: string, platform: NodeJS.Platform
   if (!Array.isArray(parsed.envs)) throw new Error('Invalid Conda environment list')
 
   const pathApi = platform === 'win32' ? win32 : posix
-  const comparable = (value: string): string => platform === 'win32' ? value.toLowerCase() : value
-  const rootPrefix = typeof parsed.root_prefix === 'string'
-    ? comparable(pathApi.normalize(parsed.root_prefix))
-    : undefined
-  const activePrefix = typeof parsed.active_prefix === 'string'
-    ? comparable(pathApi.normalize(parsed.active_prefix))
-    : undefined
+  const comparable = (value: string): string => (platform === 'win32' ? value.toLowerCase() : value)
+  const rootPrefix =
+    typeof parsed.root_prefix === 'string' ? comparable(pathApi.normalize(parsed.root_prefix)) : undefined
+  const activePrefix =
+    typeof parsed.active_prefix === 'string' ? comparable(pathApi.normalize(parsed.active_prefix)) : undefined
   const seen = new Set<string>()
   const environments: CondaEnvironment[] = []
 
@@ -175,27 +183,40 @@ async function resolveRuntimeUncached(
 ): Promise<ResolvedRuntime | undefined> {
   if (kind === 'jdk') {
     const config = settings.jdk
-    const candidates = config.mode === 'custom'
-      ? [join(config.home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')]
-      : [
-          process.env.JAVA_HOME ? join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java') : '',
-          process.platform === 'win32' ? 'java.exe' : 'java',
-        ]
-    return probeCandidates('jdk', candidates, ['-version'], config.mode === 'custom' ? config.home : process.env.JAVA_HOME)
+    const candidates =
+      config.mode === 'custom'
+        ? [join(config.home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')]
+        : [
+            process.env.JAVA_HOME
+              ? join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')
+              : '',
+            process.platform === 'win32' ? 'java.exe' : 'java',
+          ]
+    return probeCandidates(
+      'jdk',
+      candidates,
+      ['-version'],
+      config.mode === 'custom' ? config.home : process.env.JAVA_HOME,
+    )
   }
   if (kind === 'go') {
     const config = settings.go
-    const candidates = config.mode === 'custom'
-      ? [config.executable || join(config.root, 'bin', process.platform === 'win32' ? 'go.exe' : 'go')]
-      : [
-          process.env.GOROOT ? join(process.env.GOROOT, 'bin', process.platform === 'win32' ? 'go.exe' : 'go') : '',
-          process.platform === 'win32' ? 'go.exe' : 'go',
-        ]
+    const candidates =
+      config.mode === 'custom'
+        ? [config.executable || join(config.root, 'bin', process.platform === 'win32' ? 'go.exe' : 'go')]
+        : [
+            process.env.GOROOT ? join(process.env.GOROOT, 'bin', process.platform === 'win32' ? 'go.exe' : 'go') : '',
+            process.platform === 'win32' ? 'go.exe' : 'go',
+          ]
     return probeCandidates('go', candidates, ['version'], config.root || process.env.GOROOT)
   }
   if (kind === 'php') {
     const config = settings.php
-    return probeCandidates('php', [config.mode === 'custom' ? config.executable : (process.platform === 'win32' ? 'php.exe' : 'php')], ['-v'])
+    return probeCandidates(
+      'php',
+      [config.mode === 'custom' ? config.executable : process.platform === 'win32' ? 'php.exe' : 'php'],
+      ['-v'],
+    )
   }
   return resolvePythonRuntime(settings, workingDirectory)
 }
@@ -218,14 +239,15 @@ async function resolvePythonRuntime(
     return probeCandidates('python', [config.executable], ['--version'])
   }
 
-  const environments: Array<{ path: string; layout: 'venv' | 'conda' }> = config.mode === 'auto'
-    ? [
-        { path: workingDirectory ? join(workingDirectory, '.venv') : '', layout: 'venv' },
-        { path: workingDirectory ? join(workingDirectory, 'venv') : '', layout: 'venv' },
-        { path: process.env.VIRTUAL_ENV || '', layout: 'venv' },
-        { path: process.env.CONDA_PREFIX || '', layout: 'conda' },
-      ]
-    : []
+  const environments: Array<{ path: string; layout: 'venv' | 'conda' }> =
+    config.mode === 'auto'
+      ? [
+          { path: workingDirectory ? join(workingDirectory, '.venv') : '', layout: 'venv' },
+          { path: workingDirectory ? join(workingDirectory, 'venv') : '', layout: 'venv' },
+          { path: process.env.VIRTUAL_ENV || '', layout: 'venv' },
+          { path: process.env.CONDA_PREFIX || '', layout: 'conda' },
+        ]
+      : []
   for (const environment of environments.filter(({ path }) => Boolean(path))) {
     const runtime = await probePythonEnvironment(environment.path, environment.layout)
     if (runtime) return runtime
@@ -236,7 +258,12 @@ async function resolvePythonRuntime(
       ? ['python.exe', 'python3.exe', 'py.exe']
       : ['python3', 'python']
   for (const executable of candidates) {
-    const prefixArgs = basename(executable).toLowerCase().replace(/\.exe$/, '') === 'py' ? ['-3'] : []
+    const prefixArgs =
+      basename(executable)
+        .toLowerCase()
+        .replace(/\.exe$/, '') === 'py'
+        ? ['-3']
+        : []
     const runtime = await probeRuntime('python', executable, [...prefixArgs, '--version'], prefixArgs)
     if (runtime) return runtime
   }
@@ -248,9 +275,10 @@ async function probePythonEnvironment(
   layout: 'venv' | 'conda',
 ): Promise<ResolvedRuntime | undefined> {
   const normalized = normalize(environmentPath)
-  const executable = layout === 'conda'
-    ? pythonExecutableInCondaEnvironment(normalized, process.platform)
-    : pythonExecutableInEnvironment(normalized, process.platform)
+  const executable =
+    layout === 'conda'
+      ? pythonExecutableInCondaEnvironment(normalized, process.platform)
+      : pythonExecutableInEnvironment(normalized, process.platform)
   const runtime = await probeRuntime('python', executable, ['--version'])
   return runtime ? { ...runtime, environmentPath: normalized, environmentType: layout } : undefined
 }
@@ -322,7 +350,10 @@ function captureProcess(
     const appendStderr = (chunk: Buffer) => {
       if (stderr.length < 20_000) stderr += chunk.toString('utf8').slice(0, 20_000 - stderr.length)
     }
-    const timer = setTimeout(() => { child.kill(); finish(false) }, timeoutMs)
+    const timer = setTimeout(() => {
+      child.kill()
+      finish(false)
+    }, timeoutMs)
     child.stdout?.on('data', appendStdout)
     child.stderr?.on('data', appendStderr)
     child.once('error', () => finish(false))

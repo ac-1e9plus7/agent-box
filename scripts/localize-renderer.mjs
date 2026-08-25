@@ -48,7 +48,7 @@ const reviewedZh = {
   '; ': '；',
   '(empty)': '(空)',
   '{value0}: {value1}': '{value0}：{value1}',
-  'invalid': '无效',
+  invalid: '无效',
 }
 
 // --- source file sets --------------------------------------------------------------
@@ -88,9 +88,7 @@ function templateMessage(node) {
 }
 
 function isTCall(node) {
-  return ts.isCallExpression(node)
-    && ts.isIdentifier(node.expression)
-    && node.expression.text === 't'
+  return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 't'
 }
 
 function isNonLocalizableSkillAsset(node, file) {
@@ -99,14 +97,14 @@ function isNonLocalizableSkillAsset(node, file) {
   if (!ts.isPropertyAssignment(assignment) || assignment.name.getText() !== 'content') return false
   const object = assignment.parent
   if (!ts.isObjectLiteralExpression(object)) return false
-  const kindProperty = object.properties.find((property) => (
-    ts.isPropertyAssignment(property) && property.name.getText() === 'kind'
-  ))
+  const kindProperty = object.properties.find(
+    (property) => ts.isPropertyAssignment(property) && property.name.getText() === 'kind',
+  )
   return Boolean(
-    kindProperty
-    && ts.isPropertyAssignment(kindProperty)
-    && ts.isStringLiteral(kindProperty.initializer)
-    && kindProperty.initializer.text !== 'markdown',
+    kindProperty &&
+    ts.isPropertyAssignment(kindProperty) &&
+    ts.isStringLiteral(kindProperty.initializer) &&
+    kindProperty.initializer.text !== 'markdown',
   )
 }
 
@@ -147,10 +145,12 @@ function collectKeys(files) {
         collectLiterals(node.arguments[0], literals)
         for (const key of literals) keys.add(key)
       }
-      if (file === defaultSkillsPath
-        && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
-        && ts.isPropertyAssignment(node.parent)
-        && LOCALIZABLE_SKILL_FIELDS.has(node.parent.name.getText())) {
+      if (
+        file === defaultSkillsPath &&
+        (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
+        ts.isPropertyAssignment(node.parent) &&
+        LOCALIZABLE_SKILL_FIELDS.has(node.parent.name.getText())
+      ) {
         const field = node.parent.name.getText()
         const eligible = field === 'content' ? !isNonLocalizableSkillAsset(node, file) : true
         if (eligible) keys.add(node.text)
@@ -259,8 +259,7 @@ function readExistingResource(file) {
 }
 
 function resourceFile(variableName, header, entries, typed) {
-  const lines = Object.entries(entries)
-    .map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)},`)
+  const lines = Object.entries(entries).map(([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)},`)
   return `${header}\nexport const ${variableName}${typed ? ': Record<string, string>' : ''} = {\n${lines.join('\n')}\n}${typed ? '' : ' as const'}\n`
 }
 
@@ -286,9 +285,7 @@ async function generateResources(files) {
       throw new Error(`Semantic hatch key ${JSON.stringify(hatchKey)} needs an explicit reviewed Chinese value`)
     }
   }
-  const missingKeys = [...keys].filter((key) => (
-    existingZh[key] === undefined && reviewedZh[key] === undefined
-  ))
+  const missingKeys = [...keys].filter((key) => existingZh[key] === undefined && reviewedZh[key] === undefined)
   const translations = missingKeys.length > 0 ? await translateMessages(missingKeys) : new Map()
 
   const zh = {}
@@ -312,7 +309,8 @@ async function generateResources(files) {
   // en-US.ts carries only the semantic hatch keys; validate each exists in zh.
   const en = {}
   for (const [hatchKey, enValue] of Object.entries(SEMANTIC_KEYS)) {
-    if (zh[hatchKey] === undefined) throw new Error(`Semantic hatch key ${JSON.stringify(hatchKey)} missing from zh bundle`)
+    if (zh[hatchKey] === undefined)
+      throw new Error(`Semantic hatch key ${JSON.stringify(hatchKey)} missing from zh bundle`)
     en[hatchKey] = enValue
   }
 
@@ -324,11 +322,21 @@ async function generateResources(files) {
   fs.mkdirSync(localesDir, { recursive: true })
   fs.writeFileSync(
     zhPath,
-    resourceFile('zhCN', '/** Simplified Chinese resource bundle. English source copy is the key; values are reviewed Simplified Chinese. */', orderedZh, false),
+    resourceFile(
+      'zhCN',
+      '/** Simplified Chinese resource bundle. English source copy is the key; values are reviewed Simplified Chinese. */',
+      orderedZh,
+      false,
+    ),
   )
   fs.writeFileSync(
     enPath,
-    resourceFile('enUS', '/** English resource bundle. Holds only semantic hatch keys whose shared English text must distinguish different Chinese messages. */', orderedEn, true),
+    resourceFile(
+      'enUS',
+      '/** English resource bundle. Holds only semantic hatch keys whose shared English text must distinguish different Chinese messages. */',
+      orderedEn,
+      true,
+    ),
   )
   process.stdout.write(`Generated ${keys.size} localized messages.\n`)
   if (warnings.length > 0) {
@@ -370,10 +378,11 @@ function checkSources(files) {
     const visit = (node, inTArg) => {
       if (isTCall(node) && node.arguments.length > 0) {
         const first = node.arguments[0]
-        const isLiteral = ts.isStringLiteral(first)
-          || ts.isNoSubstitutionTemplateLiteral(first)
-          || ts.isConditionalExpression(first)
-          || ts.isParenthesizedExpression(first)
+        const isLiteral =
+          ts.isStringLiteral(first) ||
+          ts.isNoSubstitutionTemplateLiteral(first) ||
+          ts.isConditionalExpression(first) ||
+          ts.isParenthesizedExpression(first)
         if (!isLiteral && file !== defaultSkillsPath) {
           warnings.push(`${rel}: t() first arg is not a string literal (key validity cannot be checked statically)`)
         }
@@ -404,7 +413,8 @@ function checkSources(files) {
         const text = templateMessage(node)
         if (hasChinese(text)) {
           if (inTArg) {
-            if (!zhKeys.has(text)) failures.push(`${rel}: unknown t() template key ${JSON.stringify(text.slice(0, 60))}`)
+            if (!zhKeys.has(text))
+              failures.push(`${rel}: unknown t() template key ${JSON.stringify(text.slice(0, 60))}`)
           } else {
             failures.push(`${rel}: Chinese template outside t() — wrap it`)
           }

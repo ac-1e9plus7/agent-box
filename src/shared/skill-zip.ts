@@ -1,6 +1,10 @@
 import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate'
 import type { Skill, SkillFile, SkillFileKind, SkillInput } from './types'
-import { t } from "./i18n"
+import { t } from './i18n'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 export function inferFileKind(path: string): SkillFileKind {
   const lower = path.toLowerCase()
@@ -41,13 +45,16 @@ export function parseSkillFrontmatter(content: string): {
   return { metadata, body }
 }
 
-export function serializeSkillFrontmatter(skill: {
-  name: string
-  description: string
-  version?: string
-  author?: string
-  icon?: string
-}, body: string): string {
+export function serializeSkillFrontmatter(
+  skill: {
+    name: string
+    description: string
+    version?: string
+    author?: string
+    icon?: string
+  },
+  body: string,
+): string {
   const lines = ['---']
   lines.push(`name: ${JSON.stringify(skill.name)}`)
   lines.push(`description: ${JSON.stringify(skill.description)}`)
@@ -61,15 +68,16 @@ export function serializeSkillFrontmatter(skill: {
 
 export async function exportSkillToZip(skill: Skill): Promise<Uint8Array> {
   const entries: Record<string, Uint8Array> = {}
-  const files = skill.files && skill.files.length > 0
-    ? skill.files
-    : [
-        {
-          path: skill.entryFile || 'SKILL.md',
-          content: skill.systemPrompt || `# ${skill.name}\n\n${skill.description}`,
-          kind: 'markdown' as SkillFileKind
-        }
-      ]
+  const files =
+    skill.files && skill.files.length > 0
+      ? skill.files
+      : [
+          {
+            path: skill.entryFile || 'SKILL.md',
+            content: skill.systemPrompt || `# ${skill.name}\n\n${skill.description}`,
+            kind: 'markdown' as SkillFileKind,
+          },
+        ]
 
   const hasEntryFile = files.some((f) => f.path === (skill.entryFile || 'SKILL.md'))
 
@@ -82,7 +90,10 @@ export async function exportSkillToZip(skill: Skill): Promise<Uint8Array> {
   }
 
   if (!hasEntryFile) {
-    const entryContent = serializeSkillFrontmatter(skill, skill.systemPrompt || `# ${skill.name}\n\n${skill.description}`)
+    const entryContent = serializeSkillFrontmatter(
+      skill,
+      skill.systemPrompt || `# ${skill.name}\n\n${skill.description}`,
+    )
     entries['SKILL.md'] = strToU8(entryContent)
   }
 
@@ -107,7 +118,7 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
   })
 
   if (pathList.length === 0) {
-    throw new Error(t("The archive is empty or contains no valid files."))
+    throw new Error(t('The archive is empty or contains no valid files.'))
   }
 
   // Check if all paths share a common root directory (e.g. "my-skill/SKILL.md")
@@ -130,8 +141,8 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
     // Check for JSON/YAML manifest
     if (relativePath.toLowerCase() === 'skill.json' || relativePath.toLowerCase() === 'manifest.json') {
       try {
-        const json = JSON.parse(textContent)
-        if (json && typeof json === 'object') {
+        const json: unknown = JSON.parse(textContent)
+        if (isRecord(json)) {
           if (json.name) parsedName = String(json.name)
           if (json.description) parsedDesc = String(json.description)
           if (json.author) parsedAuthor = String(json.author)
@@ -148,16 +159,17 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
     files.push({
       path: relativePath,
       content: textContent,
-      kind
+      kind,
     })
   }
 
   // Find entry markdown file
-  let entryFileObj = files.find((f) => f.path === entryFile)
-    ?? files.find((f) => f.path.toLowerCase() === 'skill.md')
-    ?? files.find((f) => f.path.toLowerCase() === 'readme.md')
-    ?? files.find((f) => f.kind === 'markdown')
-    ?? files[0]
+  const entryFileObj =
+    files.find((f) => f.path === entryFile) ??
+    files.find((f) => f.path.toLowerCase() === 'skill.md') ??
+    files.find((f) => f.path.toLowerCase() === 'readme.md') ??
+    files.find((f) => f.kind === 'markdown') ??
+    files[0]
 
   if (entryFileObj) {
     entryFile = entryFileObj.path
@@ -193,10 +205,10 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
   }
 
   if (!parsedName) {
-    parsedName = rootDir ? rootDir.replace(/\/$/, '') : t("Custom skills")
+    parsedName = rootDir ? rootDir.replace(/\/$/, '') : t('Custom skills')
   }
   if (!parsedDesc) {
-    parsedDesc = t("A skill imported from an external ZIP archive.")
+    parsedDesc = t('A skill imported from an external ZIP archive.')
   }
 
   // Auto assign icon based on python / markdown composition
@@ -213,6 +225,6 @@ export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Prom
     files,
     author: parsedAuthor || undefined,
     version: parsedVersion || '1.0.0',
-    enabled: true
+    enabled: true,
   }
 }

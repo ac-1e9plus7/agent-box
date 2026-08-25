@@ -6,7 +6,13 @@ import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import { getMessageSiblings } from '../../../shared/conversation-tree'
-import type { MessageAttachment, SkillActivation, TokenUsage, ToolCallExecution, WebCitation } from '../../../shared/types'
+import type {
+  MessageAttachment,
+  SkillActivation,
+  TokenUsage,
+  ToolCallExecution,
+  WebCitation,
+} from '../../../shared/types'
 import type { ChatMessage, ModelConfig, PromptSuggestion } from '../types'
 import { formatFileSize } from '../file-helper'
 import { preprocessMarkdown } from '../markdown-helper'
@@ -33,7 +39,7 @@ interface ChatContentProps {
 function formatTime(timestamp: string): string {
   return new Intl.DateTimeFormat(getLanguage(), {
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   }).format(new Date(timestamp))
 }
 
@@ -44,8 +50,10 @@ function compactTokenCount(value: number): string {
 }
 
 function reasoningUsageLabel(usage?: TokenUsage): string {
-  if (usage?.reasoningTokens !== undefined) return t("Reasoning {value0} tokens", { value0: compactTokenCount(usage.reasoningTokens) })
-  if (usage?.totalTokens !== undefined) return t("Total {value0} tokens", { value0: compactTokenCount(usage.totalTokens) })
+  if (usage?.reasoningTokens !== undefined)
+    return t('Reasoning {value0} tokens', { value0: compactTokenCount(usage.reasoningTokens) })
+  if (usage?.totalTokens !== undefined)
+    return t('Total {value0} tokens', { value0: compactTokenCount(usage.totalTokens) })
   return ''
 }
 
@@ -69,14 +77,22 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
   return (
     <section
       className="message-sources"
-      aria-label={safeCitations.length > 0 ? t("{value0} web sources", { value0: safeCitations.length }) : t("{value0} web searches", { value0: searchRequests })}
+      aria-label={
+        safeCitations.length > 0
+          ? t('{value0} web sources', { value0: safeCitations.length })
+          : t('{value0} web searches', { value0: searchRequests })
+      }
     >
       <div className="message-sources-heading">
         <span>
           <Icon name="globe" size={14} />
-          {safeCitations.length > 0 ? t("{value0} web sources", { value0: safeCitations.length }) : t("{value0} web searches", { value0: searchRequests })}
+          {safeCitations.length > 0
+            ? t('{value0} web sources', { value0: safeCitations.length })
+            : t('{value0} web searches', { value0: searchRequests })}
         </span>
-        {safeCitations.length > 0 && searchRequests > 0 && <small>{t("{value0} web searches", { value0: searchRequests })}</small>}
+        {safeCitations.length > 0 && searchRequests > 0 && (
+          <small>{t('{value0} web searches', { value0: searchRequests })}</small>
+        )}
       </div>
       {safeCitations.length > 0 ? (
         <div className="message-source-list">
@@ -92,7 +108,9 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
           ))}
         </div>
       ) : (
-        <p className="message-sources-empty">{t("The web search provider returned no displayable structured sources.")}</p>
+        <p className="message-sources-empty">
+          {t('The web search provider returned no displayable structured sources.')}
+        </p>
       )}
     </section>
   )
@@ -100,7 +118,7 @@ function CitationSources({ citations, usage }: { citations?: WebCitation[]; usag
 
 function ToolExecutionItem({
   execution,
-  onResolveApproval
+  onResolveApproval,
 }: {
   execution: ToolCallExecution
   onResolveApproval?: (callId: string, approved: boolean) => void
@@ -120,7 +138,11 @@ function ToolExecutionItem({
   }, [execution.args])
 
   return (
-    <details className={`tool-execution-card ${awaitingApproval ? 'is-awaiting' : isError ? 'is-error' : isExecuting ? 'is-executing' : 'is-complete'}`} open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+    <details
+      className={`tool-execution-card ${awaitingApproval ? 'is-awaiting' : isError ? 'is-error' : isExecuting ? 'is-executing' : 'is-complete'}`}
+      open={open}
+      onToggle={(e) => setOpen(e.currentTarget.open)}
+    >
       <summary className="tool-execution-header">
         <div className="tool-execution-title">
           <Icon name="tool" size={14} />
@@ -130,21 +152,28 @@ function ToolExecutionItem({
         <div className="tool-execution-status">
           {isExecuting && (
             <span className="tool-status-badge executing">
-              <i className="spinner" />{t("Executing…")}</span>
+              <i className="spinner" />
+              {t('Executing…')}
+            </span>
           )}
-          {awaitingApproval && (
-            <span className="tool-status-badge awaiting">{t("Awaiting approval")}</span>
-          )}
+          {awaitingApproval && <span className="tool-status-badge awaiting">{t('Awaiting approval')}</span>}
           {execution.status === 'complete' && !isError && (
             <span className="tool-status-badge complete">
-              <Icon name="check" size={12} />{t("Execution completed")}</span>
+              <Icon name="check" size={12} />
+              {t('Execution completed')}
+            </span>
           )}
           {isDenied && (
-            <span className="tool-status-badge error"><Icon name="close" size={12} />{t("Denied")}</span>
+            <span className="tool-status-badge error">
+              <Icon name="close" size={12} />
+              {t('Denied')}
+            </span>
           )}
           {isError && !isDenied && (
             <span className="tool-status-badge error">
-              <Icon name="close" size={12} />{t("Execution failed")}</span>
+              <Icon name="close" size={12} />
+              {t('Execution failed')}
+            </span>
           )}
           <Icon className="tool-chevron" name="chevron-down" size={13} />
         </div>
@@ -153,25 +182,33 @@ function ToolExecutionItem({
         {awaitingApproval && (
           <div className="tool-approval-block" role="alert">
             <div>
-              <strong>{execution.riskLevel === 'sensitive' ? t("Sensitive tool calls") : t("Tool approval")}</strong>
-              <span>{execution.approvalReason || t("Approve this tool execution?")}</span>
+              <strong>{execution.riskLevel === 'sensitive' ? t('Sensitive tool calls') : t('Tool approval')}</strong>
+              <span>{execution.approvalReason || t('Approve this tool execution?')}</span>
             </div>
             <div className="tool-approval-actions">
-              <button className="secondary-button" onClick={() => onResolveApproval?.(execution.id, false)}>{t("Deny")}</button>
-              <button className="primary-button" onClick={() => onResolveApproval?.(execution.id, true)}>{t("Allow once")}</button>
+              <button className="secondary-button" onClick={() => onResolveApproval?.(execution.id, false)}>
+                {t('Deny')}
+              </button>
+              <button className="primary-button" onClick={() => onResolveApproval?.(execution.id, true)}>
+                {t('Allow once')}
+              </button>
             </div>
           </div>
         )}
         {Boolean(argsStr && argsStr !== '{}') && (
           <div className="tool-param-block">
-            <span className="tool-block-label">{t("Input parameters:")}</span>
-            <pre><code>{argsStr}</code></pre>
+            <span className="tool-block-label">{t('Input parameters:')}</span>
+            <pre>
+              <code>{argsStr}</code>
+            </pre>
           </div>
         )}
         {execution.result !== undefined && execution.result !== null && (
           <div className="tool-result-block">
-            <span className="tool-block-label">{t("Execution result:")}</span>
-            <pre><code>{execution.result}</code></pre>
+            <span className="tool-block-label">{t('Execution result:')}</span>
+            <pre>
+              <code>{execution.result}</code>
+            </pre>
           </div>
         )}
       </div>
@@ -179,13 +216,19 @@ function ToolExecutionItem({
   )
 }
 
-function ToolExecutionList({ executions, onResolveApproval }: { executions?: ToolCallExecution[]; onResolveApproval?: (callId: string, approved: boolean) => void }): JSX.Element | null {
+function ToolExecutionList({
+  executions,
+  onResolveApproval,
+}: {
+  executions?: ToolCallExecution[]
+  onResolveApproval?: (callId: string, approved: boolean) => void
+}): JSX.Element | null {
   if (!executions || executions.length === 0) return null
   return (
     <div className="tool-executions-container">
       <div className="tool-executions-heading">
         <Icon name="tool" size={13} />
-        <span>{t("Agent tool interactions: {value0}", { value0: executions.length })}</span>
+        <span>{t('Agent tool interactions: {value0}', { value0: executions.length })}</span>
       </div>
       <div className="tool-executions-list">
         {executions.map((exec) => (
@@ -199,19 +242,26 @@ function ToolExecutionList({ executions, onResolveApproval }: { executions?: Too
 function SkillActivationList({ activations }: { activations?: SkillActivation[] }): JSX.Element | null {
   if (!activations || activations.length === 0) return null
   const sourceLabel: Record<SkillActivation['source'], string> = {
-    automatic: t("Matched automatically"),
-    explicit: t("Manually selected"),
-    model: t("Selected by model"),
+    automatic: t('Matched automatically'),
+    explicit: t('Manually selected'),
+    model: t('Selected by model'),
   }
   return (
-    <section className="skill-activations" aria-label={t("{value0} Skills activated for this turn", { value0: activations.length })}>
+    <section
+      className="skill-activations"
+      aria-label={t('{value0} Skills activated for this turn', { value0: activations.length })}
+    >
       <div className="skill-activations-heading">
         <Icon name="sparkles" size={13} />
-        <span>{t("{value0} Skills activated for this turn", { value0: activations.length })}</span>
+        <span>{t('{value0} Skills activated for this turn', { value0: activations.length })}</span>
       </div>
       <div className="skill-activation-list">
         {activations.map((activation) => (
-          <span className="skill-activation-chip" key={activation.id} title={t("Skill ID: {value0}", { value0: activation.id })}>
+          <span
+            className="skill-activation-chip"
+            key={activation.id}
+            title={t('Skill ID: {value0}', { value0: activation.id })}
+          >
             <strong>{activation.name}</strong>
             <small>{sourceLabel[activation.source]}</small>
           </span>
@@ -236,23 +286,31 @@ function MessageBody({ content }: { content: string }): JSX.Element {
         rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
         remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
         components={{
-          a: ({ children, ...props }) => <a {...props} rel="noopener noreferrer" target="_blank">{children}</a>,
+          a: ({ children, ...props }) => (
+            <a {...props} rel="noopener noreferrer" target="_blank">
+              {children}
+            </a>
+          ),
           pre: ({ children }) => {
             const firstChild = Children.toArray(children)[0]
-            const className = isValidElement<{ className?: string }>(firstChild) ? firstChild.props.className : undefined
+            const className = isValidElement<{ className?: string }>(firstChild)
+              ? firstChild.props.className
+              : undefined
             const language = className?.match(/language-([^\s]+)/)?.[1] ?? 'code'
             const code = textFromNode(children).replace(/\n$/, '')
             return (
               <div className="code-block">
-              <div className="code-block-header">
-                <span>{language}</span>
-                <button aria-label={t("Copy code")} onClick={() => navigator.clipboard?.writeText(code)}>
-                  <Icon name="copy" size={14} />{t("Copy")}</button>
-              </div>
+                <div className="code-block-header">
+                  <span>{language}</span>
+                  <button aria-label={t('Copy code')} onClick={() => navigator.clipboard?.writeText(code)}>
+                    <Icon name="copy" size={14} />
+                    {t('Copy')}
+                  </button>
+                </div>
                 <pre>{children}</pre>
               </div>
             )
-          }
+          },
         }}
       >
         {processed}
@@ -263,25 +321,25 @@ function MessageBody({ content }: { content: string }): JSX.Element {
 
 function EmptyConversation({
   suggestions,
-  onSuggestion
+  onSuggestion,
 }: {
   suggestions: PromptSuggestion[]
   onSuggestion: (prompt: string) => void
 }): JSX.Element {
   return (
     <div className="empty-conversation">
-      <div className="welcome-mark"><Icon name="app" size={34} /></div>
+      <div className="welcome-mark">
+        <Icon name="app" size={34} />
+      </div>
       <p className="welcome-eyebrow">AGENTBOX</p>
-      <h1>{t("What do you want to talk about today?")}</h1>
-      <p className="welcome-subtitle">{t("Choose an inspiration, or enter your question directly below.")}</p>
+      <h1>{t('What do you want to talk about today?')}</h1>
+      <p className="welcome-subtitle">{t('Choose an inspiration, or enter your question directly below.')}</p>
       <div className="suggestion-grid">
         {suggestions.map((suggestion) => (
-          <button
-            key={suggestion.title}
-            className="suggestion-card"
-            onClick={() => onSuggestion(suggestion.prompt)}
-          >
-            <span className="suggestion-icon"><Icon name={suggestion.icon} size={18} /></span>
+          <button key={suggestion.title} className="suggestion-card" onClick={() => onSuggestion(suggestion.prompt)}>
+            <span className="suggestion-icon">
+              <Icon name={suggestion.icon} size={18} />
+            </span>
             <span>
               <strong>{suggestion.title}</strong>
               <small>{suggestion.description}</small>
@@ -296,7 +354,7 @@ function EmptyConversation({
 
 function MessageAttachmentsView({
   attachments,
-  onPreviewImage
+  onPreviewImage,
 }: {
   attachments?: MessageAttachment[]
   onPreviewImage: (url: string, name: string) => void
@@ -312,7 +370,7 @@ function MessageAttachmentsView({
               key={attachment.id}
               className="message-attachment-image-button"
               onClick={() => onPreviewImage(attachment.data, attachment.name)}
-              title={t("Click to view larger image: {value0}", { value0: attachment.name })}
+              title={t('Click to view larger image: {value0}', { value0: attachment.name })}
             >
               <img alt={attachment.name} src={attachment.data} />
             </button>
@@ -321,8 +379,13 @@ function MessageAttachmentsView({
 
         return (
           <div key={attachment.id} className="message-attachment-chip">
-            <Icon name={attachment.type === 'image' ? 'image' : attachment.type === 'document' ? 'file' : 'code'} size={15} />
-            <span className="attachment-chip-name" title={attachment.name}>{attachment.name}</span>
+            <Icon
+              name={attachment.type === 'image' ? 'image' : attachment.type === 'document' ? 'file' : 'code'}
+              size={15}
+            />
+            <span className="attachment-chip-name" title={attachment.name}>
+              {attachment.name}
+            </span>
             <small className="attachment-chip-size">{formatFileSize(attachment.size)}</small>
           </div>
         )
@@ -340,7 +403,7 @@ function UserMessage({
   onDelete,
   onEdit,
   onSwitchVersion,
-  onPreviewImage
+  onPreviewImage,
 }: {
   message: ChatMessage
   allMessages?: ChatMessage[]
@@ -396,9 +459,18 @@ function UserMessage({
               }}
             />
             <div className="user-edit-actions">
-              <button className="user-edit-cancel" onClick={cancelEdit}><Icon name="close" size={14} />{t("Cancel")}</button>
-              <button onClick={() => void commitEdit(false)}><Icon name="check" size={14} />{t("Save only")}</button>
-              <button className="user-edit-regen" onClick={() => void commitEdit(true)}><Icon name="refresh" size={14} />{t("Save and regenerate")}</button>
+              <button className="user-edit-cancel" onClick={cancelEdit}>
+                <Icon name="close" size={14} />
+                {t('Cancel')}
+              </button>
+              <button onClick={() => void commitEdit(false)}>
+                <Icon name="check" size={14} />
+                {t('Save only')}
+              </button>
+              <button className="user-edit-regen" onClick={() => void commitEdit(true)}>
+                <Icon name="refresh" size={14} />
+                {t('Save and regenerate')}
+              </button>
             </div>
           </div>
           <div className="user-message-meta">
@@ -406,7 +478,10 @@ function UserMessage({
             <span>{formatTime(message.createdAt)}</span>
           </div>
         </div>
-        <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || t("You")}>
+        <div
+          className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`}
+          title={userNickname?.trim() || t('You')}
+        >
           {userAvatar ? <img alt="" src={userAvatar} /> : <Icon name="user" size={17} />}
         </div>
       </article>
@@ -418,34 +493,38 @@ function UserMessage({
       <div className="message-column">
         <MessageAttachmentsView attachments={message.attachments} onPreviewImage={onPreviewImage} />
         {Boolean(message.content.trim()) && (
-          <div className="user-bubble"><MessageBody content={message.content} /></div>
+          <div className="user-bubble">
+            <MessageBody content={message.content} />
+          </div>
         )}
         {(total > 1 || canEdit) && (
           <div className="user-message-tools">
             {total > 1 && (
               <div className="message-pagination user-pagination">
                 <button
-                  aria-label={t("Previous question version")}
+                  aria-label={t('Previous question version')}
                   className="pagination-arrow"
                   disabled={currentIndex === 0 || !canEdit}
                   onClick={() => {
                     const target = siblings[currentIndex - 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title={t("Previous question version")}
+                  title={t('Previous question version')}
                 >
                   <Icon name="chevron-left" size={13} />
                 </button>
-                <span className="pagination-label">{currentIndex + 1} / {total}</span>
+                <span className="pagination-label">
+                  {currentIndex + 1} / {total}
+                </span>
                 <button
-                  aria-label={t("Next question version")}
+                  aria-label={t('Next question version')}
                   className="pagination-arrow"
                   disabled={currentIndex === total - 1 || !canEdit}
                   onClick={() => {
                     const target = siblings[currentIndex + 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title={t("Next question version")}
+                  title={t('Next question version')}
                 >
                   <Icon name="chevron-right" size={13} />
                 </button>
@@ -453,8 +532,21 @@ function UserMessage({
             )}
             {canEdit && (
               <>
-                <button onClick={startEdit}><Icon name="edit" size={14} />{t("Edit")}</button>
-                <button onClick={() => onDelete?.(message.id)} title={total > 1 ? t("Delete this message version and all that follow") : t("Delete this message and all that follow")}><Icon name="trash" size={14} />{t("Delete")}</button>
+                <button onClick={startEdit}>
+                  <Icon name="edit" size={14} />
+                  {t('Edit')}
+                </button>
+                <button
+                  onClick={() => onDelete?.(message.id)}
+                  title={
+                    total > 1
+                      ? t('Delete this message version and all that follow')
+                      : t('Delete this message and all that follow')
+                  }
+                >
+                  <Icon name="trash" size={14} />
+                  {t('Delete')}
+                </button>
               </>
             )}
           </div>
@@ -464,7 +556,10 @@ function UserMessage({
           <span>{formatTime(message.createdAt)}</span>
         </div>
       </div>
-      <div className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`} title={userNickname?.trim() || t("You")}>
+      <div
+        className={`message-avatar user-avatar ${userAvatar ? 'has-image' : ''}`}
+        title={userNickname?.trim() || t('You')}
+      >
         {userAvatar ? <img alt="" src={userAvatar} /> : <Icon name="user" size={17} />}
       </div>
     </article>
@@ -481,7 +576,7 @@ function AssistantMessage({
   onRegenerate,
   onResumeAgent,
   onSwitchVersion,
-  onResolveToolApproval
+  onResolveToolApproval,
 }: {
   message: ChatMessage
   allMessages?: ChatMessage[]
@@ -502,12 +597,19 @@ function AssistantMessage({
 
   return (
     <article className={`message-row assistant-message${isStreaming ? ' is-streaming' : ''}`}>
-      <div className="message-avatar assistant-avatar"><Icon name="app" size={18} /></div>
+      <div className="message-avatar assistant-avatar">
+        <Icon name="app" size={18} />
+      </div>
       <div className="message-column">
         <div className="message-meta">
-          <strong>{model?.name ?? t("AI assistant")}</strong>
+          <strong>{model?.name ?? t('AI assistant')}</strong>
           <span>{formatTime(message.createdAt)}</span>
-          {isStreaming && <span className="streaming-label"><i />{t("Generating")}</span>}
+          {isStreaming && (
+            <span className="streaming-label">
+              <i />
+              {t('Generating')}
+            </span>
+          )}
         </div>
         {message.reasoning && (
           <details
@@ -518,7 +620,7 @@ function AssistantMessage({
             <summary>
               <span>
                 <Icon name="brain" size={15} />
-                {isStreaming ? t("Thinking…") : t("Reasoning complete")}
+                {isStreaming ? t('Thinking…') : t('Reasoning complete')}
                 {reasoningUsage && <small>· {reasoningUsage}</small>}
               </span>
               <Icon className="reasoning-chevron" name="chevron-down" size={14} />
@@ -530,18 +632,30 @@ function AssistantMessage({
           <div className="reasoning-status" role="status">
             <Icon name="brain" size={15} />
             <span>
-              <strong>{t("Reasoning {value0} tokens", { value0: compactTokenCount(message.usage?.reasoningTokens ?? 0) })}</strong>
-              <small>{t("The model returned no visible reasoning")}</small>
+              <strong>
+                {t('Reasoning {value0} tokens', { value0: compactTokenCount(message.usage?.reasoningTokens ?? 0) })}
+              </strong>
+              <small>{t('The model returned no visible reasoning')}</small>
             </span>
           </div>
         )}
         <SkillActivationList activations={message.skillActivations} />
         <ToolExecutionList executions={message.toolExecutions} onResolveApproval={onResolveToolApproval} />
-        {message.content.trim() ? <MessageBody content={message.content} /> : isStreaming ? (
-          <div className="typing-indicator" aria-label={t("Replying")}><i /><i /><i /></div>
+        {message.content.trim() ? (
+          <MessageBody content={message.content} />
+        ) : isStreaming ? (
+          <div className="typing-indicator" aria-label={t('Replying')}>
+            <i />
+            <i />
+            <i />
+          </div>
         ) : message.status !== 'error' && (message.citations?.length ?? 0) > 0 ? (
           <div className="message-empty-response" role="status">
-            <Icon name="info" size={15} />{t("The model completed a web search and returned sources, but generated no response text. Retry or choose a model with better tool-calling support.")}</div>
+            <Icon name="info" size={15} />
+            {t(
+              'The model completed a web search and returned sources, but generated no response text. Retry or choose a model with better tool-calling support.',
+            )}
+          </div>
         ) : null}
         <CitationSources citations={message.citations} usage={message.usage} />
         {!isStreaming && message.status !== 'error' && Boolean(message.content.trim()) && (
@@ -549,41 +663,60 @@ function AssistantMessage({
             {total > 1 && (
               <div className="message-pagination">
                 <button
-                  aria-label={t("Previous answer")}
+                  aria-label={t('Previous answer')}
                   className="pagination-arrow"
                   disabled={currentIndex === 0 || isStreaming}
                   onClick={() => {
                     const target = siblings[currentIndex - 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title={t("Previous answer")}
+                  title={t('Previous answer')}
                 >
                   <Icon name="chevron-left" size={13} />
                 </button>
-                <span className="pagination-label">{currentIndex + 1} / {total}</span>
+                <span className="pagination-label">
+                  {currentIndex + 1} / {total}
+                </span>
                 <button
-                  aria-label={t("Next answer")}
+                  aria-label={t('Next answer')}
                   className="pagination-arrow"
                   disabled={currentIndex === total - 1 || isStreaming}
                   onClick={() => {
                     const target = siblings[currentIndex + 1]
                     if (target) onSwitchVersion?.(target.id)
                   }}
-                  title={t("Next answer")}
+                  title={t('Next answer')}
                 >
                   <Icon name="chevron-right" size={13} />
                 </button>
               </div>
             )}
-            <button onClick={() => navigator.clipboard?.writeText(message.content)}><Icon name="copy" size={14} />{t("Copy")}</button>
+            <button onClick={() => navigator.clipboard?.writeText(message.content)}>
+              <Icon name="copy" size={14} />
+              {t('Copy')}
+            </button>
             {showRegenerate && (
-              <button onClick={() => onRegenerate(message.id)}><Icon name="refresh" size={14} />{t("Regenerate")}</button>
+              <button onClick={() => onRegenerate(message.id)}>
+                <Icon name="refresh" size={14} />
+                {t('Regenerate')}
+              </button>
             )}
             {!isStreaming && (
-              <button onClick={() => onDelete?.(message.id)} title={total > 1 ? t("Delete this response version and all that follow") : t("Delete this response and all that follow")}><Icon name="trash" size={14} />{t("Delete")}</button>
+              <button
+                onClick={() => onDelete?.(message.id)}
+                title={
+                  total > 1
+                    ? t('Delete this response version and all that follow')
+                    : t('Delete this response and all that follow')
+                }
+              >
+                <Icon name="trash" size={14} />
+                {t('Delete')}
+              </button>
             )}
             <div className="message-model-info">
-              <Icon name="app" size={14} /> {model?.name ?? message.modelId ?? t("Unknown model")} {message.usage?.outputTokens ? `(${message.usage.outputTokens} tokens)` : ''}
+              <Icon name="app" size={14} /> {model?.name ?? message.modelId ?? t('Unknown model')}{' '}
+              {message.usage?.outputTokens ? `(${message.usage.outputTokens} tokens)` : ''}
             </div>
           </div>
         )}
@@ -591,11 +724,13 @@ function AssistantMessage({
           <div className={`message-error${message.interruption ? ' is-resumable' : ''}`}>
             <Icon name="info" size={15} />
             <span className="message-error-copy">
-              <span>{message.error || t("The request failed. Check the provider and model configuration.")}</span>
+              <span>{message.error || t('The request failed. Check the provider and model configuration.')}</span>
               {message.interruption && (
-                <small>{t("Interrupted checkpoint preserved")}{message.interruption.retryAfterSeconds !== undefined
-                    ? t("; try again in {value0} seconds", { value0: message.interruption.retryAfterSeconds })
-                    : t("; resume from the failure point or regenerate the entire response")}
+                <small>
+                  {t('Interrupted checkpoint preserved')}
+                  {message.interruption.retryAfterSeconds !== undefined
+                    ? t('; try again in {value0} seconds', { value0: message.interruption.retryAfterSeconds })
+                    : t('; resume from the failure point or regenerate the entire response')}
                 </small>
               )}
             </span>
@@ -603,27 +738,29 @@ function AssistantMessage({
               {total > 1 && (
                 <div className="message-pagination">
                   <button
-                    aria-label={t("Previous answer")}
+                    aria-label={t('Previous answer')}
                     className="pagination-arrow"
                     disabled={currentIndex === 0}
                     onClick={() => {
                       const target = siblings[currentIndex - 1]
                       if (target) onSwitchVersion?.(target.id)
                     }}
-                    title={t("Previous answer")}
+                    title={t('Previous answer')}
                   >
                     <Icon name="chevron-left" size={13} />
                   </button>
-                  <span className="pagination-label">{currentIndex + 1} / {total}</span>
+                  <span className="pagination-label">
+                    {currentIndex + 1} / {total}
+                  </span>
                   <button
-                    aria-label={t("Next answer")}
+                    aria-label={t('Next answer')}
                     className="pagination-arrow"
                     disabled={currentIndex === total - 1}
                     onClick={() => {
                       const target = siblings[currentIndex + 1]
                       if (target) onSwitchVersion?.(target.id)
                     }}
-                    title={t("Next answer")}
+                    title={t('Next answer')}
                   >
                     <Icon name="chevron-right" size={13} />
                   </button>
@@ -633,17 +770,25 @@ function AssistantMessage({
                 <button
                   className="message-error-retry message-error-resume"
                   onClick={() => onResumeAgent(message.id)}
-                  title={t("Keep completed tool results and resume from the interruption point")}
+                  title={t('Keep completed tool results and resume from the interruption point')}
                 >
-                  <Icon name="refresh" size={14} />{t("Resume from the interruption")}</button>
+                  <Icon name="refresh" size={14} />
+                  {t('Resume from the interruption')}
+                </button>
               )}
               {showRegenerate && (
                 <button className="message-error-retry" onClick={() => onRegenerate(message.id)}>
-                  <Icon name="refresh" size={14} /> {message.interruption ? t("Regenerate") : t("Try again")}
+                  <Icon name="refresh" size={14} /> {message.interruption ? t('Regenerate') : t('Try again')}
                 </button>
               )}
-              <button className="message-error-retry" onClick={() => onDelete?.(message.id)} title={t("Delete this error message")}>
-                <Icon name="trash" size={14} />{t("Delete")}</button>
+              <button
+                className="message-error-retry"
+                onClick={() => onDelete?.(message.id)}
+                title={t('Delete this error message')}
+              >
+                <Icon name="trash" size={14} />
+                {t('Delete')}
+              </button>
             </div>
           </div>
         )}
@@ -672,7 +817,9 @@ export function ChatContent({
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: messages.some((message) => message.status === 'streaming') ? 'auto' : 'smooth' })
+    endRef.current?.scrollIntoView({
+      behavior: messages.some((message) => message.status === 'streaming') ? 'auto' : 'smooth',
+    })
   }, [messages])
 
   if (messages.length === 0) {
@@ -684,11 +831,8 @@ export function ChatContent({
       <div className="chat-thread">
         {messages.map((message) => {
           if (message.role === 'assistant') {
-            const canRegenerate = !streaming
-              && (message.status === 'complete' || message.status === 'error')
-            const canResumeAgent = !streaming
-              && Boolean(message.interruption)
-              && messages.at(-1)?.id === message.id
+            const canRegenerate = !streaming && (message.status === 'complete' || message.status === 'error')
+            const canResumeAgent = !streaming && Boolean(message.interruption) && messages.at(-1)?.id === message.id
             return (
               <AssistantMessage
                 key={message.id}
@@ -729,11 +873,7 @@ export function ChatContent({
           <div className="lightbox-content" onClick={(event) => event.stopPropagation()}>
             <div className="lightbox-header">
               <span className="lightbox-title">{previewImage.name}</span>
-              <button
-                aria-label={t("Close preview")}
-                className="icon-button"
-                onClick={() => setPreviewImage(null)}
-              >
+              <button aria-label={t('Close preview')} className="icon-button" onClick={() => setPreviewImage(null)}>
                 <Icon name="close" size={18} />
               </button>
             </div>

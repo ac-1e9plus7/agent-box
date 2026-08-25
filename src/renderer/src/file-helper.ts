@@ -1,15 +1,63 @@
 import type { MessageAttachment, MessageAttachmentType } from '../../shared/types'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const MAX_IMAGE_DIMENSION = 2048
 const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 
 const TEXT_FILE_EXTENSIONS = new Set([
-  'txt', 'md', 'markdown', 'json', 'csv', 'tsv', 'yaml', 'yml', 'xml', 'html', 'htm',
-  'css', 'scss', 'less', 'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'java', 'c',
-  'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'php', 'rb', 'sh', 'bash', 'zsh', 'bat', 'ps1',
-  'sql', 'graphql', 'gql', 'toml', 'ini', 'env', 'dockerfile', 'makefile', 'r', 'swift',
-  'kt', 'kts', 'scala', 'vue', 'svelte', 'tex', 'log'
+  'txt',
+  'md',
+  'markdown',
+  'json',
+  'csv',
+  'tsv',
+  'yaml',
+  'yml',
+  'xml',
+  'html',
+  'htm',
+  'css',
+  'scss',
+  'less',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'mjs',
+  'cjs',
+  'py',
+  'java',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'cs',
+  'go',
+  'rs',
+  'php',
+  'rb',
+  'sh',
+  'bash',
+  'zsh',
+  'bat',
+  'ps1',
+  'sql',
+  'graphql',
+  'gql',
+  'toml',
+  'ini',
+  'env',
+  'dockerfile',
+  'makefile',
+  'r',
+  'swift',
+  'kt',
+  'kts',
+  'scala',
+  'vue',
+  'svelte',
+  'tex',
+  'log',
 ])
 
 export function formatFileSize(bytes: number): string {
@@ -29,7 +77,8 @@ function getFileExtension(filename: string): string {
 
 export function isTextFile(file: File): boolean {
   if (file.type.startsWith('text/')) return true
-  if (file.type === 'application/json' || file.type === 'application/xml' || file.type === 'application/javascript') return true
+  if (file.type === 'application/json' || file.type === 'application/xml' || file.type === 'application/javascript')
+    return true
   const ext = getFileExtension(file.name)
   return TEXT_FILE_EXTENSIONS.has(ext)
 }
@@ -46,7 +95,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error(t("Failed to read file {value0}", { value0: file.name })))
+    reader.onerror = () => reject(new Error(t('Failed to read file {value0}', { value0: file.name })))
     reader.readAsDataURL(file)
   })
 }
@@ -55,7 +104,7 @@ function readFileAsText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
-    reader.onerror = () => reject(new Error(t("Reading text file {value0} failed", { value0: file.name })))
+    reader.onerror = () => reject(new Error(t('Reading text file {value0} failed', { value0: file.name })))
     reader.readAsText(file, 'utf-8')
   })
 }
@@ -98,7 +147,12 @@ async function resizeImageIfNeeded(dataUrl: string, mimeType: string): Promise<s
 
 export async function processFile(file: File): Promise<MessageAttachment> {
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(t("File \"{value0}\" exceeds the size limit ({value1}).", { value0: file.name, value1: formatFileSize(MAX_FILE_SIZE) }))
+    throw new Error(
+      t('File "{value0}" exceeds the size limit ({value1}).', {
+        value0: file.name,
+        value1: formatFileSize(MAX_FILE_SIZE),
+      }),
+    )
   }
 
   let type: MessageAttachmentType
@@ -131,7 +185,7 @@ export async function processFile(file: File): Promise<MessageAttachment> {
     mimeType: file.type || (type === 'text' ? 'text/plain' : 'application/octet-stream'),
     size: file.size,
     data,
-    type
+    type,
   }
 }
 

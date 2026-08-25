@@ -6,10 +6,7 @@ import { posix, win32 } from 'node:path'
  * pair of double quotes; absolute paths are also normalized to the native
  * separator/layout without changing command names such as `conda`.
  */
-export function normalizeRuntimePathInput(
-  value: unknown,
-  platform: NodeJS.Platform = process.platform,
-): string {
+export function normalizeRuntimePathInput(value: unknown, platform: NodeJS.Platform = process.platform): string {
   if (typeof value !== 'string' || value.length > 4_096 || /[\r\n\0]/.test(value)) {
     throw new Error('Invalid runtime path')
   }

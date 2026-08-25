@@ -2,7 +2,7 @@ import { ProxyAgent } from 'undici'
 import type { McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition } from '../../shared/types'
 import { AppRepository } from '../storage/app-repository'
 import { McpClient, type McpToolExecutionResult } from './mcp-client'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const MCP_SERVER_CONCURRENCY = 8
 
@@ -25,7 +25,8 @@ export class McpManager {
         JSON.stringify(current.args) === JSON.stringify(config.args) &&
         JSON.stringify(current.env) === JSON.stringify(config.env) &&
         JSON.stringify(current.headers) === JSON.stringify(config.headers)
-      ) return existing
+      )
+        return existing
       void existing.close().catch(() => undefined)
       this.clients.delete(config.id)
     }
@@ -42,9 +43,8 @@ export class McpManager {
   async listAllTools(serverIds?: string[]): Promise<McpToolDefinition[]> {
     if (this.repository.getSettings().mcpEnabled === false) return []
     const allServers = this.repository.listMcpServers().filter((server) => server.enabled)
-    const targetServers = serverIds === undefined
-      ? allServers
-      : allServers.filter((server) => serverIds.includes(server.id))
+    const targetServers =
+      serverIds === undefined ? allServers : allServers.filter((server) => serverIds.includes(server.id))
     const results = await mapWithConcurrency(targetServers, MCP_SERVER_CONCURRENCY, async (server) => {
       try {
         return await this.getOrCreateClient(server).listTools()
@@ -63,7 +63,7 @@ export class McpManager {
     signal?: AbortSignal,
   ): Promise<McpToolExecutionResult & { serverName: string }> {
     if (this.repository.getSettings().mcpEnabled === false) {
-      return { result: t("MCP is disabled in global settings."), isError: true, serverName: 'Unknown' }
+      return { result: t('MCP is disabled in global settings.'), isError: true, serverName: 'Unknown' }
     }
     const server = this.repository.getMcpServer(serverId)
     if (!server || !server.enabled) {
@@ -106,12 +106,18 @@ export class McpManager {
     try {
       const connection = await client.connect()
       const tools = await client.listTools()
-      const protocol = connection.protocolVersion ? t(", protocol {value0}", { value0: connection.protocolVersion }) : ''
+      const protocol = connection.protocolVersion
+        ? t(', protocol {value0}', { value0: connection.protocolVersion })
+        : ''
       return {
         ok: true,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: tools.length,
-        message: t("Connection successful ({value0}{value1}, {value2} tools found)", { value0: connection.transport, value1: protocol, value2: tools.length }),
+        message: t('Connection successful ({value0}{value1}, {value2} tools found)', {
+          value0: connection.transport,
+          value1: protocol,
+          value2: tools.length,
+        }),
         tools,
       }
     } catch (error) {
@@ -119,7 +125,7 @@ export class McpManager {
         ok: false,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: 0,
-        message: error instanceof Error ? error.message : t("Connection failed"),
+        message: error instanceof Error ? error.message : t('Connection failed'),
       }
     } finally {
       await client.close().catch(() => undefined)

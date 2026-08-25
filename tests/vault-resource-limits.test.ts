@@ -15,10 +15,7 @@ const conversation: Conversation = {
       id: 'assistant',
       role: 'assistant',
       content: 'Answer',
-      citations: [
-        { url: 'https://example.com/one' },
-        { url: 'https://example.com/two' },
-      ],
+      citations: [{ url: 'https://example.com/one' }, { url: 'https://example.com/two' }],
       createdAt: timestamp,
     },
   ],
@@ -67,12 +64,8 @@ describe('aggregate vault resource limits', () => {
       maxMessages: 0,
       maxCitations: 1,
     }
-    expect(() =>
-      assertConversationMutationAllowed([conversation], [conversation], limits),
-    ).not.toThrow()
-    expect(() =>
-      assertConversationMutationAllowed([conversation], [], limits),
-    ).not.toThrow()
+    expect(() => assertConversationMutationAllowed([conversation], [conversation], limits)).not.toThrow()
+    expect(() => assertConversationMutationAllowed([conversation], [], limits)).not.toThrow()
     expect(() =>
       assertConversationMutationAllowed(
         [conversation],

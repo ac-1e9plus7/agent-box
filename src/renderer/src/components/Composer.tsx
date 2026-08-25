@@ -6,7 +6,7 @@ import { formatFileSize, processSelectedFiles } from '../file-helper'
 import { handleComposerKeyDown } from '../composer-helper'
 import { WEB_SEARCH_MODE_LABELS } from '../web-search'
 import { Icon } from './Icon'
-import { t } from "../../../shared/i18n"
+import { t } from '../../../shared/i18n'
 
 interface ComposerProps {
   activeModel?: ModelConfig
@@ -91,7 +91,7 @@ export function Composer({
   onToggleReasoning,
   onWebSearchModeChange,
   onShowToast,
-  streaming
+  streaming,
 }: ComposerProps): JSX.Element {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -100,18 +100,20 @@ export function Composer({
 
   const contextPercentage = contextLimit ? Math.min((contextTokens / contextLimit) * 100, 100) : 0
   const reasoningLabel = !activeModel?.supportsReasoning
-    ? t("Reasoning unavailable")
+    ? t('Reasoning unavailable')
     : reasoningEnabled
-      ? t("Reasoning · {value0}", { value0: activeModel.defaultReasoningEffort.toUpperCase() })
-      : t("Reasoning off")
+      ? t('Reasoning · {value0}', { value0: activeModel.defaultReasoningEffort.toUpperCase() })
+      : t('Reasoning off')
   const webSearchLabel = !webSearchAvailable
-    ? t("Web search unavailable")
+    ? t('Web search unavailable')
     : webSearchMode === 'off'
-      ? t("Web search off")
+      ? t('Web search off')
       : WEB_SEARCH_MODE_LABELS[webSearchMode]
   const webSearchDescription = webSearchAvailable
-    ? t("Web search may incur additional charges and sends queries to a search provider. “Prefer native web search” falls back automatically when native search is unavailable.")
-    : t("Web search is currently available only with OpenRouter connections.")
+    ? t(
+        'Web search may incur additional charges and sends queries to a search provider. “Prefer native web search” falls back automatically when native search is unavailable.',
+      )
+    : t('Web search is currently available only with OpenRouter connections.')
   const enabledMcpServers = mcpServers.filter((server) => server.enabled)
   const effectiveMcpServerIds = selectedMcpServerIds ?? enabledMcpServers.map((server) => server.id)
   const enabledSkills = skills.filter((skill) => skill.enabled)
@@ -131,7 +133,7 @@ export function Composer({
       const processed = await processSelectedFiles(files)
       onAttachmentsChange([...attachments, ...processed])
     } catch (error) {
-      onShowToast(error instanceof Error ? error.message : t("Could not read the file"))
+      onShowToast(error instanceof Error ? error.message : t('Could not read the file'))
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -194,17 +196,19 @@ export function Composer({
           <Icon name={contextTone === 'error' ? 'info' : 'refresh'} size={15} />
           <span>{contextMessage}</span>
           {contextCanTrimOnce ? (
-            <button onClick={onSendWithTrim}>{t("Trim context and send")}</button>
+            <button onClick={onSendWithTrim}>{t('Trim context and send')}</button>
           ) : contextTone === 'error' ? (
-            <button onClick={onOpenContextSettings}>{t("Context settings")}</button>
+            <button onClick={onOpenContextSettings}>{t('Context settings')}</button>
           ) : null}
         </div>
       )}
-      <div className={`composer ${disabled ? 'is-disabled' : ''} ${contextTone === 'error' ? 'has-context-error' : ''}`}>
+      <div
+        className={`composer ${disabled ? 'is-disabled' : ''} ${contextTone === 'error' ? 'has-context-error' : ''}`}
+      >
         <input
           ref={fileInputRef}
           accept="image/*,.pdf,.txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.yaml,.yml,.xml,.sql,.sh,.log"
-          aria-label={t("Upload files")}
+          aria-label={t('Upload files')}
           hidden
           multiple
           type="file"
@@ -225,11 +229,13 @@ export function Composer({
                   </div>
                 )}
                 <div className="composer-attachment-info">
-                  <span className="composer-attachment-name" title={attachment.name}>{attachment.name}</span>
+                  <span className="composer-attachment-name" title={attachment.name}>
+                    {attachment.name}
+                  </span>
                   <small className="composer-attachment-size">{formatFileSize(attachment.size)}</small>
                 </div>
                 <button
-                  aria-label={t("Remove attachment")}
+                  aria-label={t('Remove attachment')}
                   className="composer-attachment-remove"
                   onClick={() => handleRemoveAttachment(attachment.id)}
                 >
@@ -242,7 +248,7 @@ export function Composer({
 
         <textarea
           ref={textareaRef}
-          aria-label={t("Message input box")}
+          aria-label={t('Message input box')}
           disabled={disabled}
           onChange={(event) => onDraftChange(event.target.value)}
           onKeyDown={(event) => {
@@ -257,7 +263,7 @@ export function Composer({
               canSend,
               draft,
               selectionStart: event.currentTarget.selectionStart ?? draft.length,
-              selectionEnd: event.currentTarget.selectionEnd ?? draft.length
+              selectionEnd: event.currentTarget.selectionEnd ?? draft.length,
             })
 
             if (action.type === 'send') {
@@ -278,7 +284,11 @@ export function Composer({
             }
           }}
           onPaste={handlePaste}
-          placeholder={disabled ? t("Please configure available models and API keys first") : t("Send a message to AgentBox (supports dragging/pasting files or images)…")}
+          placeholder={
+            disabled
+              ? t('Please configure available models and API keys first')
+              : t('Send a message to AgentBox (supports dragging/pasting files or images)…')
+          }
           rows={1}
           value={draft}
         />
@@ -286,11 +296,11 @@ export function Composer({
         <div className="composer-toolbar">
           <div className="composer-tools-left">
             <button
-              aria-label={t("Add a picture or file")}
+              aria-label={t('Add a picture or file')}
               className="composer-action-button"
               disabled={disabled || uploading}
               onClick={() => fileInputRef.current?.click()}
-              title={t("Upload images or text files (paste or drag and drop supported)")}
+              title={t('Upload images or text files (paste or drag and drop supported)')}
             >
               <Icon name="paperclip" size={15} />
               {uploading && <span className="upload-spinner" />}
@@ -299,7 +309,11 @@ export function Composer({
               className={`agent-pill ${agentMode ? 'is-active' : ''}`}
               disabled={disabled}
               onClick={onToggleAgentMode}
-              title={agentMode ? t("Agent mode is on (Skills and MCP tool calls are available during execution)") : t("Click to enable Agent mode")}
+              title={
+                agentMode
+                  ? t('Agent mode is on (Skills and MCP tool calls are available during execution)')
+                  : t('Click to enable Agent mode')
+              }
             >
               <Icon name="bot" size={15} />
               <span>Agent</span>
@@ -309,19 +323,26 @@ export function Composer({
               <details className="mcp-conversation-selector skill-conversation-selector">
                 <summary
                   className={`mcp-indicator-pill skill-indicator-pill ${fixedSkillIds.length > 0 ? 'is-active' : ''}`}
-                  title={t("Pin skills for this conversation; when none are selected, the Agent routes automatically")}
+                  title={t('Pin skills for this conversation; when none are selected, the Agent routes automatically')}
                 >
                   <Icon name="sparkles" size={14} />
-                  <span>{t("Skills · {selection}", { selection: fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : t("Auto") })}</span>
+                  <span>
+                    {t('Skills · {selection}', {
+                      selection:
+                        fixedSkillIds.length > 0 ? `${fixedSkillIds.length}/${enabledSkills.length}` : t('Auto'),
+                    })}
+                  </span>
                   <Icon name="chevron-down" size={12} />
                 </summary>
                 <div className="mcp-conversation-menu skill-conversation-menu">
-                  <strong>{t("Skill routing for this conversation")}</strong>
+                  <strong>{t('Skill routing for this conversation')}</strong>
                   <button
                     className={fixedSkillIds.length === 0 ? 'is-selected' : ''}
                     type="button"
                     onClick={() => onSkillSelectionChange?.([])}
-                  >{t("Automatically select relevant skills")}</button>
+                  >
+                    {t('Automatically select relevant skills')}
+                  </button>
                   <div className="mcp-conversation-options">
                     {enabledSkills.map((skill) => (
                       <label key={skill.id} title={skill.description}>
@@ -339,20 +360,31 @@ export function Composer({
                       </label>
                     ))}
                   </div>
-                  <small>{t("Fixed skills are preloaded each round; automatic mode matches on request, and the model can also load other skills from the catalog on demand.")}</small>
-                  <button type="button" onClick={onOpenSkillsSettings}>{t("Manage Skills")}</button>
+                  <small>
+                    {t(
+                      'Fixed skills are preloaded each round; automatic mode matches on request, and the model can also load other skills from the catalog on demand.',
+                    )}
+                  </small>
+                  <button type="button" onClick={onOpenSkillsSettings}>
+                    {t('Manage Skills')}
+                  </button>
                 </div>
               </details>
             )}
             {agentMode && enabledMcpServers.length > 0 && (
               <details className="mcp-conversation-selector">
-                <summary className="mcp-indicator-pill" title={t("Select the MCP servers available to this conversation")}>
+                <summary
+                  className="mcp-indicator-pill"
+                  title={t('Select the MCP servers available to this conversation')}
+                >
                   <Icon name="tool" size={14} />
-                  <span>MCP · {effectiveMcpServerIds.length}/{enabledMcpServers.length}</span>
+                  <span>
+                    MCP · {effectiveMcpServerIds.length}/{enabledMcpServers.length}
+                  </span>
                   <Icon name="chevron-down" size={12} />
                 </summary>
                 <div className="mcp-conversation-menu">
-                  <strong>{t("MCP servers available to this conversation")}</strong>
+                  <strong>{t('MCP servers available to this conversation')}</strong>
                   {enabledMcpServers.map((server) => (
                     <label key={server.id}>
                       <input
@@ -368,8 +400,14 @@ export function Composer({
                       <span>{server.name}</span>
                     </label>
                   ))}
-                  <small>{t("{value0} tools found; unselected servers will not be exposed to the model.", { value0: mcpToolsCount ?? 0 })}</small>
-                  <button type="button" onClick={onOpenMcpSettings}>{t("Manage MCP servers")}</button>
+                  <small>
+                    {t('{value0} tools found; unselected servers will not be exposed to the model.', {
+                      value0: mcpToolsCount ?? 0,
+                    })}
+                  </small>
+                  <button type="button" onClick={onOpenMcpSettings}>
+                    {t('Manage MCP servers')}
+                  </button>
                 </div>
               </details>
             )}
@@ -377,7 +415,11 @@ export function Composer({
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}
               disabled={!activeModel?.supportsReasoning || disabled}
               onClick={onToggleReasoning}
-              title={activeModel?.supportsReasoning ? t("Toggle reasoning") : t("The current model does not support reasoning")}
+              title={
+                activeModel?.supportsReasoning
+                  ? t('Toggle reasoning')
+                  : t('The current model does not support reasoning')
+              }
             >
               <Icon name="brain" size={15} />
               {reasoningLabel}
@@ -392,40 +434,50 @@ export function Composer({
               <Icon name="chevron-down" size={12} />
               <select
                 aria-describedby="web-search-description"
-                aria-label={t("Conversation web search mode")}
+                aria-label={t('Conversation web search mode')}
                 disabled={!webSearchAvailable || disabled}
                 value={webSearchAvailable ? webSearchMode : 'off'}
                 onChange={(event) => onWebSearchModeChange(event.target.value as WebSearchMode)}
               >
-                <option value="off">{t("Off")}</option>
-                <option value="auto">{t("Automatic web search")}</option>
-                <option value="native">{t("Prefer native web search (fallback when unavailable)")}</option>
+                <option value="off">{t('Off')}</option>
+                <option value="auto">{t('Automatic web search')}</option>
+                <option value="native">{t('Prefer native web search (fallback when unavailable)')}</option>
               </select>
             </label>
           </div>
 
           <div className="composer-tools-right">
-            <button className={`context-meter is-${contextTone}`} onClick={onOpenModelSettings} title={t("Available input budget (after reserving space for model output)")}>
-              <span className="context-ring" style={{ '--context': `${contextPercentage * 3.6}deg` } as CSSProperties} />
-              <span>{compactNumber(contextTokens)} / {compactNumber(contextLimit)}</span>
-              <em>{contextMode === 'manual' ? t("Manual") : t("Auto")}</em>
+            <button
+              className={`context-meter is-${contextTone}`}
+              onClick={onOpenModelSettings}
+              title={t('Available input budget (after reserving space for model output)')}
+            >
+              <span
+                className="context-ring"
+                style={{ '--context': `${contextPercentage * 3.6}deg` } as CSSProperties}
+              />
+              <span>
+                {compactNumber(contextTokens)} / {compactNumber(contextLimit)}
+              </span>
+              <em>{contextMode === 'manual' ? t('Manual') : t('Auto')}</em>
             </button>
             {streaming ? (
-              <button className="send-button stop-button" aria-label={t("Stop generating")} onClick={onStop}><span /></button>
+              <button className="send-button stop-button" aria-label={t('Stop generating')} onClick={onStop}>
+                <span />
+              </button>
             ) : (
-              <button
-                className="send-button"
-                aria-label={t("Send message")}
-                disabled={!canSend}
-                onClick={onSend}
-              >
+              <button className="send-button" aria-label={t('Send message')} disabled={!canSend} onClick={onSend}>
                 <Icon name="arrow-up" size={19} />
               </button>
             )}
           </div>
         </div>
       </div>
-      <p className="composer-hint" id="web-search-description">{t("AI can make mistakes. Check important information.")}{sendOnEnter ? t("Enter to send; Shift / Ctrl / ⌘ + Enter for a new line") : t("⌘ / Ctrl + Enter to send; Enter for a new line")}
+      <p className="composer-hint" id="web-search-description">
+        {t('AI can make mistakes. Check important information.')}
+        {sendOnEnter
+          ? t('Enter to send; Shift / Ctrl / ⌘ + Enter for a new line')
+          : t('⌘ / Ctrl + Enter to send; Enter for a new line')}
         {webSearchMode !== 'off' && webSearchAvailable && <span> · {webSearchDescription}</span>}
       </p>
     </div>

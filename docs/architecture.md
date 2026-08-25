@@ -97,20 +97,20 @@ The relevant controls live in [`src/electron/main.ts`](../src/electron/main.ts),
 
 Channel constants are centralized in [`src/shared/ipc.ts`](../src/shared/ipc.ts). The public methods and their types are defined in [`src/electron/preload.ts`](../src/electron/preload.ts) and [`src/shared/types.ts`](../src/shared/types.ts). The legacy `vault:*` and `chat:stream` channels no longer exist.
 
-| Domain | Channels | Purpose |
-| --- | --- | --- |
-| Settings | `settings:get`, `settings:update` | Read or update application settings; mask proxy credentials on output |
-| Providers | `providers:list`, `providers:upsert`, `providers:remove`, `providers:test` | Manage connections, write API keys, and test the models endpoint |
-| Models | `models:list`, `models:upsert`, `models:remove`, `models:discover` | Manage local model configurations and discover remote models |
-| Skills | `skills:list`, `skills:upsert`, `skills:remove`, `skills:toggle`, `skills:reset-defaults` | Manage skill packages, enablement, and built-in skill reset |
-| MCP | `mcp:list-servers`, `mcp:upsert-server`, `mcp:remove-server`, `mcp:toggle-server`, `mcp:test-server`, `mcp:list-tools` | Manage MCP servers, test connections, and query tools |
-| Terminal and runtimes | `terminal:test-shell`, `runtime:test`, `runtime:list-conda-environments` | Test the integrated shell and developer runtimes, and list Conda environments |
-| Workspace | `workspace:select-directory` | Open the system directory picker in the main process and return a normalized absolute path |
-| Conversations | `conversations:list`, `conversations:get`, `conversations:save`, `conversations:remove` | Read and persist conversation trees |
-| Data | `data:export-backup`, `data:clear-conversations` | Export a shallow or deep ZIP backup, or clear all conversations |
-| Chat | `chat:start`, `chat:cancel`, `chat:resolve-tool-approval` | Start a request, cancel it by `requestId`, and resolve tool approval |
-| Stream events | `chat:event` | Push `StreamEvent` values to the renderer: text, reasoning, citations, tools, usage, completion, or errors |
-| Application | `app:get-info` | Return the application name, version, and platform |
+| Domain                | Channels                                                                                                               | Purpose                                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Settings              | `settings:get`, `settings:update`                                                                                      | Read or update application settings; mask proxy credentials on output                                      |
+| Providers             | `providers:list`, `providers:upsert`, `providers:remove`, `providers:test`                                             | Manage connections, write API keys, and test the models endpoint                                           |
+| Models                | `models:list`, `models:upsert`, `models:remove`, `models:discover`                                                     | Manage local model configurations and discover remote models                                               |
+| Skills                | `skills:list`, `skills:upsert`, `skills:remove`, `skills:toggle`, `skills:reset-defaults`                              | Manage skill packages, enablement, and built-in skill reset                                                |
+| MCP                   | `mcp:list-servers`, `mcp:upsert-server`, `mcp:remove-server`, `mcp:toggle-server`, `mcp:test-server`, `mcp:list-tools` | Manage MCP servers, test connections, and query tools                                                      |
+| Terminal and runtimes | `terminal:test-shell`, `runtime:test`, `runtime:list-conda-environments`                                               | Test the integrated shell and developer runtimes, and list Conda environments                              |
+| Workspace             | `workspace:select-directory`                                                                                           | Open the system directory picker in the main process and return a normalized absolute path                 |
+| Conversations         | `conversations:list`, `conversations:get`, `conversations:save`, `conversations:remove`                                | Read and persist conversation trees                                                                        |
+| Data                  | `data:export-backup`, `data:clear-conversations`                                                                       | Export a shallow or deep ZIP backup, or clear all conversations                                            |
+| Chat                  | `chat:start`, `chat:cancel`, `chat:resolve-tool-approval`                                                              | Start a request, cancel it by `requestId`, and resolve tool approval                                       |
+| Stream events         | `chat:event`                                                                                                           | Push `StreamEvent` values to the renderer: text, reasoning, citations, tools, usage, completion, or errors |
+| Application           | `app:get-info`                                                                                                         | Return the application name, version, and platform                                                         |
 
 `chat:start` returns a newly generated `{ requestId }`. Cancellation, tool approval, and stream events are all associated with this request ID; a conversation ID does not directly control an in-flight generation.
 

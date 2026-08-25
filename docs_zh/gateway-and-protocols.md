@@ -41,11 +41,11 @@ sequenceDiagram
 
 模型可以用 `ModelConfig.apiFormat` 覆盖供应商的默认格式。端点由规范化后的 Base URL 和下列相对路径组成：
 
-| API 格式 | 端点 | 主要请求结构 | 主要流事件 |
-| --- | --- | --- | --- |
-| **OpenAI Chat Completions API** | `chat/completions` | `messages`, `tools`, `max_tokens`, `reasoning` / `reasoning_effort` | `choices[].delta.content`, `delta.tool_calls`, `reasoning*`, `usage` |
-| **OpenAI Responses API** | `responses` | `instructions`, `input`, function tools, `max_output_tokens`, `reasoning` | `response.output_text.delta`, `response.function_call_arguments.delta`, `response.reasoning*`, terminal response events |
-| **Anthropic Messages API** | `messages` | `system`, content-block `messages`, `tools`, `thinking`, `max_tokens` | `content_block_start/delta`, `text_delta`, `thinking_delta`, `signature_delta`, `input_json_delta` |
+| API 格式                        | 端点               | 主要请求结构                                                              | 主要流事件                                                                                                              |
+| ------------------------------- | ------------------ | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **OpenAI Chat Completions API** | `chat/completions` | `messages`, `tools`, `max_tokens`, `reasoning` / `reasoning_effort`       | `choices[].delta.content`, `delta.tool_calls`, `reasoning*`, `usage`                                                    |
+| **OpenAI Responses API**        | `responses`        | `instructions`, `input`, function tools, `max_output_tokens`, `reasoning` | `response.output_text.delta`, `response.function_call_arguments.delta`, `response.reasoning*`, terminal response events |
+| **Anthropic Messages API**      | `messages`         | `system`, content-block `messages`, `tools`, `thinking`, `max_tokens`     | `content_block_start/delta`, `text_delta`, `thinking_delta`, `signature_delta`, `input_json_delta`                      |
 
 适配实现分别位于 [`request-adapters.ts`](../src/electron/api/request-adapters.ts) 与 [`protocol-adapters.ts`](../src/electron/api/protocol-adapters.ts)。共享历史会被重建为各协议所需的 assistant tool call / tool result 结构；Responses 的已完成 reasoning item 与 Anthropic thinking signature 会保存在 Agent trace 中，以便下一轮和中断恢复时原样回放协议状态。
 

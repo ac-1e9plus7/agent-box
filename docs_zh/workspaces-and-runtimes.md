@@ -75,23 +75,23 @@ Shell 在“设置 → 通用 → Integrated terminal shell”中选择。
 
 在“设置 → 开发运行时”中配置 JDK、Go、PHP 与 Python，并可分别执行版本探测。解析实现见 [`src/electron/api/runtime-environments.ts`](../src/electron/api/runtime-environments.ts)。
 
-| 运行时 | 自动模式 | 指定模式 |
-| --- | --- | --- |
-| JDK | 先尝试 `JAVA_HOME/bin/java`，再尝试 PATH 中的 `java`。 | 填写 JDK 根目录，解析 `<home>/bin/java`。 |
-| Go | 先尝试 `GOROOT/bin/go`，再尝试 PATH 中的 `go`。 | 可直接填写 Go 可执行文件；留空时使用 `<GOROOT>/bin/go`。 |
-| PHP | 尝试 PATH 中的 `php`。 | 填写 PHP CLI 可执行文件。 |
+| 运行时 | 自动模式                                               | 指定模式                                                 |
+| ------ | ------------------------------------------------------ | -------------------------------------------------------- |
+| JDK    | 先尝试 `JAVA_HOME/bin/java`，再尝试 PATH 中的 `java`。 | 填写 JDK 根目录，解析 `<home>/bin/java`。                |
+| Go     | 先尝试 `GOROOT/bin/go`，再尝试 PATH 中的 `go`。        | 可直接填写 Go 可执行文件；留空时使用 `<GOROOT>/bin/go`。 |
+| PHP    | 尝试 PATH 中的 `php`。                                 | 填写 PHP CLI 可执行文件。                                |
 
 JDK 使用 `java -version`，Go 使用 `go version`，PHP 使用 `php -v`；绝对路径在启动前会先检查是否存在，探测进程默认 3 秒超时。
 
 ### Python 模式
 
-| 模式 | 解析规则 |
-| --- | --- |
-| **自动** | 当前工作目录 `.venv` → `venv` → `VIRTUAL_ENV` → `CONDA_PREFIX` → 已保留的指定 executable（若有）或系统候选。 |
-| **系统** | 使用填写的 executable；留空时尝试平台系统候选。 |
-| **venv** | Windows 使用 `<venv>/Scripts/python.exe`，macOS/Linux 使用 `<venv>/bin/python`。 |
-| **Conda** | 绝对 prefix 直接解析；环境名称通过 `conda env list --json` 查找后解析。Windows 使用 `<prefix>/python.exe`，macOS/Linux 使用 `<prefix>/bin/python`。 |
-| **指定解释器** | 直接探测填写的 Python 可执行文件。 |
+| 模式           | 解析规则                                                                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **自动**       | 当前工作目录 `.venv` → `venv` → `VIRTUAL_ENV` → `CONDA_PREFIX` → 已保留的指定 executable（若有）或系统候选。                                        |
+| **系统**       | 使用填写的 executable；留空时尝试平台系统候选。                                                                                                     |
+| **venv**       | Windows 使用 `<venv>/Scripts/python.exe`，macOS/Linux 使用 `<venv>/bin/python`。                                                                    |
+| **Conda**      | 绝对 prefix 直接解析；环境名称通过 `conda env list --json` 查找后解析。Windows 使用 `<prefix>/python.exe`，macOS/Linux 使用 `<prefix>/bin/python`。 |
+| **指定解释器** | 直接探测填写的 Python 可执行文件。                                                                                                                  |
 
 系统候选顺序为：Windows `python.exe` → `python3.exe` → `py.exe -3`；macOS/Linux `python3` → `python`。解析器通过 `--version` 验证可执行性，但不会单独拒绝 Python 2，因此应明确选择 Python 3，尤其是供 `agentbox_run_code` 使用时。
 

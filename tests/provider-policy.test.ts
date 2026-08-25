@@ -7,15 +7,13 @@ import {
 } from '../src/electron/api/provider-policy'
 
 describe('CLIProxyAPI authentication policy', () => {
-  it.each([
-    'http://127.0.0.1:8317/v1',
-    'http://127.0.0.2:8317/v1',
-    'http://localhost:8317/v1',
-    'http://[::1]:8317/v1',
-  ])('recognizes %s as loopback', (baseUrl) => {
-    expect(isLoopbackUrl(baseUrl)).toBe(true)
-    expect(isApiKeyOptional({ kind: 'cliproxy', baseUrl })).toBe(true)
-  })
+  it.each(['http://127.0.0.1:8317/v1', 'http://127.0.0.2:8317/v1', 'http://localhost:8317/v1', 'http://[::1]:8317/v1'])(
+    'recognizes %s as loopback',
+    (baseUrl) => {
+      expect(isLoopbackUrl(baseUrl)).toBe(true)
+      expect(isApiKeyOptional({ kind: 'cliproxy', baseUrl })).toBe(true)
+    },
+  )
 
   it('requires credentials for remote CLIProxyAPI and every custom endpoint', () => {
     expect(
@@ -62,9 +60,7 @@ describe('CLIProxyAPI authentication policy', () => {
       baseUrl: 'http://127.0.0.1:8317/v1',
       apiKey: 'proxy-secret',
     }
-    expect(
-      buildProviderHeaders(provider, 'openai-chat-completions').Authorization,
-    ).toBe('Bearer proxy-secret')
+    expect(buildProviderHeaders(provider, 'openai-chat-completions').Authorization).toBe('Bearer proxy-secret')
     expect(buildProviderHeaders(provider, 'anthropic-messages')).toMatchObject({
       'anthropic-version': '2023-06-01',
       'x-api-key': 'proxy-secret',

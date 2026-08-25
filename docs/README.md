@@ -6,17 +6,17 @@ This documentation set describes AgentBox's current design, boundaries, and main
 
 ## Documentation index
 
-| # | Document | Scope | Primary source |
-| --- | --- | --- | --- |
-| 1 | [System architecture](./architecture.md) | Electron process model, sandbox, preload/IPC boundaries, windows, and external-link lifecycle | `src/electron/main.ts`, `src/electron/preload.ts`, `src/shared/ipc.ts` |
-| 2 | [Encrypted storage and Vault security](./storage-and-vault.md) | safeStorage, AES-256-GCM, schemas, quotas, data clearing, and ZIP backups | `src/electron/storage/`, `src/electron/backup/` |
-| 3 | [API protocols and request gateway](./gateway-and-protocols.md) | OpenAI Chat Completions API, OpenAI Responses API, Anthropic Messages API, SSE, reasoning, web search, and proxies | `src/electron/api/` |
-| 4 | [Agent Skills system](./skills-system.md) | Multi-file Skills, built-ins, ZIP import/export, retrieval, and dynamic prompt augmentation | `src/electron/storage/default-skills.ts`, `src/shared/skill-zip.ts` |
-| 5 | [MCP tools and retrieval](./mcp-integration.md) | stdio, Streamable HTTP, legacy HTTP+SSE, connection pooling, retrieval, approvals, and multi-turn Agent execution | `src/electron/mcp/`, `src/electron/api/gateway.ts` |
-| 6 | [Renderer UI and interactions](./ui-and-components.md) | React renderer, message trees, Markdown/KaTeX, attachments, profiles, and keyboard behavior | `src/renderer/src/`, `src/shared/conversation-tree.ts` |
-| 7 | [Development, testing, and CI](./development-and-testing.md) | pnpm scripts, Vitest, CommonJS packaging constraints, smoke tests, and GitHub Actions | `package.json`, `tests/`, `.github/workflows/` |
-| 8 | [Conversation workspaces and development runtimes](./workspaces-and-runtimes.md) | Workspace boundaries, integrated terminal, JDK/Go/PHP/Python, venv, and Conda | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
-| 9 | [Localization and English terminology](./i18n.md) | First-launch language selection, English-source-key bundles, generation, the `check` linter, semantic hatch keys, and terminology | `src/shared/i18n/`, `scripts/localize-renderer.mjs` |
+| #   | Document                                                                         | Scope                                                                                                                             | Primary source                                                                     |
+| --- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| 1   | [System architecture](./architecture.md)                                         | Electron process model, sandbox, preload/IPC boundaries, windows, and external-link lifecycle                                     | `src/electron/main.ts`, `src/electron/preload.ts`, `src/shared/ipc.ts`             |
+| 2   | [Encrypted storage and Vault security](./storage-and-vault.md)                   | safeStorage, AES-256-GCM, schemas, quotas, data clearing, and ZIP backups                                                         | `src/electron/storage/`, `src/electron/backup/`                                    |
+| 3   | [API protocols and request gateway](./gateway-and-protocols.md)                  | OpenAI Chat Completions API, OpenAI Responses API, Anthropic Messages API, SSE, reasoning, web search, and proxies                | `src/electron/api/`                                                                |
+| 4   | [Agent Skills system](./skills-system.md)                                        | Multi-file Skills, built-ins, ZIP import/export, retrieval, and dynamic prompt augmentation                                       | `src/electron/storage/default-skills.ts`, `src/shared/skill-zip.ts`                |
+| 5   | [MCP tools and retrieval](./mcp-integration.md)                                  | stdio, Streamable HTTP, legacy HTTP+SSE, connection pooling, retrieval, approvals, and multi-turn Agent execution                 | `src/electron/mcp/`, `src/electron/api/gateway.ts`                                 |
+| 6   | [Renderer UI and interactions](./ui-and-components.md)                           | React renderer, message trees, Markdown/KaTeX, attachments, profiles, and keyboard behavior                                       | `src/renderer/src/`, `src/shared/conversation-tree.ts`                             |
+| 7   | [Development, testing, and CI](./development-and-testing.md)                     | pnpm scripts, Vitest, CommonJS packaging constraints, smoke tests, and GitHub Actions                                             | `package.json`, `tests/`, `.github/workflows/`                                     |
+| 8   | [Conversation workspaces and development runtimes](./workspaces-and-runtimes.md) | Workspace boundaries, integrated terminal, JDK/Go/PHP/Python, venv, and Conda                                                     | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
+| 9   | [Localization and English terminology](./i18n.md)                                | First-launch language selection, English-source-key bundles, generation, the `check` linter, semantic hatch keys, and terminology | `src/shared/i18n/`, `scripts/localize-renderer.mjs`                                |
 
 ## Core maintenance principles
 

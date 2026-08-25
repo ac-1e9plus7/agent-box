@@ -15,13 +15,11 @@ export type TokenStepDirection = 'decrease' | 'increase'
 export function stepTokenValue(
   value: number,
   direction: TokenStepDirection,
-  { minimum, maximum }: TokenStepOptions
+  { minimum, maximum }: TokenStepOptions,
 ): number {
   const lowerBound = Math.max(0, Math.trunc(minimum))
   const upperBound = Math.max(lowerBound, Math.trunc(maximum))
-  const normalized = Number.isFinite(value)
-    ? Math.min(upperBound, Math.max(lowerBound, Math.trunc(value)))
-    : lowerBound
+  const normalized = Number.isFinite(value) ? Math.min(upperBound, Math.max(lowerBound, Math.trunc(value))) : lowerBound
 
   if (direction === 'increase' && normalized < TOKEN_BUTTON_STEP) {
     return Math.min(upperBound, Math.max(lowerBound, TOKEN_BUTTON_STEP))
@@ -30,18 +28,17 @@ export function stepTokenValue(
     return lowerBound
   }
 
-  const nominalTarget = direction === 'increase'
-    ? Math.min(upperBound, normalized + TOKEN_BUTTON_STEP)
-    : Math.max(lowerBound, normalized - TOKEN_BUTTON_STEP)
+  const nominalTarget =
+    direction === 'increase'
+      ? Math.min(upperBound, normalized + TOKEN_BUTTON_STEP)
+      : Math.max(lowerBound, normalized - TOKEN_BUTTON_STEP)
   const anchors = getTokenStepAnchors(upperBound)
 
   if (direction === 'increase') {
-    return anchors.find((anchor) => anchor > normalized && anchor <= nominalTarget)
-      ?? nominalTarget
+    return anchors.find((anchor) => anchor > normalized && anchor <= nominalTarget) ?? nominalTarget
   }
 
-  return anchors.filter((anchor) => anchor < normalized && anchor >= nominalTarget).at(-1)
-    ?? nominalTarget
+  return anchors.filter((anchor) => anchor < normalized && anchor >= nominalTarget).at(-1) ?? nominalTarget
 }
 
 export function getTokenStepAnchors(maximum: number): number[] {
@@ -53,7 +50,5 @@ export function getTokenStepAnchors(maximum: number): number[] {
     if (value > Number.MAX_SAFE_INTEGER / 2) break
   }
 
-  return [...anchors]
-    .filter((anchor) => anchor <= upperBound)
-    .sort((left, right) => left - right)
+  return [...anchors].filter((anchor) => anchor <= upperBound).sort((left, right) => left - right)
 }

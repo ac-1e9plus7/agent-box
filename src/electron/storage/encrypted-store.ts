@@ -2,7 +2,7 @@ import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { safeStorage } from 'electron'
-import { t } from "../../shared/i18n"
+import { t } from '../../shared/i18n'
 
 const KEY_BYTES = 32
 const IV_BYTES = 12
@@ -18,6 +18,10 @@ interface EncryptedEnvelope {
   iv: string
   authTag: string
   ciphertext: string
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 export class EncryptedStoreError extends Error {
@@ -87,7 +91,10 @@ export class EncryptedStore<T extends object> {
       const hasCustomData =
         conversations.length > 0 ||
         models.length > 1 ||
-        providers.some((p: any) => Boolean(p.apiKeyEncrypted || p.apiKey || p.id !== 'openrouter')) ||
+        providers.some(
+          (provider) =>
+            isRecord(provider) && Boolean(provider.apiKeyEncrypted || provider.apiKey || provider.id !== 'openrouter'),
+        ) ||
         providers.length > 1
       return !hasCustomData
     }
@@ -112,7 +119,7 @@ export class EncryptedStore<T extends object> {
 
     if (envelopeBuffer && !this.state) {
       throw new EncryptedStoreError(
-        t("Unable to decrypt local data. The system key may have changed, or the data file may have become corrupted."),
+        t('Unable to decrypt local data. The system key may have changed, or the data file may have become corrupted.'),
       )
     }
 
@@ -152,20 +159,21 @@ export class EncryptedStore<T extends object> {
   private assertSecureStorageAvailable(): void {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new EncryptedStoreError(
-        t("Operating-system secure storage is unavailable. To prevent plaintext storage, AgentBox will not load user data."),
+        t(
+          'Operating-system secure storage is unavailable. To prevent plaintext storage, AgentBox will not load user data.',
+        ),
       )
     }
 
     const safeStorageWithBackend = safeStorage as typeof safeStorage & {
       getSelectedStorageBackend?: () => string
     }
-    const backend =
-      process.platform === 'linux'
-        ? safeStorageWithBackend.getSelectedStorageBackend?.()
-        : undefined
+    const backend = process.platform === 'linux' ? safeStorageWithBackend.getSelectedStorageBackend?.() : undefined
     if (process.platform === 'linux' && backend === 'basic_text') {
       throw new EncryptedStoreError(
-        t("There is no system keyring available for the current Linux environment; Electron's basic_text plaintext backend has been rejected."),
+        t(
+          "There is no system keyring available for the current Linux environment; Electron's basic_text plaintext backend has been rejected.",
+        ),
       )
     }
   }
@@ -182,7 +190,7 @@ export class EncryptedStore<T extends object> {
         }
         return decoded
       } catch (error) {
-        throw new EncryptedStoreError(t("Unable to use system secure storage to unlock local data key."), {
+        throw new EncryptedStoreError(t('Unable to use system secure storage to unlock local data key.'), {
           cause: error,
         })
       }
@@ -236,7 +244,7 @@ export class EncryptedStore<T extends object> {
       throw new Error('Invalid encrypted envelope')
     }
 
-    const tryDecryptWithAad = (aad: Buffer): unknown | undefined => {
+    const tryDecryptWithAad = (aad: Buffer): unknown => {
       try {
         const decipher = createDecipheriv('aes-256-gcm', masterKey, iv, {
           authTagLength: AUTH_TAG_BYTES,
@@ -311,10 +319,7 @@ export class EncryptedStore<T extends object> {
 
   private async persist(value: T): Promise<void> {
     const envelope = this.encrypt(value)
-    await this.writeFileAtomic(
-      this.vaultPath,
-      Buffer.from(JSON.stringify(envelope), 'utf8'),
-    )
+    await this.writeFileAtomic(this.vaultPath, Buffer.from(JSON.stringify(envelope), 'utf8'))
   }
 
   private async writeFileAtomic(path: string, data: Buffer): Promise<void> {
@@ -337,12 +342,12 @@ export class EncryptedStore<T extends object> {
   }
 
   private requireMasterKey(): Buffer {
-    if (!this.masterKey) throw new EncryptedStoreError(t("EncryptedStore has not been initialized."))
+    if (!this.masterKey) throw new EncryptedStoreError(t('EncryptedStore has not been initialized.'))
     return this.masterKey
   }
 
   private requireState(): T {
-    if (!this.state) throw new EncryptedStoreError(t("EncryptedStore has not been initialized."))
+    if (!this.state) throw new EncryptedStoreError(t('EncryptedStore has not been initialized.'))
     return this.state
   }
 }

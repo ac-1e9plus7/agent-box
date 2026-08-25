@@ -75,23 +75,23 @@ Execution limits:
 
 JDK, Go, PHP, and Python are configured and tested individually under **Settings → Developer Runtimes**. Resolution is implemented in [`src/electron/api/runtime-environments.ts`](../src/electron/api/runtime-environments.ts).
 
-| Runtime | Automatic mode | Custom mode |
-| --- | --- | --- |
-| JDK | Tries `JAVA_HOME/bin/java`, then `java` on PATH. | Takes a JDK root and resolves `<home>/bin/java`. |
-| Go | Tries `GOROOT/bin/go`, then `go` on PATH. | Accepts a Go executable directly; if empty, resolves `<GOROOT>/bin/go`. |
-| PHP | Tries `php` on PATH. | Takes a PHP CLI executable. |
+| Runtime | Automatic mode                                   | Custom mode                                                             |
+| ------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| JDK     | Tries `JAVA_HOME/bin/java`, then `java` on PATH. | Takes a JDK root and resolves `<home>/bin/java`.                        |
+| Go      | Tries `GOROOT/bin/go`, then `go` on PATH.        | Accepts a Go executable directly; if empty, resolves `<GOROOT>/bin/go`. |
+| PHP     | Tries `php` on PATH.                             | Takes a PHP CLI executable.                                             |
 
 JDK is probed with `java -version`, Go with `go version`, and PHP with `php -v`. Absolute JDK, Go, and PHP candidates are checked for existence before launch, and their probe process has a 3-second default timeout.
 
 ### Python modes
 
-| Mode | Resolution rule |
-| --- | --- |
-| **Automatic** | Working-directory `.venv` → `venv` → `VIRTUAL_ENV` → `CONDA_PREFIX` → a retained custom executable, if present, or system candidates. |
-| **System** | Uses the entered executable, or platform system candidates when the field is empty. |
-| **venv** | Uses `<venv>/Scripts/python.exe` on Windows or `<venv>/bin/python` on macOS/Linux. |
-| **Conda** | Resolves an absolute prefix directly, or looks up an environment name through `conda env list --json`. Uses `<prefix>/python.exe` on Windows or `<prefix>/bin/python` on macOS/Linux. |
-| **Custom interpreter** | Probes the entered Python executable directly. |
+| Mode                   | Resolution rule                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Automatic**          | Working-directory `.venv` → `venv` → `VIRTUAL_ENV` → `CONDA_PREFIX` → a retained custom executable, if present, or system candidates.                                                 |
+| **System**             | Uses the entered executable, or platform system candidates when the field is empty.                                                                                                   |
+| **venv**               | Uses `<venv>/Scripts/python.exe` on Windows or `<venv>/bin/python` on macOS/Linux.                                                                                                    |
+| **Conda**              | Resolves an absolute prefix directly, or looks up an environment name through `conda env list --json`. Uses `<prefix>/python.exe` on Windows or `<prefix>/bin/python` on macOS/Linux. |
+| **Custom interpreter** | Probes the entered Python executable directly.                                                                                                                                        |
 
 System candidate order is `python.exe` → `python3.exe` → `py.exe -3` on Windows and `python3` → `python` on macOS/Linux. Resolution uses `--version` to confirm executability but does not separately reject Python 2, so select Python 3 explicitly, especially for `agentbox_run_code`.
 

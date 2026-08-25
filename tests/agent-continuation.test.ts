@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { interruptionFromStreamEvent, isAgentContinuationCommand, resolveNaturalAgentResumeMessageId } from '../src/renderer/src/agent-continuation'
+import {
+  interruptionFromStreamEvent,
+  isAgentContinuationCommand,
+  resolveNaturalAgentResumeMessageId,
+} from '../src/renderer/src/agent-continuation'
 
 describe('Agent interruption continuation', () => {
   it.each([
@@ -26,29 +30,50 @@ describe('Agent interruption continuation', () => {
   })
 
   it('classifies API limits and resumable terminal states', () => {
-    expect(interruptionFromStreamEvent({
-      type: 'error',
-      requestId: 'request',
-      error: { message: 'Rate limit exceeded', status: 429, retryAfterSeconds: 5 },
-    }, true, '2026-08-23T00:00:00.000Z')).toMatchObject({
+    expect(
+      interruptionFromStreamEvent(
+        {
+          type: 'error',
+          requestId: 'request',
+          error: { message: 'Rate limit exceeded', status: 429, retryAfterSeconds: 5 },
+        },
+        true,
+        '2026-08-23T00:00:00.000Z',
+      ),
+    ).toMatchObject({
       reason: 'rate_limit',
       retryAfterSeconds: 5,
     })
-    expect(interruptionFromStreamEvent({
-      type: 'done',
-      requestId: 'request',
-      finishReason: 'tool_turn_limit',
-    }, true)).toMatchObject({ reason: 'tool_turn_limit' })
-    expect(interruptionFromStreamEvent({
-      type: 'done',
-      requestId: 'request',
-      finishReason: 'stop',
-    }, true)).toBeUndefined()
-    expect(interruptionFromStreamEvent({
-      type: 'error',
-      requestId: 'request',
-      error: { message: 'network disconnected', code: 'network_error' },
-    }, false)).toBeUndefined()
+    expect(
+      interruptionFromStreamEvent(
+        {
+          type: 'done',
+          requestId: 'request',
+          finishReason: 'tool_turn_limit',
+        },
+        true,
+      ),
+    ).toMatchObject({ reason: 'tool_turn_limit' })
+    expect(
+      interruptionFromStreamEvent(
+        {
+          type: 'done',
+          requestId: 'request',
+          finishReason: 'stop',
+        },
+        true,
+      ),
+    ).toBeUndefined()
+    expect(
+      interruptionFromStreamEvent(
+        {
+          type: 'error',
+          requestId: 'request',
+          error: { message: 'network disconnected', code: 'network_error' },
+        },
+        false,
+      ),
+    ).toBeUndefined()
   })
 
   it('only resumes from the immediately preceding interrupted assistant message', () => {
@@ -62,9 +87,11 @@ describe('Agent interruption continuation', () => {
     }
     expect(resolveNaturalAgentResumeMessageId([interrupted], '继续')).toBe('assistant-checkpoint')
     expect(resolveNaturalAgentResumeMessageId([interrupted], '继续', true)).toBeUndefined()
-    expect(resolveNaturalAgentResumeMessageId([
-      interrupted,
-      { id: 'user-new', role: 'user', content: 'new task', createdAt: timestamp },
-    ], '继续')).toBeUndefined()
+    expect(
+      resolveNaturalAgentResumeMessageId(
+        [interrupted, { id: 'user-new', role: 'user', content: 'new task', createdAt: timestamp }],
+        '继续',
+      ),
+    ).toBeUndefined()
   })
 })
