@@ -1606,14 +1606,12 @@ select:disabled {
   background: var(--accent-soft);
 }
 
-.user-bubble .message-body {
+.user-bubble .plain-text-message-body {
   color: color-mix(in srgb, var(--text), var(--accent) 8%);
   font-size: 13.5px;
   line-height: 1.65;
-}
-
-.user-bubble .message-body .katex {
-  color: inherit;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .user-message-time {

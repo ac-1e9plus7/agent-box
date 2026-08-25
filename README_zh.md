@@ -43,8 +43,8 @@
 
 ### 环境要求
 
-- Node.js 20 或更高版本
-- pnpm 9 或更高版本
+- Node.js 20.19+、22.13+ 或 24+
+- pnpm 11.24.0（通过 `packageManager` 固定）
 - 操作系统凭据后端：Windows 凭据保护、macOS Keychain 或 Linux Secret Service
 
 ### 安装与运行
@@ -52,6 +52,7 @@
 ```powershell
 git clone https://github.com/ac-1e9plus7/agent-box.git
 cd agent-box
+corepack enable
 pnpm install
 
 # 启动 Electron 与 Vite 开发服务器

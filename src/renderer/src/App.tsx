@@ -36,6 +36,7 @@ import { resolveNaturalAgentResumeMessageId } from './agent-continuation'
 import { cleanGeneratedTitle, cleanManualTitle, firstUserQuestion, TITLE_SYSTEM_PROMPT } from './title'
 import { languageFromSystemLocale, setLanguage } from '../../shared/i18n'
 import { t } from '../../shared/i18n'
+import { normalizeMessageContent } from '../../shared/message-content'
 import {
   toStoredConversation,
   toUiConversation,
@@ -729,9 +730,9 @@ export default function App(): JSX.Element {
 
   const handleSend = async (allowContextTrimming = false, options?: SendOptions): Promise<void> => {
     const usesExplicitContent = options?.content !== undefined
-    const content = (options?.content ?? draft).trim()
+    const content = normalizeMessageContent(options?.content ?? draft)
     const currentAttachments = usesExplicitContent ? [] : [...attachments]
-    if ((!content && currentAttachments.length === 0) || !activeModel) return
+    if ((!content.trim() && currentAttachments.length === 0) || !activeModel) return
 
     if (activeConversation && streamingConversationIds.has(activeConversation.id)) return
     if (!activeConversation) {
@@ -979,12 +980,12 @@ export default function App(): JSX.Element {
   )
 
   const handleEditMessage = async (messageId: string, nextContent: string, regenerate: boolean): Promise<boolean> => {
-    const content = nextContent.trim()
+    const content = normalizeMessageContent(nextContent)
     if (!activeModel || !activeConversation || streamingConversationIds.has(activeConversation.id)) return false
     const messages = activeConversation.messages
     const targetUserMsg = messages.find((message) => message.id === messageId && message.role === 'user')
     if (!targetUserMsg) return false
-    if (!content && !targetUserMsg.attachments?.length) return false
+    if (!content.trim() && !targetUserMsg.attachments?.length) return false
 
     if (!regenerate) {
       const timestamp = new Date().toISOString()

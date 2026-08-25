@@ -149,4 +149,13 @@ describe('projectContext includes pending draft', () => {
     const withDraft = projectContext([msg('u1', 'user', 'hi')], 'follow up question', baseSettings, model())
     expect(withDraft.estimatedInputTokens).toBeGreaterThan(without.estimatedInputTokens)
   })
+
+  it('accounts for the normalized draft without trimming its source whitespace', () => {
+    const pending = '\r\n  follow up  \r\n'
+    const normalized = '\n  follow up  \n'
+    const fromPending = projectContext([], pending, baseSettings, model())
+    const fromStoredMessage = projectContext([msg('u1', 'user', normalized)], '', baseSettings, model())
+
+    expect(fromPending.estimatedInputTokens).toBe(fromStoredMessage.estimatedInputTokens)
+  })
 })

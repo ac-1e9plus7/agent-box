@@ -512,6 +512,48 @@ describe('request body adapters', () => {
     expect(body.messages).toEqual(messages.map(({ role, content }) => ({ role, content })))
   })
 
+  it('preserves multiline source whitespace in every provider request format', () => {
+    const content = '\n  first line\nsecond line  \n'
+    const multilineMessages: Message[] = [{ id: 'user', role: 'user', content, createdAt: timestamp }]
+    const multilineRequest = { ...request, messages: multilineMessages }
+
+    const chatBody = buildRequestBody(
+      'openai-chat-completions',
+      { kind: 'openai' },
+      model,
+      multilineMessages,
+      multilineRequest,
+      4_096,
+    )
+    expect(chatBody.messages).toEqual([{ role: 'user', content }])
+
+    const responsesBody = buildRequestBody(
+      'openai-responses',
+      { kind: 'openai' },
+      model,
+      multilineMessages,
+      multilineRequest,
+      4_096,
+    )
+    expect(responsesBody.input).toEqual([
+      {
+        type: 'message',
+        role: 'user',
+        content: [{ type: 'input_text', text: content }],
+      },
+    ])
+
+    const anthropicBody = buildRequestBody(
+      'anthropic-messages',
+      { kind: 'anthropic' },
+      model,
+      multilineMessages,
+      multilineRequest,
+      4_096,
+    )
+    expect(anthropicBody.messages).toEqual([{ role: 'user', content }])
+  })
+
   it('replays Responses assistant messages with the required output-item shape', () => {
     const body = buildRequestBody('openai-responses', { kind: 'openrouter' }, model, messages, request, 4_096)
     expect(body.instructions).toBe('Be concise.')

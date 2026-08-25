@@ -33,7 +33,7 @@ Core invariants:
 
 ## Tooling and commands
 
-The CI baseline is Node.js 20 and pnpm 9. The repository does not currently enforce these through `engines` or `packageManager`, so match CI when diagnosing environment-specific issues.
+The CI baseline is Node.js 20 and pnpm 11.24.0. `package.json#packageManager` pins the pnpm version; use Corepack or the exact pinned version when installing dependencies or diagnosing environment-specific issues. Local tooling requires Node.js 20.19+, 22.13+, or 24+.
 
 Use pnpm for repository dependency and script operations. Do not use npm or Yarn to rewrite `pnpm-lock.yaml`; prefer `pnpm exec` over `npx` for project-local binaries.
 
@@ -42,22 +42,32 @@ pnpm install
 pnpm dev
 pnpm preview
 pnpm typecheck
+pnpm lint
+pnpm lint:fix
+pnpm format
+pnpm format:check
 pnpm test
 pnpm test:watch
+pnpm i18n:generate
+pnpm i18n:check
+pnpm check
 pnpm build
 pnpm package
 pnpm dist
 ```
 
 - `pnpm typecheck` checks main, preload, shared, renderer, and tests without emitting files.
+- `pnpm lint` runs type-aware ESLint and fails on warnings; `pnpm lint:fix` applies safe automatic fixes.
+- `pnpm format` writes Prettier formatting; `pnpm format:check` verifies it without modifying files.
 - `pnpm test` runs the Vitest suite once.
+- `pnpm check` is the non-mutating quality gate: type checking, linting, formatting, localization validation, and the complete test suite.
 - `pnpm build` runs type checking and creates production bundles; it does not run tests.
 - `pnpm package` creates an unpacked application directory.
 - `pnpm dist` creates distributable artifacts for the current platform.
 
-For ordinary code changes, run focused tests while iterating and finish with `pnpm test` and `pnpm build`. Packaging, preload, entry-point, dependency-externalization, or Electron lifecycle changes also require `pnpm package` and an actual unpacked-application smoke test.
+For ordinary code changes, run focused tests while iterating and finish with `pnpm check` and `pnpm build`. Packaging, preload, entry-point, dependency-externalization, or Electron lifecycle changes also require `pnpm package` and an actual unpacked-application smoke test.
 
-The GitHub release workflow currently installs Node.js 20 and pnpm 9, builds and packages a platform matrix, and uploads artifacts. It does not run `pnpm test` and does not publish a GitHub Release; do not describe artifact upload as a release publication.
+The GitHub quality workflow runs `pnpm check` for branch pushes and pull requests. The release workflow installs Node.js 20 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and uploads artifacts. It does not publish a GitHub Release; do not describe artifact upload as a release publication.
 
 ## Documentation contract
 
@@ -302,7 +312,8 @@ Do not add claims that a model has native web search without explicit capability
 - TypeScript strict mode and `noUncheckedIndexedAccess` are enabled. Do not use `any` to bypass external-data validation.
 - Validate and normalize user, network, IPC, Vault, MCP, and archive input before storing or forwarding it.
 - Prefer small pure functions, explicit types, and narrow type guards at trust boundaries.
-- Keep the existing no-semicolon and trailing-comma style. Do not introduce unrelated formatting changes or claim that an unconfigured formatter/linter exists.
+- ESLint owns code-quality checks and Prettier owns formatting. Keep the configured no-semicolon, single-quote, trailing-comma, and 120-column style by running the repository commands instead of hand-tuning conflicting formatting.
+- Do not introduce unrelated formatting churn. Generated locale bundles, `pnpm-lock.yaml`, and `CLAUDE.md` are intentionally excluded from Prettier; preserve their generator-owned or manual formatting.
 - Use `apply_patch` for focused edits. Mechanical generation may use the repository scripts.
 - `tsconfig.node.json` includes the complete renderer source tree because jsdom integration tests import real component graphs. Keep both `tests/**/*.ts` and `tests/**/*.tsx` in its include set.
 
@@ -336,7 +347,7 @@ Before handing off a completed change:
 3. Add focused tests for new behavior and failure paths.
 4. Update both English and Chinese READMEs/documents when behavior or user-facing copy changed; preserve all reciprocal language links.
 5. Regenerate and validate i18n resources when visible copy changed; confirm executable assets did not enter locale bundles.
-6. Run `pnpm test` and `pnpm build` for code changes.
+6. Run `pnpm check` and `pnpm build` for code changes.
 7. Run `pnpm package` and launch the unpacked app for packaging, preload, entry-point, or runtime-dependency changes.
 8. Validate Markdown links, paired filenames, code fences, and trailing whitespace for documentation changes.
 9. Confirm no log, fixture, screenshot, error, or generated file contains credentials or sensitive Vault data.

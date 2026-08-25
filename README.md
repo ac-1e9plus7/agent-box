@@ -43,8 +43,8 @@ The English documentation is in [`docs/`](./docs/README.md). The corresponding C
 
 ### Requirements
 
-- Node.js 20 or later
-- pnpm 9 or later
+- Node.js 20.19+, 22.13+, or 24+
+- pnpm 11.24.0 (pinned by `packageManager`)
 - An OS credential backend: Windows credential protection, macOS Keychain, or Linux Secret Service
 
 ### Install and run
@@ -52,6 +52,7 @@ The English documentation is in [`docs/`](./docs/README.md). The corresponding C
 ```powershell
 git clone https://github.com/ac-1e9plus7/agent-box.git
 cd agent-box
+corepack enable
 pnpm install
 
 # Start Electron with the Vite development server

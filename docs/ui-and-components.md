@@ -42,13 +42,15 @@ When an Agent response is interrupted by cancellation, rate limiting, a network/
 
 ## Markdown, code, and math
 
-[`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) renders content with `react-markdown` and the following plugins:
+[`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) treats stored `message.content` as source data rather than rendered HTML. User messages are rendered as escaped plain text with `white-space: pre-wrap`, so line breaks, indentation, and Markdown punctuation stay literal without generating `<br>` elements. Assistant messages use `react-markdown` and the following plugins:
 
 - `remark-gfm` for GitHub Flavored Markdown tables, task lists, strikethrough, and autolinks;
 - `remark-breaks` so a single line break is rendered as a line break in chat;
 - `remark-math` and `rehype-katex` for KaTeX rendering without letting malformed math fail the whole message.
 
 Before rendering, [`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts) normalizes `\(...\)`, `\[...\]`, `math` / `latex-math` fences, and standalone environments such as `matrix`, `aligned`, and `cases`. It leaves inline code and ordinary fenced code untouched and protects common dollar-denominated amounts from accidental math parsing. Code blocks include a language label and copy action; long code and equations scroll horizontally. Message links open in a new window with `noopener noreferrer`.
+
+New or edited user content is normalized to LF line endings but is never trimmed before storage or provider serialization. Empty-message checks may inspect a trimmed copy, while titles and rendered output remain derived data and are never fed back into `message.content`.
 
 ## Multimodal attachments
 

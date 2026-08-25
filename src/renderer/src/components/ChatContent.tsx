@@ -278,7 +278,7 @@ function textFromNode(node: ReactNode): string {
   return ''
 }
 
-function MessageBody({ content }: { content: string }): JSX.Element {
+function MarkdownMessageBody({ content }: { content: string }): JSX.Element {
   const processed = preprocessMarkdown(content)
   return (
     <div className="message-body">
@@ -317,6 +317,10 @@ function MessageBody({ content }: { content: string }): JSX.Element {
       </ReactMarkdown>
     </div>
   )
+}
+
+function PlainTextMessageBody({ content }: { content: string }): JSX.Element {
+  return <div className="plain-text-message-body">{content}</div>
 }
 
 function EmptyConversation({
@@ -432,9 +436,8 @@ function UserMessage({
     setEditing(false)
   }
   const commitEdit = async (regenerate: boolean): Promise<void> => {
-    const trimmed = draft.trim()
-    if (!trimmed && !message.attachments?.length) return
-    const ok = await onEdit(message.id, trimmed, regenerate)
+    if (!draft.trim() && !message.attachments?.length) return
+    const ok = await onEdit(message.id, draft, regenerate)
     if (ok) setEditing(false)
   }
 
@@ -494,7 +497,7 @@ function UserMessage({
         <MessageAttachmentsView attachments={message.attachments} onPreviewImage={onPreviewImage} />
         {Boolean(message.content.trim()) && (
           <div className="user-bubble">
-            <MessageBody content={message.content} />
+            <PlainTextMessageBody content={message.content} />
           </div>
         )}
         {(total > 1 || canEdit) && (
@@ -642,7 +645,7 @@ function AssistantMessage({
         <SkillActivationList activations={message.skillActivations} />
         <ToolExecutionList executions={message.toolExecutions} onResolveApproval={onResolveToolApproval} />
         {message.content.trim() ? (
-          <MessageBody content={message.content} />
+          <MarkdownMessageBody content={message.content} />
         ) : isStreaming ? (
           <div className="typing-indicator" aria-label={t('Replying')}>
             <i />

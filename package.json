@@ -6,6 +6,7 @@
   "main": "./out/main/index.cjs",
   "author": "AgentBox contributors",
   "license": "MIT",
+  "packageManager": "pnpm@11.24.0",
   "scripts": {
     "dev": "electron-vite dev",
     "preview": "electron-vite preview",

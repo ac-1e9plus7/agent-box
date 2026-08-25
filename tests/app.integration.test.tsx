@@ -66,4 +66,63 @@ describe('App renderer integration', () => {
       )
     })
   })
+
+  it('preserves source whitespace when sending and editing user messages', async () => {
+    const bridge = createRendererApiMock()
+    Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
+
+    render(<App />)
+    await screen.findByText('已有回答')
+
+    const sentContent = '\n  first line\nsecond line  \n'
+    fireEvent.change(screen.getByLabelText('消息输入框'), {
+      target: { value: sentContent },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
+
+    await waitFor(() => expect(bridge.mocks.stream).toHaveBeenCalledOnce())
+    expect(bridge.mocks.stream.mock.calls[0]?.[0].messages.at(-1)?.content).toBe(sentContent)
+    expect(bridge.mocks.conversationSave.mock.calls[0]?.[0].messages.at(-1)?.content).toBe(sentContent)
+
+    await act(async () => {
+      bridge.emit({ type: 'done', requestId: 'request-1', finishReason: 'stop' })
+    })
+
+    fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[0]!)
+    const editedContent = '\n  edited line\nlast line  \n'
+    fireEvent.change(screen.getByDisplayValue('已有问题'), {
+      target: { value: editedContent },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '仅保存' }))
+
+    await waitFor(() => {
+      const lastSaved = bridge.mocks.conversationSave.mock.calls.at(-1)?.[0]
+      expect(lastSaved.messages.find((message: { id: string }) => message.id === 'user-1')?.content).toBe(editedContent)
+    })
+  })
+
+  it('renders user source as literal plain text while keeping assistant Markdown line breaks', async () => {
+    const userContent = '# literal heading\n> literal quote\n<br>'
+    const conversation = {
+      ...rendererConversation,
+      messages: [
+        { ...rendererConversation.messages[0]!, content: userContent },
+        { ...rendererConversation.messages[1]!, content: 'answer line 1\nanswer line 2' },
+      ],
+    }
+    const bridge = createRendererApiMock({ conversations: [conversation] })
+    Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
+
+    render(<App />)
+    await screen.findByLabelText('消息输入框')
+
+    const userBody = document.querySelector('.user-bubble .plain-text-message-body')
+    expect(userBody?.textContent).toBe(userContent)
+    expect(userBody?.querySelector('h1')).toBeNull()
+    expect(userBody?.querySelector('blockquote')).toBeNull()
+    expect(userBody?.querySelector('br')).toBeNull()
+    expect(userBody?.innerHTML).toContain('&lt;br&gt;')
+
+    expect(document.querySelector('.assistant-message .message-body br')).not.toBeNull()
+  })
 })

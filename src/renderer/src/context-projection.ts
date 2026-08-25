@@ -1,6 +1,7 @@
 import type { AppSettings, Message, ModelConfig } from '../../shared/types'
 import { REQUEST_OVERHEAD, RESERVED_SAFETY_TOKENS, estimateMessageTokens } from '../../shared/token-estimate'
 import { getLanguage, t } from '../../shared/i18n'
+import { normalizeMessageContent } from '../../shared/message-content'
 
 /**
  * Accepts the structural subset of a message that the projection needs. The
@@ -61,11 +62,12 @@ export function projectContext(
     if (message.role === 'user') turns.push([message])
     else if (turns.length > 0) turns.at(-1)?.push(message)
   }
-  if (pendingContent.trim() || pendingAttachments?.length) {
+  const normalizedPendingContent = normalizeMessageContent(pendingContent)
+  if (normalizedPendingContent.trim() || pendingAttachments?.length) {
     turns.push([
       {
         role: 'user',
-        content: pendingContent.trim(),
+        content: normalizedPendingContent,
         attachments: pendingAttachments,
       },
     ])

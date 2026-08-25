@@ -6,7 +6,7 @@
 
 ## 开发命令
 
-CI 当前以 Node.js 20 和 pnpm 9 为基线。仓库尚未通过 `engines` 或 `packageManager` 字段强制本地版本，排查环境差异时应优先与 CI 对齐。
+CI 当前以 Node.js 20 和 pnpm 11.24.0 为基线。仓库通过 `packageManager` 固定 pnpm 版本，排查环境差异时应优先与该版本对齐。
 
 | 命令                | 实际行为                                                                                            |
 | ------------------- | --------------------------------------------------------------------------------------------------- |
@@ -72,6 +72,6 @@ pnpm build
 - macOS：runner 原生架构；
 - Ubuntu：x64 与 arm64。
 
-每个发布 job 安装 pnpm 9、Node.js 20 和冻结锁文件依赖，运行 `pnpm check` 与 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。
+每个发布 job 安装 pnpm 11.24.0、Node.js 20 和冻结锁文件依赖，运行 `pnpm check` 与 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。
 
 发布工作流仍不会创建或发布 GitHub Release。若产品流程要求自动发布 Release，需要另行增加 release publishing 步骤，不能把 artifact upload 误认为正式发布。

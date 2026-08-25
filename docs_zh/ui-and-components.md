@@ -42,13 +42,15 @@ Agent 回复因取消、限流、网络/API 错误、输出上限或工具轮次
 
 ## Markdown、代码与数学公式
 
-[`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) 使用 `react-markdown`，并组合以下插件：
+[`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) 将持久化的 `message.content` 视为源数据，而不是渲染后的 HTML。用户消息使用转义后的纯文本和 `white-space: pre-wrap` 显示，因此换行、缩进与 Markdown 标点保持字面含义，也不会生成 `<br>` 元素。助手消息使用 `react-markdown`，并组合以下插件：
 
 - `remark-gfm`：表格、任务列表、删除线和自动链接等 GitHub Flavored Markdown。
 - `remark-breaks`：单次回车渲染为换行，适合聊天文本。
 - `remark-math` 与 `rehype-katex`：解析并渲染 KaTeX，错误公式不会使整条消息崩溃。
 
 [`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts) 会在渲染前把 `\(...\)`、`\[...\]`、`math` / `latex-math` 代码块和独立的 `matrix`、`aligned`、`cases` 等环境归一为 Markdown 数学语法，同时保护行内代码、围栏代码和常见美元金额。代码块提供语言标签与复制按钮；超长代码和公式使用独立横向滚动。消息链接仅在新窗口打开，并带有 `noopener noreferrer`。
+
+新建或编辑的用户消息只会把行尾规范为 LF，存储及发送给模型前不会裁剪正文。空消息校验可以检查裁剪后的副本；标题和渲染结果始终属于派生数据，不能回写到 `message.content`。
 
 ## 多模态附件
 
