@@ -17,7 +17,8 @@ This documentation set describes AgentBox's current design, boundaries, and main
 | 7   | [Development, testing, and CI](./development-and-testing.md)                     | pnpm scripts, Vitest, CommonJS packaging constraints, smoke tests, and GitHub Actions                                             | `package.json`, `tests/`, `.github/workflows/`                                     |
 | 8   | [Conversation workspaces and development runtimes](./workspaces-and-runtimes.md) | Workspace boundaries, integrated terminal, JDK/Go/PHP/Python, venv, and Conda                                                     | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
 | 9   | [Localization and English terminology](./i18n.md)                                | First-launch language selection, English-source-key bundles, generation, the `check` linter, semantic hatch keys, and terminology | `src/shared/i18n/`, `scripts/localize-renderer.mjs`                                |
-| 10  | [LangGraph Agent Runtime refactor](./langgraph-agent-runtime-design.md)          | Incremental Agent state-machine extraction, compatibility boundaries, checkpoint constraints, and verification                    | `src/electron/api/gateway.ts`, `src/electron/api/agent-runtime.ts`                 |
+| 10  | [LangGraph Agent Runtime](./langgraph-agent-runtime.md)                          | Current Agent state machine, Gateway callback boundary, streaming, cancellation, checkpoint routing, and security                 | `src/electron/api/gateway.ts`, `src/electron/api/agent-runtime.ts`                 |
+| 11  | [Encrypted LangGraph checkpoints](./langgraph-checkpoints.md)                    | Encrypted record sidecar, `BaseCheckpointSaver`, message artifacts, quotas, lifecycle deletion, and recovery                      | `src/electron/storage/`, `src/electron/api/agent-runtime.ts`                       |
 
 ## Core maintenance principles
 

@@ -51,6 +51,9 @@ Provider API keys, MCP environment variables and headers, and proxy credentials 
 - This does not make all Agent tools read-only. When Agent mode is enabled and the applicable tool is approved, workspace writes or terminal commands may operate within that directory. Those actions are separate from Vault persistence.
 - A deep backup is the only storage-related operation that recursively reads an entire working directory. It reads the source directory and writes it to a user-selected ZIP; it does not import the project into the Vault.
 - Assistant messages can persist structured `interruption` metadata, `agentTrace`, and tool results. Recovery uses these persisted checkpoints rather than transient renderer error state.
+- LangGraph runtime checkpoints use separately encrypted records under `<userData>/vault/agent-checkpoints-v1/`. Their AES-GCM and filename-HMAC keys are derived from the in-memory Vault master key; logical IDs and payloads are never used as filenames or written in plaintext.
+
+The record format, saver contract, quotas, and lifecycle are documented in [Encrypted LangGraph Checkpoints](./langgraph-checkpoints.md).
 
 ---
 
@@ -72,6 +75,8 @@ interface VaultState {
 
 `skills` and `mcpServers` remain optional in the interface for compatibility with older Vaults; loading and validation normalize both to arrays. [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) similarly migrates missing newer settings to safe defaults.
 
+The LangGraph checkpoint sidecar is deliberately not a `VaultState` field. Superstep writes therefore do not rewrite the complete conversation Vault. It is machine-local execution state; `agentTrace` remains in the conversation schema and portable backups.
+
 `AppSettings.userNickname` and `userAvatar` are display-only local profile fields and are never included in model prompts. A nickname is limited to 50 characters. An avatar must be a PNG, JPEG, or WebP Base64 data URL no longer than 3,000,000 characters, and the renderer crop flow limits each dimension to 1,000 pixels. When a legacy Vault has no `language`, validation uses the system-language fallback supplied at startup.
 
 ---
@@ -80,23 +85,25 @@ interface VaultState {
 
 The main limits are enforced by [`app-repository.ts`](../src/electron/storage/app-repository.ts), [`vault-resource-limits.ts`](../src/electron/storage/vault-resource-limits.ts), and [`web-metadata-schema.ts`](../src/electron/storage/web-metadata-schema.ts):
 
-| Resource                                         |             Current limit |
-| ------------------------------------------------ | ------------------------: |
-| Providers                                        |                       100 |
-| Models                                           |                     2,000 |
-| Conversations                                    |                    10,000 |
-| Skills                                           |                       500 |
-| MCP servers                                      |                       100 |
-| Messages per conversation                        |                    20,000 |
-| Message content or reasoning field               | 2,000,000 characters each |
-| Counted content per conversation                 |     50,000,000 characters |
-| Serialized data across all conversations         |                    50 MiB |
-| Messages / citations across all conversations    |              100,000 each |
-| Citations per message                            |                       100 |
-| Attachments per message                          |                        20 |
-| Files per skill / content per skill file         |   50 / 500,000 characters |
-| Arguments / environment variables per MCP server |                  50 / 100 |
-| Each MCP argument or environment-variable value  |          8,192 characters |
+| Resource                                              |             Current limit |
+| ----------------------------------------------------- | ------------------------: |
+| Providers                                             |                       100 |
+| Models                                                |                     2,000 |
+| Conversations                                         |                    10,000 |
+| Skills                                                |                       500 |
+| MCP servers                                           |                       100 |
+| Messages per conversation                             |                    20,000 |
+| Message content or reasoning field                    | 2,000,000 characters each |
+| Counted content per conversation                      |     50,000,000 characters |
+| Serialized data across all conversations              |                    50 MiB |
+| Messages / citations across all conversations         |              100,000 each |
+| Citations per message                                 |                       100 |
+| Attachments per message                               |                        20 |
+| Files per skill / content per skill file              |   50 / 500,000 characters |
+| Arguments / environment variables per MCP server      |                  50 / 100 |
+| Each MCP argument or environment-variable value       |          8,192 characters |
+| Encrypted checkpoint threads / checkpoints per thread |                 256 / 512 |
+| Checkpoint data per thread / complete namespace       |          64 MiB / 256 MiB |
 
 Saving a conversation applies both per-conversation and aggregate quotas. To avoid locking users out of legacy data when a newer aggregate quota is introduced, an already-over-limit Vault can still load and the user can delete or shrink data. A save that would further increase any over-limit dimension is rejected.
 
@@ -107,8 +114,9 @@ Saving a conversation applies both per-conversation and aggregate quotas. To avo
 **Settings → Data & Security → Clear all conversation data** performs these steps:
 
 1. `ChatGateway.cancelAll()` aborts every active request and resolves pending tool approvals as denied.
-2. The repository replaces `conversations` with an empty array. Settings, providers and API keys, models, skills, and MCP server configurations remain unchanged.
-3. The complete Vault is encrypted again with a new random IV and written to disk. The `safeStorage`-wrapped Vault key is retained rather than rotated.
+2. The encrypted checkpoint namespace is cleared. A failure stops the operation rather than reporting that conversation data was cleared.
+3. The repository replaces `conversations` with an empty array. Settings, providers and API keys, models, skills, and MCP server configurations remain unchanged.
+4. The complete Vault is encrypted again with a new random IV and written to disk. The `safeStorage`-wrapped Vault key is retained rather than rotated.
 
 This operation removes conversations from the active Vault. It is not a forensic secure-erasure guarantee for the underlying storage medium.
 
@@ -128,7 +136,7 @@ This operation removes conversations from the active Vault. It is not a forensic
 - The password is optional and limited to 256 characters. With a non-empty password, `@zip.js/zip.js` encrypts ZIP entries using WinZip AES-256 (AE-2). The password is not written to settings or the Vault, and AgentBox cannot recover it.
 - JSON, Markdown, and workspace files enter the archive as their original content. They are directly readable without a password; with a password, at-rest protection comes from ZIP entry encryption.
 - The ZIP central directory does not encrypt entry names. Conversation files use sequence numbers rather than titles, while relative workspace filenames remain visible in a deep backup. `manifest.json` also records absolute working-directory mappings, but its contents are encrypted when a password is set.
-- A backup excludes provider API keys, authentication credentials, the Vault key and Vault files, as well as provider, model, MCP server, skill, and application settings. Conversation text and workspace files may still contain sensitive information.
+- A backup excludes provider API keys, authentication credentials, the Vault key and Vault files, the machine-local LangGraph checkpoint sidecar, as well as provider, model, MCP server, skill, and application settings. `agentTrace` remains in conversation JSON so recovery is portable. Conversation text and workspace files may still contain sensitive information.
 
 ### Writing and replacement
 

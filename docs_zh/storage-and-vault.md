@@ -51,6 +51,9 @@ AgentBox 将设置、供应商凭据、模型、会话、Skills 和 MCP server �
 - 这不代表 Agent 工具永远只读：用户启用 Agent 模式并批准相应工具后，工作区文件写入或终端命令可以在该目录范围内执行。该行为与 Vault 存储相互独立。
 - 深备份是唯一会递归读取整个工作目录的存储相关操作；它只读取源目录并把内容写入用户选择的 ZIP，不会把项目文件并入 Vault。
 - Assistant 消息可以保存结构化 `interruption`、`agentTrace` 和工具执行结果。恢复时以这些持久化 checkpoint 为准，不依赖 renderer 的临时错误状态。
+- LangGraph Runtime checkpoint 使用 `<userData>/vault/agent-checkpoints-v1/` 下的独立加密记录。AES-GCM 和文件名 HMAC 密钥从内存中 Vault 主密钥派生；逻辑 ID 和 payload 不用作文件名，也不以明文落盘。
+
+Record 格式、Saver 契约、配额与生命周期详见 [LangGraph 加密 Checkpoint](./langgraph-checkpoints.md)。
 
 ---
 
@@ -72,6 +75,8 @@ interface VaultState {
 
 `skills` 和 `mcpServers` 在接口中可选是为了兼容旧 Vault；加载和校验后都会补齐为数组。设置中缺失的较新字段也由 [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) 迁移为安全默认值。
 
+LangGraph checkpoint sidecar 刻意不是 `VaultState` 字段，superstep 写入因此不会重写完整会话 Vault。它是本机执行状态；`agentTrace` 仍位于会话 Schema 和可移植备份中。
+
 `AppSettings.userNickname` 和 `userAvatar` 仅用于本地展示，不会进入模型提示词。昵称最多 50 个字符；头像接受 PNG/JPEG/WebP Base64 Data URL，最多 3,000,000 个字符，renderer 裁剪时将边长限制为 1,000 像素。首次缺少 `language` 的 Vault 会使用启动时传入的系统语言回退值。
 
 ---
@@ -80,23 +85,25 @@ interface VaultState {
 
 主要限制由 [`app-repository.ts`](../src/electron/storage/app-repository.ts)、[`vault-resource-limits.ts`](../src/electron/storage/vault-resource-limits.ts) 和 [`web-metadata-schema.ts`](../src/electron/storage/web-metadata-schema.ts) 执行：
 
-| 资源                                |          当前上限 |
-| ----------------------------------- | ----------------: |
-| 供应商                              |               100 |
-| 模型                                |             2,000 |
-| 会话                                |            10,000 |
-| Skills                              |               500 |
-| MCP servers                         |               100 |
-| 单会话消息                          |            20,000 |
-| 单条消息正文或推理字段              | 各 2,000,000 字符 |
-| 单会话计入校验的总内容              |   50,000,000 字符 |
-| 全部会话序列化数据                  |            50 MiB |
-| 全部会话消息 / 引用                 |        各 100,000 |
-| 单条消息引用                        |               100 |
-| 单条消息附件                        |                20 |
-| 单个 Skill 文件数 / 单文件内容      | 50 / 500,000 字符 |
-| 单个 MCP server 参数数 / 环境变量数 |          50 / 100 |
-| 单项 MCP 参数或环境变量值           |        8,192 字符 |
+| 资源                                          |          当前上限 |
+| --------------------------------------------- | ----------------: |
+| 供应商                                        |               100 |
+| 模型                                          |             2,000 |
+| 会话                                          |            10,000 |
+| Skills                                        |               500 |
+| MCP servers                                   |               100 |
+| 单会话消息                                    |            20,000 |
+| 单条消息正文或推理字段                        | 各 2,000,000 字符 |
+| 单会话计入校验的总内容                        |   50,000,000 字符 |
+| 全部会话序列化数据                            |            50 MiB |
+| 全部会话消息 / 引用                           |        各 100,000 |
+| 单条消息引用                                  |               100 |
+| 单条消息附件                                  |                20 |
+| 单个 Skill 文件数 / 单文件内容                | 50 / 500,000 字符 |
+| 单个 MCP server 参数数 / 环境变量数           |          50 / 100 |
+| 单项 MCP 参数或环境变量值                     |        8,192 字符 |
+| 加密 checkpoint thread / 单 thread checkpoint |         256 / 512 |
+| 单 thread / 完整 namespace checkpoint 数据    |  64 MiB / 256 MiB |
 
 保存会话时同时执行单会话和聚合配额。为避免新配额把旧数据永久锁死，旧 Vault 即使已经超过聚合上限也可以加载，并允许删除或缩小数据；任何仍会增大超限维度的保存都会被拒绝。
 
@@ -107,8 +114,9 @@ interface VaultState {
 「设置 → 数据与安全 → 清除全部会话数据」执行以下流程：
 
 1. `ChatGateway.cancelAll()` 中止全部活动请求并结束待处理的工具审批。
-2. Repository 将 `conversations` 替换为空数组；设置、供应商与 API Key、模型、Skills 和 MCP server 配置保持不变。
-3. 完整 Vault 使用新的随机 IV 再次加密并写入；safeStorage 封装的主密钥不轮换。
+2. 先清空加密 checkpoint namespace。清理失败时中止，不报告会话数据已清除。
+3. Repository 将 `conversations` 替换为空数组；设置、供应商与 API Key、模型、Skills 和 MCP server 配置保持不变。
+4. 完整 Vault 使用新的随机 IV 再次加密并写入；safeStorage 封装的主密钥不轮换。
 
 该操作清除活动 Vault 中的会话，不是面向磁盘取证场景的安全擦除保证。
 
@@ -128,7 +136,7 @@ interface VaultState {
 - 密码可选，最长 256 个字符。设置非空密码时，`@zip.js/zip.js` 对 ZIP 条目使用 WinZip AES-256（AE-2）；密码不写入设置或 Vault，AgentBox 也无法恢复密码。
 - ZIP 中的 JSON、Markdown 和工作区文件在进入归档前都是原始内容。没有密码时可直接读取；有密码时由条目加密提供静态保护。
 - ZIP 中央目录不加密条目名称。会话文件使用序号而不是标题；深备份的工作区相对文件名仍会出现在条目名称中。`manifest.json` 还包含工作目录绝对路径映射，但设置密码后其文件内容会被加密。
-- 备份不包含供应商 API Key、认证凭据、Vault 主密钥、Vault 文件，也不包含供应商、模型、MCP server、Skill 或应用设置。会话正文和工作区本身仍可能包含敏感数据。
+- 备份不包含供应商 API Key、认证凭据、Vault 主密钥、Vault 文件和本机 LangGraph checkpoint sidecar，也不包含供应商、模型、MCP server、Skill 或应用设置。`agentTrace` 仍位于会话 JSON 中，因此恢复可移植。会话正文和工作区本身仍可能包含敏感数据。
 
 ### 写入与替换
 

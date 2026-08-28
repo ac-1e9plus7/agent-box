@@ -1,0 +1,98 @@
+# LangGraph Agent Runtime
+
+> English: [LangGraph Agent Runtime](../docs/langgraph-agent-runtime.md)
+
+AgentBox 使用请求级 LangGraph `StateGraph` 控制多轮 Agent 生命周期。Runtime 是 Electron 主进程内的编排组件，不替换 AgentBox 的 provider 适配器、MCP Client、工具安全策略、加密 repository 或 renderer 事件模型。
+
+## 职责
+
+Runtime 只管理状态转换：
+
+```text
+START -> model -> tools -> model -> ... -> terminal -> END
+                   |                     |
+                   +-- tool limit -------+
+```
+
+`ChatGateway` 仍是请求与安全外壳。它向图提供 provider 请求、SSE 消费、工具校验与审批、内置/MCP 工具执行、上下文裁剪和现有 `StreamEvent` 发送回调。
+
+| 组件                 | 职责                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| `ChatGateway`        | 请求校验、provider/model 解析、代理调度、网络看门狗、错误脱敏、审批等待和回调组装       |
+| `runAgentRuntime()`  | model/tool/终态路由、轮次计数、递归上限、取消传播和可选 checkpoint 恢复                 |
+| 请求/协议适配器      | OpenAI Chat Completions API、OpenAI Responses API 和 Anthropic Messages API wire format |
+| 工具执行器           | AJV 校验、审批策略、工作区限制、MCP 路由、代码/终端执行和结果限制                       |
+| Renderer stream hook | 把归一化事件投影到 Assistant 文本、reasoning、引用、工具、`agentTrace` 和 interruption  |
+
+## Runtime 状态
+
+图使用 provider-neutral 的 AgentBox 消息，而不是 LangChain message class。
+
+| 状态字段         | 含义                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| `messages`       | 为下一 provider 请求准备的上下文                             |
+| `turn`           | 当前运行已进入 model node 的次数                             |
+| `toolTurns`      | 请求工具并已进入处理的模型响应数                             |
+| `modelResult`    | 最新 provider stream 的归一化结果，包含 tool call 与回放数据 |
+| `terminal`       | 终态回调是否完成                                             |
+| `terminalReason` | `complete`、`unexpected_tool_call` 或 `tool_turn_limit`      |
+
+一个 provider 响应即使包含多个 tool call，也只消耗一个 tool turn。调用继续按 provider 顺序处理，保持审批顺序和副作用行为。
+
+## 转换规则
+
+每个 model node 完成后，图选择一条路径：
+
+- 无 tool call：执行正常完成处理器；
+- 非 Agent 模式下的 tool call：不执行并以 `unexpected_tool_call` 终止；
+- 已达工具上限：为每个未执行调用发送错误结果，并以 `tool_turn_limit` 终止；
+- 有效 Agent tool turn：执行工具回调，追加 Assistant/工具历史，再回到 model node。
+
+图递归上限根据配置的 tool-turn 上限计算。当前产品范围是 1–100，默认 30。
+
+## Streaming 与取消
+
+Provider streaming 仍位于 `ChatGateway`。在 model node 运行期间，文本、reasoning、引用、用量、provider item 和工具参数 delta 会立即发送；LangGraph 只在图边界保存 checkpoint。
+
+同一请求级 `AbortSignal` 传给图和所有回调，用于取消 provider fetch、MCP、代码、终端、工作区和审批等待。120 秒网络停滞定时器只在等待 provider 数据时运行，工具处理期间暂停。
+
+## Checkpoint 行为
+
+Renderer 创建的 Agent 请求带 `responseMessageId`。Gateway 从 conversation/response ID 派生加密 checkpoint thread，并把 AgentBox `BaseCheckpointSaver` 适配器传给图。
+
+直接 graph resume 只用于 provider node 失败：
+
+| 中断                       | 恢复路径                                                  |
+| -------------------------- | --------------------------------------------------------- |
+| 限流、网络、超时、API 错误 | Descriptor 和上下文 digest 匹配时恢复原 graph thread      |
+| Thread 缺失或过期          | 从已校验 `agentTrace` 重建 provider 历史，并创建新 thread |
+| 用户取消                   | `agentTrace` 回退；中断可能发生在副作用内                 |
+| 输出或工具轮次上限         | `agentTrace` 回退并启动新运行                             |
+| 未知工具/执行失败          | `agentTrace` 回退；不重新进入外部状态未知的操作           |
+
+正常完成会删除 checkpoint thread。中断 thread 保留到恢复、随消息/会话删除，或在 checkpoint 配额下整体回收。
+
+存储、配额与删除详见 [LangGraph 加密 Checkpoint](./langgraph-checkpoints.md)。
+
+## 安全边界
+
+- Provider 凭据和代理配置不进入图状态。
+- LangGraph 工具不能绕过 AgentBox 参数校验、已暴露工具别名、审批策略、路径检查、超时和结果限制。
+- Runtime 在桌面主进程中强制禁用 LangSmith/LangChain tracing，并运行在无 callback 异步上下文。
+- Checkpoint 是加密本机执行状态；`agentTrace` 仍是可移植协议账本和备份形式。
+- Renderer 只获取归一化 `StreamEvent`，不直接读取 checkpoint 文件或 provider 协议响应。
+
+## 实现映射
+
+- [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts)：图状态与转换路由
+- [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts)：请求回调、checkpoint 选择和事件发送
+- [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts)：LangGraph Saver 适配器
+- [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts)：事件投影与 `agentTrace` 构造
+- [`src/renderer/src/agent-continuation.ts`](../src/renderer/src/agent-continuation.ts)：中断分类与自然恢复指令
+
+## 测试覆盖
+
+- `tests/langgraph-agent-runtime.test.ts`：转换路由、上限、失败、取消和 tracing 隔离
+- `tests/gateway-mcp-loop.test.ts`：provider/工具循环、durable provider 恢复、过期 checkpoint 回退、审批、Skills 和内置工具
+- `tests/agent-runtime.test.ts`：provider trace 回放与工具安全契约
+- `tests/agent-continuation.test.ts`：中断分类和恢复命令规则

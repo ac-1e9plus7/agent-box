@@ -154,4 +154,32 @@ describe('LangGraph Agent runtime', () => {
     controller.abort(new DOMException('cancelled', 'AbortError'))
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
   })
+
+  it('disables ambient LangSmith tracing for private Agent state', async () => {
+    const previousTracing = process.env.LANGSMITH_TRACING
+    const previousLegacyTracing = process.env.LANGCHAIN_TRACING_V2
+    process.env.LANGSMITH_TRACING = 'true'
+    process.env.LANGCHAIN_TRACING_V2 = 'true'
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('remote tracing must stay disabled'))
+    try {
+      await runAgentRuntime({
+        initialMessages,
+        agentMode: true,
+        maxToolTurns: 3,
+        invokeModel: vi.fn(async () => result('done')),
+        executeTools: vi.fn(async () => initialMessages),
+        onComplete: vi.fn(),
+        onUnexpectedToolCall: vi.fn(),
+        onToolTurnLimit: vi.fn(),
+      })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      if (previousTracing === undefined) delete process.env.LANGSMITH_TRACING
+      else process.env.LANGSMITH_TRACING = previousTracing
+      if (previousLegacyTracing === undefined) delete process.env.LANGCHAIN_TRACING_V2
+      else process.env.LANGCHAIN_TRACING_V2 = previousLegacyTracing
+      fetchSpy.mockRestore()
+    }
+  })
 })

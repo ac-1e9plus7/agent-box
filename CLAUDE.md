@@ -136,6 +136,8 @@ src/electron/api/terminal-shell.ts  Integrated terminal resolution and execution
 src/electron/api/workspace-files.ts Workspace-scoped file operations
 src/electron/mcp/                   MCP clients, transports, manager, approval policy, BM25 retrieval
 src/electron/storage/               Encrypted Vault, schemas, repository CRUD, quotas, built-in Skills
+src/electron/storage/agentbox-checkpoint-saver.ts Encrypted LangGraph BaseCheckpointSaver adapter
+src/electron/storage/checkpoint-repository.ts Encrypted checkpoint manifests, quotas, artifacts, and deletion
 src/electron/backup/                Conversation and workspace ZIP backup export
 src/renderer/src/App.tsx            Renderer bootstrap, settings persistence, coordination, top-level composition
 src/renderer/src/hooks/              Conversation state and normalized chat-stream orchestration
@@ -157,6 +159,7 @@ Do not move provider protocol logic, credentials, or persistence into React comp
 
 - Stored API keys may never be returned by IPC. `ProviderView` exposes `hasApiKey`, not the stored value. Mask proxy or MCP secrets before returning configurations to the renderer.
 - Never log or snapshot API keys, authentication headers, proxy credentials, the Vault key, complete decrypted Vault state, or unredacted secret-bearing records.
+- LangGraph checkpoint files remain inside the Vault security domain. Logical checkpoint IDs use HMAC-derived filenames; checkpoint records, pending writes, message snapshots, and artifacts are AES-256-GCM ciphertext only.
 - The Vault uses a random 32-byte key, AES-256-GCM, random 12-byte IVs, authentication tags, and atomic file replacement. The key is wrapped with Electron `safeStorage`.
 - Refuse plaintext fallback when `safeStorage` is unavailable or Linux reports the `basic_text` backend. Do not disable this behavior to make development easier.
 - Preserve the single-instance lock and secure key lifecycle. Fill sensitive in-memory key buffers on destruction.

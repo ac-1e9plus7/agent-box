@@ -1,8 +1,9 @@
-import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto'
+import { randomBytes, createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { safeStorage } from 'electron'
 import { t } from '../../shared/i18n'
+import { EncryptedRecordNamespace } from './encrypted-record-namespace'
 
 const KEY_BYTES = 32
 const IV_BYTES = 12
@@ -51,6 +52,7 @@ export class EncryptedStore<T extends object> {
   private masterKey?: Buffer
   private state?: T
   private operationQueue: Promise<void> = Promise.resolve()
+  private readonly recordNamespaces = new Map<string, EncryptedRecordNamespace>()
 
   constructor(
     userDataDirectory: string,
@@ -150,7 +152,26 @@ export class EncryptedStore<T extends object> {
     return output
   }
 
+  openRecordNamespace(name: string): EncryptedRecordNamespace {
+    const existing = this.recordNamespaces.get(name)
+    if (existing) return existing
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(name)) throw new Error('Invalid encrypted record namespace')
+    const masterKey = this.requireMasterKey()
+    const salt = Buffer.from('agentbox:record-namespace:v1', 'utf8')
+    const dataKey = Buffer.from(
+      hkdfSync('sha256', masterKey, salt, Buffer.from(`agentbox:${name}:data:v1`, 'utf8'), KEY_BYTES),
+    )
+    const nameKey = Buffer.from(
+      hkdfSync('sha256', masterKey, salt, Buffer.from(`agentbox:${name}:name:v1`, 'utf8'), KEY_BYTES),
+    )
+    const namespace = new EncryptedRecordNamespace(join(this.directory, name), name, dataKey, nameKey)
+    this.recordNamespaces.set(name, namespace)
+    return namespace
+  }
+
   destroy(): void {
+    for (const namespace of this.recordNamespaces.values()) namespace.destroy()
+    this.recordNamespaces.clear()
     this.masterKey?.fill(0)
     this.masterKey = undefined
     this.state = undefined

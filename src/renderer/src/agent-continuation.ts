@@ -112,6 +112,7 @@ function classifyChatError(error: ChatError): AgentInterruption['reason'] {
     /econn|socket|connection|网络|连接中断/.test(`${code} ${message}`)
   )
     return 'network'
+  if (code.includes('checkpoint')) return 'checkpoint_error'
   if (error.status !== undefined || code) return 'api_error'
   return 'unknown'
 }

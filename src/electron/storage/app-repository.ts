@@ -21,6 +21,9 @@ import type {
   ToolCallExecution,
 } from '../../shared/types'
 import { EncryptedStore } from './encrypted-store'
+import { CheckpointRepositoryError, EncryptedCheckpointRepository } from './checkpoint-repository'
+import { AgentBoxCheckpointSaver } from './agentbox-checkpoint-saver'
+import { agentCheckpointThreadId } from './checkpoint-identity'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
 import { createOpenRouterAutoModel } from './default-models'
 import { DEFAULT_SKILLS, localizedDefaultSkills } from './default-skills'
@@ -87,6 +90,8 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export class AppRepository {
   private readonly store: EncryptedStore<VaultState>
+  private checkpointRepository?: EncryptedCheckpointRepository
+  private checkpointSaver?: AgentBoxCheckpointSaver
 
   constructor(userDataDirectory: string, defaultLanguage: AppLanguage = 'en-US') {
     this.store = new EncryptedStore(
@@ -96,12 +101,25 @@ export class AppRepository {
     )
   }
 
-  initialize(): Promise<void> {
-    return this.store.initialize()
+  async initialize(): Promise<void> {
+    await this.store.initialize()
+    const checkpointRepository = new EncryptedCheckpointRepository(
+      this.store.openRecordNamespace('agent-checkpoints-v1'),
+    )
+    await checkpointRepository.initialize()
+    this.checkpointRepository = checkpointRepository
+    this.checkpointSaver = new AgentBoxCheckpointSaver(checkpointRepository)
   }
 
   destroy(): void {
+    this.checkpointRepository = undefined
+    this.checkpointSaver = undefined
     this.store.destroy()
+  }
+
+  getAgentCheckpointSaver(): AgentBoxCheckpointSaver {
+    if (!this.checkpointSaver) throw new Error('Agent checkpoint repository has not been initialized')
+    return this.checkpointSaver
   }
 
   getSettings(): AppSettings {
@@ -452,8 +470,43 @@ export class AppRepository {
   }
 
   async saveConversation(conversation: Conversation): Promise<Conversation> {
+    const validated = validateConversation(structuredClone(conversation))
+    const existingConversation = this.getConversation(validated.id)
+    const previousById = new Map(existingConversation?.messages.map((message) => [message.id, message]))
+    if (existingConversation) {
+      const nextMessageIds = new Set(validated.messages.map((message) => message.id))
+      const removedAssistantIds = existingConversation.messages
+        .filter((message) => message.role === 'assistant' && !nextMessageIds.has(message.id))
+        .map((message) => message.id)
+      for (const messageId of removedAssistantIds) {
+        await this.getAgentCheckpointSaver()
+          .deleteThread(agentCheckpointThreadId(validated.id, messageId))
+          .catch((error) => {
+            throw checkpointStorageError(error)
+          })
+      }
+    }
+    for (const message of validated.messages) {
+      if (message.role !== 'assistant' || !message.interruption || !message.agentTrace?.length) continue
+      const previous = previousById.get(message.id)
+      if (previous?.interruption && previous.agentTrace?.length === message.agentTrace.length) continue
+      const threadId = agentCheckpointThreadId(validated.id, message.id)
+      const descriptor = await this.getAgentCheckpointSaver()
+        .getThreadDescriptor(threadId)
+        .catch((error) => {
+          throw checkpointStorageError(error)
+        })
+      if (!descriptor) continue
+      await this.getAgentCheckpointSaver()
+        .setThreadDescriptor(threadId, {
+          lifecycle: 'interrupted',
+          hasTraceFallback: true,
+        })
+        .catch((error) => {
+          throw checkpointStorageError(error)
+        })
+    }
     return this.store.mutate((draft) => {
-      const validated = validateConversation(structuredClone(conversation))
       const existing = draft.conversations.some((item) => item.id === validated.id)
       if (existing) {
         const conversations = draft.conversations.map((item) => (item.id === validated.id ? validated : item))
@@ -469,6 +522,11 @@ export class AppRepository {
   }
 
   async removeConversation(id: string): Promise<void> {
+    await this.getAgentCheckpointSaver()
+      .deleteThreadsForConversation(id)
+      .catch((error) => {
+        throw checkpointStorageError(error)
+      })
     return this.store.mutate((draft) => {
       draft.conversations = draft.conversations.filter((conversation) => conversation.id !== id)
     })
@@ -481,10 +539,22 @@ export class AppRepository {
    * preserved so the retained provider/model configuration stays readable.
    */
   async clearConversations(): Promise<void> {
+    await this.getAgentCheckpointSaver()
+      .clear()
+      .catch((error) => {
+        throw checkpointStorageError(error)
+      })
     return this.store.mutate((draft) => {
       draft.conversations = []
     })
   }
+}
+
+function checkpointStorageError(error: unknown): Error {
+  const code = error instanceof CheckpointRepositoryError ? error.code : 'io'
+  return new Error(t('Unable to update encrypted Agent recovery state ({value0}).', { value0: code }), {
+    cause: error,
+  })
 }
 
 function buildStoredProvider(input: ProviderInput, existing?: StoredProvider): StoredProvider {
@@ -1000,6 +1070,7 @@ function parseStoredAgentInterruption(value: unknown): AgentInterruption | undef
       'tool_turn_limit',
       'output_limit',
       'api_error',
+      'checkpoint_error',
       'unknown',
     ].includes(String(value.reason))
   )

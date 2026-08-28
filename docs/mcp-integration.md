@@ -89,6 +89,7 @@ sequenceDiagram
 - A request-scoped LangGraph runtime controls model/tool/terminal transitions, while the Gateway callbacks retain argument validation, approval, execution, event emission, and provider-history construction.
 - The Agent tool-turn limit defaults to 30 and can be configured from 1 to 100. When the limit is reached, calls not yet executed in that turn receive an error result.
 - `agentTrace` is an ordered, protocol-neutral ledger of model text/thinking blocks, tool calls, tool results, and required provider items. It supports faithful replay in later turns.
+- Agent requests with renderer response IDs also write an encrypted LangGraph checkpoint thread. Only provider-node failures resume that thread directly; cancellations and uncertain tool-side-effect paths restart through the completed/error results in `agentTrace` to avoid duplicate writes or execution.
 - Rate limits, network/API errors, output limits, the tool-turn limit, and user cancellation produce an `interruption` checkpoint. Resume reuses completed results; before retrying an operation with unknown status and possible side effects, the Agent should inspect external state.
 - Short instructions such as `go`, `continue`, `resume`, `retry`, or `继续` are treated as resume requests only when the last Assistant message on the active branch contains a checkpoint. Attachments or substantive new requirements remain new requests.
 

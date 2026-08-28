@@ -1,4 +1,6 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph'
+import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
+import { AsyncLocalStorageProviderSingleton } from '@langchain/core/singletons'
 import type { Message } from '../../shared/types'
 
 export interface AgentModelTurnResult<TToolCall = unknown> {
@@ -27,6 +29,9 @@ export interface AgentRuntimeOptions<TResult extends AgentModelTurnResult> {
   agentMode: boolean
   maxToolTurns: number
   signal?: AbortSignal
+  checkpointer?: BaseCheckpointSaver
+  threadId?: string
+  resumeExisting?: boolean
   invokeModel(input: AgentModelTurnInput): Promise<TResult>
   executeTools(input: AgentToolTurnInput<TResult>): Promise<Message[]>
   onComplete(input: AgentTerminalInput<TResult>): Promise<void> | void
@@ -51,6 +56,7 @@ type AgentRoute = 'tools' | AgentRuntimeTerminalReason
 export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
   options: AgentRuntimeOptions<TResult>,
 ): Promise<AgentRuntimeResult<TResult>> {
+  disableRemoteTracing()
   if (!Number.isInteger(options.maxToolTurns) || options.maxToolTurns < 0) {
     throw new Error('Agent tool-turn limit must be a non-negative integer.')
   }
@@ -123,7 +129,7 @@ export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
     }
   }
 
-  const graph = new StateGraph(RuntimeState)
+  const graphBuilder = new StateGraph(RuntimeState)
     .addNode('model', modelNode)
     .addNode('tools', toolNode)
     .addNode(
@@ -144,23 +150,29 @@ export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
     .addEdge('complete', END)
     .addEdge('unexpected_tool_call', END)
     .addEdge('tool_turn_limit', END)
-    .compile()
+  const graph = graphBuilder.compile(options.checkpointer ? { checkpointer: options.checkpointer } : undefined)
 
-  const state = await graph.invoke(
-    {
-      messages: [...options.initialMessages],
-      turn: 0,
-      toolTurns: 0,
-      modelResult: undefined,
-      terminal: false,
-      terminalReason: undefined,
-    },
-    {
+  const initialState: RuntimeStateValue = {
+    messages: [...options.initialMessages],
+    turn: 0,
+    toolTurns: 0,
+    modelResult: undefined,
+    terminal: false,
+    terminalReason: undefined,
+  }
+  const configurable = options.checkpointer && options.threadId ? { thread_id: options.threadId } : undefined
+  const existing =
+    options.resumeExisting && options.checkpointer && configurable
+      ? await options.checkpointer.getTuple({ configurable })
+      : undefined
+  const state = await AsyncLocalStorageProviderSingleton.runWithConfig({ callbacks: [] }, () =>
+    graph.invoke(existing ? null : initialState, {
       signal: options.signal,
       // Each tool turn visits model and tools. Leave headroom for the terminal
       // node and LangGraph's input/output supersteps at the configured maximum.
       recursionLimit: options.maxToolTurns * 2 + 8,
-    },
+      configurable,
+    }),
   )
 
   if (!state.terminal || !state.terminalReason || !state.modelResult) {
@@ -183,4 +195,11 @@ function requireModelResult<TResult extends AgentModelTurnResult>(result: TResul
 function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return
   throw signal.reason ?? new DOMException('The operation was aborted.', 'AbortError')
+}
+
+function disableRemoteTracing(): void {
+  process.env.LANGSMITH_TRACING = 'false'
+  process.env.LANGSMITH_TRACING_V2 = 'false'
+  process.env.LANGCHAIN_TRACING_V2 = 'false'
+  delete process.env.LANGCHAIN_TRACING
 }

@@ -35,6 +35,7 @@ graph TB
         Bridge -->|"invoke / event"| IPC
         IPC --> Gateway
         Gateway --> AgentRuntime
+        AgentRuntime --> Repository
         IPC --> Repository
         IPC --> MCP
         IPC --> Backup
@@ -46,9 +47,11 @@ graph TB
         Store["EncryptedStore · AES-256-GCM"]
         SafeStorage["Electron safeStorage"]
         VaultFiles["master-key.bin + user-data.v1.enc"]
+        CheckpointFiles["agent-checkpoints-v1 · encrypted records"]
         Repository --> Store
         Store --> SafeStorage
         Store --> VaultFiles
+        Store --> CheckpointFiles
     end
 
     subgraph External["Operating system and external services"]
@@ -125,5 +128,7 @@ Channel constants are centralized in [`src/shared/ipc.ts`](../src/shared/ipc.ts)
 - [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts): IPC registration, input boundaries, and trusted-sender checks
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts): request orchestration, stream handling, and the Agent tool loop
 - [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts): provider-neutral LangGraph state machine for model, tool, and terminal turns
+- [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts): encrypted `BaseCheckpointSaver` adapter and message snapshot/delta reconstruction
+- [`src/electron/storage/checkpoint-repository.ts`](../src/electron/storage/checkpoint-repository.ts): checkpoint quotas, manifests, lifecycle deletion, and recovery
 - [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts): Vault domain repository and schema validation
 - [`src/electron/mcp/mcp-manager.ts`](../src/electron/mcp/mcp-manager.ts): MCP client lifecycle and proxy dispatch

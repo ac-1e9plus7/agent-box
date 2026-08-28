@@ -15,6 +15,7 @@ vi.mock('electron', () => ({
 const { AppRepository } = await import('../src/electron/storage/app-repository')
 const { McpManager } = await import('../src/electron/mcp/mcp-manager')
 const { ChatGateway } = await import('../src/electron/api/gateway')
+const { agentCheckpointThreadId } = await import('../src/electron/storage/checkpoint-identity')
 
 function makeSseResponse(chunks: string[]): Response {
   const stream = new ReadableStream({
@@ -492,6 +493,162 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     expect(requestBody).toContain('file written')
     expect(requestBody).toContain('不要从头重复整个任务')
     expect(events.some((event) => event.type === 'text-delta' && event.delta.includes('saved checkpoint'))).toBe(true)
+  })
+
+  it('resumes a provider failure from the encrypted LangGraph checkpoint and removes it after success', async () => {
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('fetch failed before the model turn completed'))
+      .mockImplementationOnce(async () =>
+        makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: 'Recovered durably.' }, finish_reason: 'stop' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ]),
+      )
+    const conversationId = 'conversation-durable-resume'
+    const responseMessageId = 'assistant-durable-resume'
+    const modelId = repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id
+    const originalMessages: ChatRequest['messages'] = [
+      {
+        id: 'user-durable-original',
+        role: 'user',
+        content: 'Continue this request after a network failure.',
+        createdAt: new Date().toISOString(),
+      },
+    ]
+    const firstEvents: StreamEvent[] = []
+    await gateway.stream(
+      'req-durable-first',
+      {
+        conversationId,
+        responseMessageId,
+        modelId,
+        messages: originalMessages,
+        workingDirectory: tempDirectory,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => firstEvents.push(event),
+    )
+    expect(firstEvents.some((event) => event.type === 'error')).toBe(true)
+    const threadId = agentCheckpointThreadId(conversationId, responseMessageId)
+    await expect(repo.getAgentCheckpointSaver().getThreadDescriptor(threadId)).resolves.toMatchObject({
+      lifecycle: 'interrupted',
+      responseMessageId,
+    })
+
+    const resumedEvents: StreamEvent[] = []
+    await gateway.stream(
+      'req-durable-second',
+      {
+        conversationId,
+        responseMessageId: 'assistant-durable-follow-up',
+        modelId,
+        messages: [
+          ...originalMessages,
+          {
+            id: responseMessageId,
+            role: 'assistant',
+            content: '',
+            interruption: {
+              reason: 'network',
+              message: 'fetch failed before the model turn completed',
+              occurredAt: new Date().toISOString(),
+            },
+            createdAt: new Date().toISOString(),
+          },
+          { id: 'user-durable-resume', role: 'user', content: '继续', createdAt: new Date().toISOString() },
+        ],
+        workingDirectory: tempDirectory,
+        resumeFromMessageId: responseMessageId,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => resumedEvents.push(event),
+    )
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(resumedEvents.some((event) => event.type === 'text-delta' && event.delta === 'Recovered durably.')).toBe(
+      true,
+    )
+    await expect(repo.getAgentCheckpointSaver().getThreadDescriptor(threadId)).resolves.toBeUndefined()
+  })
+
+  it('rejects a stale checkpoint digest and falls back to the validated agentTrace path', async () => {
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    let resumedBody = ''
+    vi.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockImplementationOnce(async (_input, init) => {
+        resumedBody = String(init?.body || '')
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: 'Recovered through trace fallback.' }, finish_reason: 'stop' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      })
+    const conversationId = 'conversation-stale-checkpoint'
+    const interruptedId = 'assistant-stale-checkpoint'
+    const followUpId = 'assistant-stale-follow-up'
+    const modelId = repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id
+    await gateway.stream(
+      'req-stale-first',
+      {
+        conversationId,
+        responseMessageId: interruptedId,
+        modelId,
+        messages: [
+          {
+            id: 'user-stale-original',
+            role: 'user',
+            content: 'Original request before editing.',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      () => undefined,
+    )
+    const staleThreadId = agentCheckpointThreadId(conversationId, interruptedId)
+    await expect(repo.getAgentCheckpointSaver().getThreadDescriptor(staleThreadId)).resolves.toBeDefined()
+
+    await gateway.stream(
+      'req-stale-second',
+      {
+        conversationId,
+        responseMessageId: followUpId,
+        modelId,
+        messages: [
+          {
+            id: 'user-stale-original',
+            role: 'user',
+            content: 'Edited request invalidates the old digest.',
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: interruptedId,
+            role: 'assistant',
+            content: 'partial',
+            agentTrace: [{ type: 'assistant_text', turn: 1, text: 'partial' }],
+            interruption: { reason: 'network', message: 'fetch failed', occurredAt: new Date().toISOString() },
+            createdAt: new Date().toISOString(),
+          },
+          { id: 'user-stale-resume', role: 'user', content: '继续', createdAt: new Date().toISOString() },
+        ],
+        resumeFromMessageId: interruptedId,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      () => undefined,
+    )
+
+    expect(resumedBody).toContain('Edited request invalidates the old digest.')
+    expect(resumedBody).toContain('从中断现场继续')
+    await expect(repo.getAgentCheckpointSaver().getThreadDescriptor(staleThreadId)).resolves.toBeDefined()
+    await expect(
+      repo.getAgentCheckpointSaver().getThreadDescriptor(agentCheckpointThreadId(conversationId, followUpId)),
+    ).resolves.toBeUndefined()
   })
 
   it('waits for explicit approval before executing a sensitive tool', async () => {

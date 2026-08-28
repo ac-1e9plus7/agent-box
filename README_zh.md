@@ -17,7 +17,7 @@
 - **可携带会话备份：** 导出无损 JSON 和可读 Markdown。浅备份包含会话，深备份还会收集去重后的会话工作目录。可选密码使用 WinZip AES-256 (AE-2) 保护文件内容。
 - **供应商、模型与 API 格式解耦：** 分别配置供应商、模型和线上协议。支持 OpenAI Chat Completions API、OpenAI Responses API 与 Anthropic Messages API，预置 [OpenRouter](https://openrouter.ai/) 和本地 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 连接。
 - **MCP 服务器集成：** 支持本地 `stdio`、远程 Streamable HTTP，并兼容旧式 HTTP+SSE。BM25 工具检索、会话级服务器选择、审批策略和 Tool Explorer 便于管理大型工具目录。
-- **可恢复的 Agent 执行：** Agent 模式默认最多运行 30 轮工具调用，可配置为 1–100。限流、网络错误、输出上限或手动停止时会保留可恢复的检查点。
+- **可恢复的 Agent 执行：** Agent 模式默认最多运行 30 轮工具调用，可配置为 1–100。安全 provider 失败使用加密 LangGraph checkpoint sidecar；输出上限、取消和副作用不确定状态仍使用可移植 `agentTrace` 回退。
 - **集成终端和工作区文件工具：** 自动探测跨平台 Shell，也可自定义可执行文件和参数。原生文件工具可分段读取 UTF-8 文本，并在不经过 Shell 转义的情况下创建、覆盖或追加文件。
 - **会话级开发环境：** 每个会话都绑定工作目录。可配置 JDK、Go、PHP 和 Python；Python 支持项目 `.venv`/`venv`、系统解释器、普通虚拟环境、Conda 环境和自定义解释器。
 - **多文件 Agent Skills：** Skill 可包含 Markdown 指令、参考文档以及不会自动执行的 Python / Shell 参考脚本。支持会话固定、`$skill-id` 显式调用、自动检索和模型按需加载，并可导入导出 ZIP Skill 归档。
@@ -38,6 +38,8 @@
 - [开发、测试与发布](./docs_zh/development-and-testing.md)
 - [工作目录与开发运行时](./docs_zh/workspaces-and-runtimes.md)
 - [国际化设计](./docs_zh/i18n.md)
+- [LangGraph Agent Runtime](./docs_zh/langgraph-agent-runtime.md)
+- [LangGraph 加密 Checkpoint](./docs_zh/langgraph-checkpoints.md)
 
 ## 快速开始
 

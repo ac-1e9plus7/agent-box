@@ -951,6 +951,7 @@ export const zhCN = {
   "Unable to start specified shell: {value0}. Please check the executable path and startup parameters.": "无法启动指定 Shell：{value0}。请检查可执行文件路径和启动参数。",
   "Unable to stop generation: {value0}": "无法停止生成：{value0}",
   "Unable to submit tool for approval: {value0}": "无法提交工具审批：{value0}",
+  "Unable to update encrypted Agent recovery state ({value0}).": "无法更新加密的 Agent 恢复状态（{value0}）。",
   "Unable to use system secure storage to unlock local data key.": "无法使用系统安全存储解锁本地数据密钥。",
   "Unknown error": "未知错误",
   "Unknown model": "未知模型",

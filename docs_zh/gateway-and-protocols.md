@@ -4,6 +4,8 @@
 
 [`ChatGateway`](../src/electron/api/gateway.ts) 是 renderer 与模型供应商之间的主进程请求与安全外壳：它校验请求、选择模型与供应商、准备上下文、构造协议请求、消费 SSE 并归一化流事件。Agent 模式下，它向 [`agent-runtime.ts`](../src/electron/api/agent-runtime.ts) 中 provider-neutral 的 LangGraph 状态机提供 provider 和安全工具回调。
 
+图状态与转换契约详见 [LangGraph Agent Runtime](./langgraph-agent-runtime.md)。
+
 ---
 
 ## 🔄 请求生命周期
@@ -111,7 +113,7 @@ Web Search 只对 OpenRouter 连接开放，并可用于三种 API 格式。请�
 
 每次工具结果会转换回当前供应商协议并进入下一模型轮，同时记录 `toolExecutions` 和 `agentTrace`。工具轮次默认上限为 30，可配置范围为 1–100；超过上限后不会执行新增调用。上下文预算会先扣除工具定义的估算 token，再按手动或自动模式处理完整会话轮次；自动模式绝不删除 system message 和最新用户轮次。
 
-`model -> tools -> model -> terminal` 转换由请求级 LangGraph `StateGraph` 执行。Provider 请求、SSE 解析、审批、工具执行和 `StreamEvent` 发送仍位于 Gateway 回调中，因此图无法绕过现有协议或安全边界。当前未启用 LangGraph persistence：加密会话 checkpoint 仍是权威状态，也不会创建明文图数据库。
+`model -> tools -> model -> terminal` 转换由请求级 LangGraph `StateGraph` 执行。Provider 请求、SSE 解析、审批、工具执行和 `StreamEvent` 发送仍位于 Gateway 回调中，因此图无法绕过现有协议或安全边界。带 response message ID 的 Agent 请求使用加密 `BaseCheckpointSaver` sidecar；安全 provider-node 失败从该 graph thread 恢复，缺失、过期、取消、工具上限和副作用不确定状态则回退到 `agentTrace`。应用不会创建明文图数据库。
 
 ---
 

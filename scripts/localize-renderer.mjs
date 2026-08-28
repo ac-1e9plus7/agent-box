@@ -49,6 +49,7 @@ const reviewedZh = {
   '(empty)': '(空)',
   '{value0}: {value1}': '{value0}：{value1}',
   invalid: '无效',
+  'Unable to update encrypted Agent recovery state ({value0}).': '无法更新加密的 Agent 恢复状态（{value0}）。',
 }
 
 // --- source file sets --------------------------------------------------------------

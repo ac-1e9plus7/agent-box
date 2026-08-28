@@ -57,6 +57,16 @@ describe('Agent interruption continuation', () => {
     expect(
       interruptionFromStreamEvent(
         {
+          type: 'error',
+          requestId: 'request',
+          error: { message: 'Unable to update encrypted Agent recovery state (quota).', code: 'checkpoint_quota' },
+        },
+        true,
+      ),
+    ).toMatchObject({ reason: 'checkpoint_error' })
+    expect(
+      interruptionFromStreamEvent(
+        {
           type: 'done',
           requestId: 'request',
           finishReason: 'stop',

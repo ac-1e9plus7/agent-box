@@ -1,5 +1,6 @@
 import { ProxyAgent } from 'undici'
 import { isAbsolute, normalize } from 'node:path'
+import { createHash } from 'node:crypto'
 import type {
   AgentTraceItem,
   ApiFormat,
@@ -62,6 +63,9 @@ import {
   type CitationEmissionState,
 } from '../storage/web-metadata-schema'
 import { t } from '../../shared/i18n'
+import { agentCheckpointThreadId } from '../storage/checkpoint-identity'
+import { CheckpointRepositoryError } from '../storage/checkpoint-repository'
+import type { AgentBoxCheckpointSaver } from '../storage/agentbox-checkpoint-saver'
 
 type StreamEmitter = (event: StreamEvent) => void
 
@@ -138,6 +142,7 @@ export class ChatGateway {
     if (this.controllers.has(requestId)) throw new Error('Duplicate request id')
     const controller = new AbortController()
     let requestSecret: string | undefined
+    let activeCheckpoint: { saver: AgentBoxCheckpointSaver; threadId: string; hasTraceFallback: boolean } | undefined
     this.controllers.set(requestId, controller)
     emit({ type: 'start', requestId })
 
@@ -245,11 +250,57 @@ export class ChatGateway {
       const prepared = prepareMessagesForContext(messages, effectiveContextWindow, maxOutputTokens, contextMode)
 
       const maxAgentToolTurns = settings.agentToolTurnLimit ?? DEFAULT_AGENT_TOOL_TURN_LIMIT
-      await runAgentRuntime<StreamConsumptionResult>({
+      let resumeExistingCheckpoint = false
+      if (isAgentMode) {
+        const requestedResponseMessageId = request.responseMessageId?.trim()
+        const originalCheckpoint = resumeFromMessageId
+          ? request.messages.find((message) => message.id === resumeFromMessageId && message.role === 'assistant')
+          : undefined
+        const baseMessages = checkpointBaseMessages(requestMessages, resumeFromMessageId)
+        const contextDigest = checkpointContextDigest(baseMessages, model.id, format)
+        const saver = this.repository.getAgentCheckpointSaver()
+        const previousThreadId = resumeFromMessageId
+          ? agentCheckpointThreadId(request.conversationId, resumeFromMessageId)
+          : undefined
+        const previousDescriptor = previousThreadId ? await saver.getThreadDescriptor(previousThreadId) : undefined
+        resumeExistingCheckpoint = Boolean(
+          resumeFromMessageId &&
+          previousDescriptor &&
+          previousDescriptor.conversationId === request.conversationId &&
+          previousDescriptor.responseMessageId === resumeFromMessageId &&
+          previousDescriptor.contextDigest === contextDigest &&
+          originalCheckpoint?.interruption &&
+          isDurableModelResumeReason(originalCheckpoint.interruption.reason),
+        )
+        const responseMessageId = resumeExistingCheckpoint ? resumeFromMessageId : requestedResponseMessageId
+        if (responseMessageId) {
+          const threadId = agentCheckpointThreadId(request.conversationId, responseMessageId)
+          if (!resumeExistingCheckpoint && (await saver.getThreadDescriptor(threadId))) {
+            await saver.deleteThread(threadId)
+          }
+          await saver.setThreadDescriptor(threadId, {
+            conversationId: request.conversationId,
+            responseMessageId,
+            runtimeVersion: 'agentbox-agent-runtime-v1',
+            contextDigest,
+            lifecycle: 'active',
+            hasTraceFallback: Boolean(originalCheckpoint?.agentTrace?.length),
+          })
+          activeCheckpoint = {
+            saver,
+            threadId,
+            hasTraceFallback: Boolean(originalCheckpoint?.agentTrace?.length),
+          }
+        }
+      }
+      const runtimeResult = await runAgentRuntime<StreamConsumptionResult>({
         initialMessages: prepared.messages,
         agentMode: isAgentMode,
         maxToolTurns: maxAgentToolTurns,
         signal: controller.signal,
+        checkpointer: activeCheckpoint?.saver,
+        threadId: activeCheckpoint?.threadId,
+        resumeExisting: resumeExistingCheckpoint,
         invokeModel: async ({ messages: currentTurnMessages, turn }) => {
           resetStallTimer()
 
@@ -896,7 +947,32 @@ export class ChatGateway {
           emit({ type: 'done', requestId, finishReason: 'tool_turn_limit' })
         },
       })
+      if (activeCheckpoint) {
+        if (runtimeResult.terminalReason === 'complete') {
+          await activeCheckpoint.saver
+            .setThreadDescriptor(activeCheckpoint.threadId, { lifecycle: 'completed' })
+            .catch(() => undefined)
+          await activeCheckpoint.saver.deleteThread(activeCheckpoint.threadId).catch(() => {
+            console.warn('Unable to delete a completed Agent checkpoint thread.')
+          })
+        } else {
+          await activeCheckpoint.saver
+            .setThreadDescriptor(activeCheckpoint.threadId, {
+              lifecycle: 'interrupted',
+              hasTraceFallback: activeCheckpoint.hasTraceFallback,
+            })
+            .catch(() => undefined)
+        }
+      }
     } catch (error) {
+      if (activeCheckpoint) {
+        await activeCheckpoint.saver
+          .setThreadDescriptor(activeCheckpoint.threadId, {
+            lifecycle: 'interrupted',
+            hasTraceFallback: activeCheckpoint.hasTraceFallback,
+          })
+          .catch(() => undefined)
+      }
       if (isAbortError(error)) {
         emit({ type: 'done', requestId, finishReason: 'cancelled' })
       } else {
@@ -1301,6 +1377,14 @@ function validateChatRequest(request: ChatRequest): Message[] {
   }
   if (request.agentMode !== undefined && typeof request.agentMode !== 'boolean') {
     throw new GatewayError(t('Agent mode configuration is invalid.'), 'invalid_request')
+  }
+  if (
+    request.responseMessageId !== undefined &&
+    (typeof request.responseMessageId !== 'string' ||
+      !request.responseMessageId.trim() ||
+      request.responseMessageId.length > 500)
+  ) {
+    throw new GatewayError(t('Agent recovery checkpoint is invalid.'), 'invalid_request')
   }
   if (
     request.resumeFromMessageId !== undefined &&
@@ -1903,6 +1987,12 @@ async function readResponseTextLimited(
 }
 
 function toChatError(error: unknown): ChatError {
+  if (error instanceof CheckpointRepositoryError) {
+    return {
+      message: t('Unable to update encrypted Agent recovery state ({value0}).', { value0: error.code }),
+      code: error.code === 'quota' ? 'checkpoint_quota' : `checkpoint_${error.code}`,
+    }
+  }
   if (error instanceof GatewayError) {
     return removeUndefined({
       message: error.message,
@@ -1921,6 +2011,20 @@ function toChatError(error: unknown): ChatError {
     message: error instanceof Error ? error.message : t('An unknown error occurred.'),
     code: 'unknown_error',
   }
+}
+
+function checkpointContextDigest(messages: Message[], modelId: string, format: ApiFormat): string {
+  return createHash('sha256').update(JSON.stringify({ messages, modelId, format }), 'utf8').digest('hex')
+}
+
+function checkpointBaseMessages(messages: Message[], resumeFromMessageId?: string): Message[] {
+  if (!resumeFromMessageId) return messages
+  const checkpointIndex = messages.findIndex((message) => message.id === resumeFromMessageId)
+  return checkpointIndex >= 0 ? messages.slice(0, checkpointIndex) : messages
+}
+
+function isDurableModelResumeReason(reason: string): boolean {
+  return reason === 'rate_limit' || reason === 'network' || reason === 'timeout' || reason === 'api_error'
 }
 
 function redactError(error: unknown, secret?: string, proxyUrl?: string): Error {

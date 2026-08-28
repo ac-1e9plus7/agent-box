@@ -89,6 +89,7 @@ sequenceDiagram
 - 请求级 LangGraph Runtime 控制 model/tool/终态转换；参数校验、审批、执行、事件发送与 provider 历史构造仍位于 Gateway 回调中。
 - Agent 工具执行上限默认 30 轮，可在设置中调整为 1–100；达到上限后，本轮尚未执行的调用会收到错误结果。
 - `agentTrace` 是按发生顺序保存的协议无关账本，包含模型文本/思考块、工具调用、工具结果及必要的 provider item，可用于后续协议重放。
+- 带 renderer response ID 的 Agent 请求还会写入加密 LangGraph checkpoint thread。只有 provider-node 失败会直接恢复该 thread；取消和副作用不确定的工具路径使用 `agentTrace` 中的已完成/错误结果重启，避免重复写入或执行。
 - 限流、网络/API 错误、输出上限、工具轮次上限或用户停止会生成 `interruption` 检查点。恢复时复用已完成结果；对结果未知且可能有副作用的操作，应先检查外部状态再决定是否重试。
 - 只有当前分支最后一条 Assistant 消息存在检查点时，`go`、`continue`、`resume`、`retry`、`继续` 等短指令才会作为恢复请求；附件或新的实质要求仍按新问题处理。
 

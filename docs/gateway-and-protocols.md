@@ -4,6 +4,8 @@
 
 [`ChatGateway`](../src/electron/api/gateway.ts) is the main-process request and security facade between the renderer and model providers. It validates requests, resolves the model and provider, prepares context, builds protocol-specific requests, consumes SSE, and normalizes stream events. In Agent mode it supplies provider and secure-tool callbacks to the provider-neutral LangGraph state machine in [`agent-runtime.ts`](../src/electron/api/agent-runtime.ts).
 
+The graph state and transition contract are documented in [LangGraph Agent Runtime](./langgraph-agent-runtime.md).
+
 ---
 
 ## 🔄 Request lifecycle
@@ -111,7 +113,7 @@ Model-supplied arguments must be a JSON object and pass the tool's JSON Schema t
 
 Each tool result is converted back into the active provider protocol for the next model turn, while `toolExecutions` and `agentTrace` are recorded. The tool-turn limit defaults to 30 and can be configured from 1 to 100. Once reached, new calls are not executed. The context budget first subtracts estimated tool-definition tokens, then retains or trims complete conversation turns according to manual or automatic context management. Automatic mode never removes system messages or the latest user turn.
 
-The `model -> tools -> model -> terminal` transitions are executed by a request-scoped LangGraph `StateGraph`. Provider requests, SSE parsing, approvals, tool execution, and `StreamEvent` emission remain in the Gateway callbacks, so the graph cannot bypass existing protocol or security boundaries. LangGraph persistence is not enabled: the encrypted conversation checkpoint remains authoritative and no plaintext graph database is created.
+The `model -> tools -> model -> terminal` transitions are executed by a request-scoped LangGraph `StateGraph`. Provider requests, SSE parsing, approvals, tool execution, and `StreamEvent` emission remain in the Gateway callbacks, so the graph cannot bypass existing protocol or security boundaries. Agent requests with a response message ID use an encrypted `BaseCheckpointSaver` sidecar. Safe provider-node failures resume from that graph thread; missing, stale, cancelled, tool-limit, and uncertain side-effect states use `agentTrace` fallback instead. No plaintext graph database is created.
 
 ---
 

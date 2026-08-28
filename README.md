@@ -17,7 +17,7 @@
 - **Portable conversation backups:** export lossless JSON and human-readable Markdown. Shallow backups contain conversations; deep backups also include unique conversation working directories. Optional password protection uses WinZip AES-256 (AE-2).
 - **Providers and API formats are independent:** configure providers, models, and wire protocols separately. AgentBox supports the OpenAI Chat Completions API, OpenAI Responses API, and Anthropic Messages API, with presets for [OpenRouter](https://openrouter.ai/) and local [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) connections.
 - **MCP server integration:** connect local `stdio` servers or remote Streamable HTTP servers, with fallback support for legacy HTTP+SSE. BM25 tool retrieval, per-conversation server selection, approval policies, and Tool Explorer keep large tool catalogs manageable.
-- **Resumable Agent execution:** Agent mode can run up to 30 tool-call turns by default, configurable from 1 to 100. Rate limits, network failures, output limits, and manual cancellation preserve a resumable checkpoint.
+- **Resumable Agent execution:** Agent mode can run up to 30 tool-call turns by default, configurable from 1 to 100. Safe provider failures use an encrypted LangGraph checkpoint sidecar; `agentTrace` remains the portable fallback for output limits, cancellation, and uncertain tool-side-effect states.
 - **Integrated terminal and workspace tools:** use an automatically detected cross-platform shell or configure a custom executable and arguments. Native workspace tools read UTF-8 files in chunks and create, overwrite, or append files without shell escaping.
 - **Conversation-scoped development environments:** every conversation has a working directory. Configure JDK, Go, PHP, and Python runtimes; Python supports project `.venv`/`venv`, system interpreters, virtual environments, Conda environments, and custom interpreters.
 - **Multi-file Agent Skills:** Skills can include Markdown instructions, reference documents, and non-automatic Python or shell reference scripts. Pin Skills to a conversation, invoke `$skill-id`, use automatic retrieval, or let the model load a relevant Skill on demand. ZIP skill archives can be imported and exported.
@@ -38,6 +38,8 @@ The English documentation is in [`docs/`](./docs/README.md). The corresponding C
 - [Development, testing, and releases](./docs/development-and-testing.md)
 - [Working directories and developer runtimes](./docs/workspaces-and-runtimes.md)
 - [Internationalization](./docs/i18n.md)
+- [LangGraph Agent Runtime](./docs/langgraph-agent-runtime.md)
+- [Encrypted LangGraph checkpoints](./docs/langgraph-checkpoints.md)
 
 ## Quick start
 

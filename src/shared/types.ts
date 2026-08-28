@@ -290,7 +290,15 @@ export interface RemoteModel {
 export type MessageRole = 'system' | 'user' | 'assistant'
 
 export type AgentInterruptionReason =
-  'rate_limit' | 'network' | 'timeout' | 'cancelled' | 'tool_turn_limit' | 'output_limit' | 'api_error' | 'unknown'
+  | 'rate_limit'
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'tool_turn_limit'
+  | 'output_limit'
+  | 'api_error'
+  | 'checkpoint_error'
+  | 'unknown'
 
 export interface AgentInterruption {
   reason: AgentInterruptionReason
@@ -427,6 +435,8 @@ export interface Conversation {
 
 export interface ChatRequest {
   conversationId: string
+  /** Renderer-created assistant response ID used to scope encrypted Agent checkpoints. */
+  responseMessageId?: string
   modelId: string
   messages: Message[]
   reasoningEnabled: boolean

@@ -51,7 +51,7 @@ Desktop.ini
 !.vscode/settings.json
 
 # Temporary files
-*.tmp
+*.tmp*
 *.temp
 *.bak
 *.swp

@@ -706,11 +706,12 @@ export default function App(): JSX.Element {
     (
       conversation: Conversation,
       messages: Message[],
-      options?: Pick<ChatRequest, 'allowContextTrimming' | 'resumeFromMessageId'>,
+      options?: Pick<ChatRequest, 'allowContextTrimming' | 'resumeFromMessageId' | 'responseMessageId'>,
     ): ChatRequest => {
       if (!activeModel) throw new Error(t('The current model is unavailable.'))
       return {
         conversationId: conversation.id,
+        responseMessageId: options?.responseMessageId,
         modelId: activeModel.id,
         messages,
         agentMode: conversation.agentMode ?? agentMode,
@@ -850,6 +851,7 @@ export default function App(): JSX.Element {
     await launchPreparedStream(
       streamRegistration,
       buildChatRequest(nextConversation, requestMessages, {
+        responseMessageId: assistantMessage.id,
         resumeFromMessageId,
         allowContextTrimming: allowContextTrimming || undefined,
       }),
@@ -957,6 +959,7 @@ export default function App(): JSX.Element {
     await launchPreparedStream(
       streamRegistration,
       buildChatRequest(nextConversation, requestMessages, {
+        responseMessageId: assistantMessage.id,
         allowContextTrimming: allowContextTrimming || undefined,
       }),
     )
@@ -1074,7 +1077,10 @@ export default function App(): JSX.Element {
       return false
     }
 
-    return launchPreparedStream(streamRegistration, buildChatRequest(nextConversation, requestMessages))
+    return launchPreparedStream(
+      streamRegistration,
+      buildChatRequest(nextConversation, requestMessages, { responseMessageId: assistantMessage.id }),
+    )
   }
 
   const saveSettings = async (payload: SettingsSavePayload): Promise<void> => {
