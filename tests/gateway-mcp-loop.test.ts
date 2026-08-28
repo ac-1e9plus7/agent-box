@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
 import type { ChatRequest, StreamEvent } from '../src/shared/types'
 
 vi.mock('electron', () => ({
@@ -361,15 +361,16 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
 
     expect(fetchCount).toBe(2)
     expect(executeMcp).not.toHaveBeenCalled()
-    expect(
-      events.some(
-        (event) =>
-          event.type === 'tool-result' &&
-          event.callId === 'call-run-terminal' &&
-          event.result.includes(tempDirectory) &&
-          !event.isError,
-      ),
-    ).toBe(true)
+    const terminalResult = events.find((event) => event.type === 'tool-result' && event.callId === 'call-run-terminal')
+    expect(terminalResult).toBeDefined()
+    if (!terminalResult || terminalResult.type !== 'tool-result') throw new Error('Missing terminal result')
+    expect(terminalResult.isError).toBe(false)
+    const reportedWorkingDirectory = terminalResult.result.trim().split(/\r?\n/).at(-1) || ''
+    const comparablePath = (value: string) => {
+      const normalizedPath = normalize(value)
+      return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
+    }
+    expect(comparablePath(reportedWorkingDirectory)).toBe(comparablePath(realpathSync(tempDirectory)))
   }, 15_000)
 
   it('writes and reads workspace files without shell escaping', async () => {
