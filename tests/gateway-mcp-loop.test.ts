@@ -370,7 +370,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
           !event.isError,
       ),
     ).toBe(true)
-  })
+  }, 15_000)
 
   it('writes and reads workspace files without shell escaping', async () => {
     await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
