@@ -2,7 +2,7 @@
 
 > 中文：[API 协议与请求网关](../docs_zh/gateway-and-protocols.md)
 
-[`ChatGateway`](../src/electron/api/gateway.ts) is the main-process orchestration layer between the renderer and model providers. It validates requests, resolves the model and provider, prepares context, builds protocol-specific requests, consumes SSE, normalizes stream events, and drives a multi-turn tool loop in Agent mode.
+[`ChatGateway`](../src/electron/api/gateway.ts) is the main-process request and security facade between the renderer and model providers. It validates requests, resolves the model and provider, prepares context, builds protocol-specific requests, consumes SSE, and normalizes stream events. In Agent mode it supplies provider and secure-tool callbacks to the provider-neutral LangGraph state machine in [`agent-runtime.ts`](../src/electron/api/agent-runtime.ts).
 
 ---
 
@@ -110,6 +110,8 @@ Tool calls are executed only in Agent mode. The gateway combines two categories 
 Model-supplied arguments must be a JSON object and pass the tool's JSON Schema through AJV. With the exception of the local read-only skill loader, approval is determined by the selected policy plus tool annotations or the built-in tool's risk definition. `always` prompts for every applicable call; `sensitive` automatically permits only tools explicitly declared read-only, non-destructive, and closed-world; `full-access` does not prompt. Approval can time out after five minutes or wait until the user decides or cancels.
 
 Each tool result is converted back into the active provider protocol for the next model turn, while `toolExecutions` and `agentTrace` are recorded. The tool-turn limit defaults to 30 and can be configured from 1 to 100. Once reached, new calls are not executed. The context budget first subtracts estimated tool-definition tokens, then retains or trims complete conversation turns according to manual or automatic context management. Automatic mode never removes system messages or the latest user turn.
+
+The `model -> tools -> model -> terminal` transitions are executed by a request-scoped LangGraph `StateGraph`. Provider requests, SSE parsing, approvals, tool execution, and `StreamEvent` emission remain in the Gateway callbacks, so the graph cannot bypass existing protocol or security boundaries. LangGraph persistence is not enabled: the encrypted conversation checkpoint remains authoritative and no plaintext graph database is created.
 
 ---
 

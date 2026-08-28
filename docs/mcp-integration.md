@@ -86,6 +86,7 @@ sequenceDiagram
 ```
 
 - The Gateway bridges OpenAI Chat Completions API `tool_calls`, OpenAI Responses API `function_call` items, and Anthropic Messages API `tool_use` blocks.
+- A request-scoped LangGraph runtime controls model/tool/terminal transitions, while the Gateway callbacks retain argument validation, approval, execution, event emission, and provider-history construction.
 - The Agent tool-turn limit defaults to 30 and can be configured from 1 to 100. When the limit is reached, calls not yet executed in that turn receive an error result.
 - `agentTrace` is an ordered, protocol-neutral ledger of model text/thinking blocks, tool calls, tool results, and required provider items. It supports faithful replay in later turns.
 - Rate limits, network/API errors, output limits, the tool-turn limit, and user cancellation produce an `interruption` checkpoint. Resume reuses completed results; before retrying an operation with unknown status and possible side effects, the Agent should inspect external state.

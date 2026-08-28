@@ -17,6 +17,7 @@ This documentation set describes AgentBox's current design, boundaries, and main
 | 7   | [Development, testing, and CI](./development-and-testing.md)                     | pnpm scripts, Vitest, CommonJS packaging constraints, smoke tests, and GitHub Actions                                             | `package.json`, `tests/`, `.github/workflows/`                                     |
 | 8   | [Conversation workspaces and development runtimes](./workspaces-and-runtimes.md) | Workspace boundaries, integrated terminal, JDK/Go/PHP/Python, venv, and Conda                                                     | `src/electron/api/runtime-environments.ts`, `src/renderer/src/workspace-groups.ts` |
 | 9   | [Localization and English terminology](./i18n.md)                                | First-launch language selection, English-source-key bundles, generation, the `check` linter, semantic hatch keys, and terminology | `src/shared/i18n/`, `scripts/localize-renderer.mjs`                                |
+| 10  | [LangGraph Agent Runtime refactor](./langgraph-agent-runtime-design.md)          | Incremental Agent state-machine extraction, compatibility boundaries, checkpoint constraints, and verification                    | `src/electron/api/gateway.ts`, `src/electron/api/agent-runtime.ts`                 |
 
 ## Core maintenance principles
 
@@ -24,4 +25,4 @@ This documentation set describes AgentBox's current design, boundaries, and main
 2. **Separate product entities from protocols:** Providers, models, and API formats are distinct entities. The gateway normalizes all three upstream API families into shared request and event types.
 3. **Protect local data:** The Vault uses AES-256-GCM and wraps its data key with OS secure storage. Never fall back to plaintext when secure storage is unavailable.
 4. **Enforce workspace boundaries:** Agent file and execution tools operate only under a conversation's absolute working directory and reject symbolic-link escapes.
-5. **Keep both languages synchronized:** The root READMEs, both documentation indexes, and all nine module documents have language counterparts. Product-copy changes also require synchronized resource bundles and localization tests.
+5. **Keep both languages synchronized:** The root READMEs, both documentation indexes, and all module documents have language counterparts. Product-copy changes also require synchronized resource bundles and localization tests.

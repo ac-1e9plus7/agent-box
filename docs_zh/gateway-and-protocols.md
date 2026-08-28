@@ -2,7 +2,7 @@
 
 > English: [API Protocols and Request Gateway](../docs/gateway-and-protocols.md)
 
-[`ChatGateway`](../src/electron/api/gateway.ts) 是 renderer 与模型供应商之间的主进程编排层：它校验请求、选择模型与供应商、准备上下文、构造协议请求、消费 SSE、归一化流事件，并在 Agent 模式下驱动多轮工具循环。
+[`ChatGateway`](../src/electron/api/gateway.ts) 是 renderer 与模型供应商之间的主进程请求与安全外壳：它校验请求、选择模型与供应商、准备上下文、构造协议请求、消费 SSE 并归一化流事件。Agent 模式下，它向 [`agent-runtime.ts`](../src/electron/api/agent-runtime.ts) 中 provider-neutral 的 LangGraph 状态机提供 provider 和安全工具回调。
 
 ---
 
@@ -110,6 +110,8 @@ Web Search 只对 OpenRouter 连接开放，并可用于三种 API 格式。请�
 模型返回的参数必须是 JSON 对象，并通过工具的 JSON Schema（AJV）校验。除本地只读 Skill loader 外，审批策略由工具 annotations 和内置工具风险定义共同决定：`always` 对每个适用调用询问，`sensitive` 只自动放行明确声明为只读、非破坏且不访问开放环境的工具，`full-access` 不弹出审批。审批等待时间可选择 5 分钟或直到用户决定/取消。
 
 每次工具结果会转换回当前供应商协议并进入下一模型轮，同时记录 `toolExecutions` 和 `agentTrace`。工具轮次默认上限为 30，可配置范围为 1–100；超过上限后不会执行新增调用。上下文预算会先扣除工具定义的估算 token，再按手动或自动模式处理完整会话轮次；自动模式绝不删除 system message 和最新用户轮次。
+
+`model -> tools -> model -> terminal` 转换由请求级 LangGraph `StateGraph` 执行。Provider 请求、SSE 解析、审批、工具执行和 `StreamEvent` 发送仍位于 Gateway 回调中，因此图无法绕过现有协议或安全边界。当前未启用 LangGraph persistence：加密会话 checkpoint 仍是权威状态，也不会创建明文图数据库。
 
 ---
 

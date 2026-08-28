@@ -24,7 +24,8 @@ graph TB
 
     subgraph Main["Electron Main Process · Node.js"]
         IPC["Validated IPC handlers"]
-        Gateway["ChatGateway · streaming and Agent loop"]
+        Gateway["ChatGateway · request and security facade"]
+        AgentRuntime["LangGraph Agent runtime"]
         Repository["AppRepository"]
         MCP["McpManager / McpClient"]
         Backup["Backup export / runtime and workspace services"]
@@ -33,6 +34,7 @@ graph TB
 
         Bridge -->|"invoke / event"| IPC
         IPC --> Gateway
+        Gateway --> AgentRuntime
         IPC --> Repository
         IPC --> MCP
         IPC --> Backup
@@ -122,5 +124,6 @@ Channel constants are centralized in [`src/shared/ipc.ts`](../src/shared/ipc.ts)
 - [`src/electron/preload.ts`](../src/electron/preload.ts): renderer-facing API
 - [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts): IPC registration, input boundaries, and trusted-sender checks
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts): request orchestration, stream handling, and the Agent tool loop
+- [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts): provider-neutral LangGraph state machine for model, tool, and terminal turns
 - [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts): Vault domain repository and schema validation
 - [`src/electron/mcp/mcp-manager.ts`](../src/electron/mcp/mcp-manager.ts): MCP client lifecycle and proxy dispatch

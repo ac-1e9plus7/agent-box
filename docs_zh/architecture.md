@@ -24,7 +24,8 @@ graph TB
 
     subgraph Main["Electron Main Process · Node.js"]
         IPC["Validated IPC handlers"]
-        Gateway["ChatGateway · streaming and Agent loop"]
+        Gateway["ChatGateway · 请求与安全外壳"]
+        AgentRuntime["LangGraph Agent Runtime"]
         Repository["AppRepository"]
         MCP["McpManager / McpClient"]
         Backup["Backup export / runtime and workspace services"]
@@ -33,6 +34,7 @@ graph TB
 
         Bridge -->|"invoke / event"| IPC
         IPC --> Gateway
+        Gateway --> AgentRuntime
         IPC --> Repository
         IPC --> MCP
         IPC --> Backup
@@ -122,5 +124,6 @@ graph TB
 - [`src/electron/preload.ts`](../src/electron/preload.ts)：renderer 可见 API
 - [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts)：IPC 注册、输入入口与可信发送方校验
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts)：请求编排、流处理和 Agent 工具循环
+- [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts)：provider-neutral 的 LangGraph model/tool/终态转换状态机
 - [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts)：Vault 领域仓库与 Schema 校验
 - [`src/electron/mcp/mcp-manager.ts`](../src/electron/mcp/mcp-manager.ts)：MCP 客户端生命周期与代理分发

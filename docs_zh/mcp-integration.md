@@ -86,6 +86,7 @@ sequenceDiagram
 ```
 
 - Gateway 在 OpenAI Chat Completions API 的 `tool_calls`、OpenAI Responses API 的 `function_call` 与 Anthropic Messages API 的 `tool_use` 之间桥接协议格式。
+- 请求级 LangGraph Runtime 控制 model/tool/终态转换；参数校验、审批、执行、事件发送与 provider 历史构造仍位于 Gateway 回调中。
 - Agent 工具执行上限默认 30 轮，可在设置中调整为 1–100；达到上限后，本轮尚未执行的调用会收到错误结果。
 - `agentTrace` 是按发生顺序保存的协议无关账本，包含模型文本/思考块、工具调用、工具结果及必要的 provider item，可用于后续协议重放。
 - 限流、网络/API 错误、输出上限、工具轮次上限或用户停止会生成 `interruption` 检查点。恢复时复用已完成结果；对结果未知且可能有副作用的操作，应先检查外部状态再决定是否重试。

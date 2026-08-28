@@ -55,6 +55,7 @@ import { readWorkspaceFile, writeWorkspaceFile } from './workspace-files'
 import { buildSkillRetrievalQuery, retrieveExplicitlyMentionedSkills, retrieveRelevantSkills } from './skill-retriever'
 import { buildProviderHeaders, providerHasUsableAuthentication } from './provider-policy'
 import { parseSse } from './sse'
+import { runAgentRuntime } from './agent-runtime'
 import {
   createCitationEmissionState,
   takeChangedWebCitations,
@@ -244,91 +245,71 @@ export class ChatGateway {
       const prepared = prepareMessagesForContext(messages, effectiveContextWindow, maxOutputTokens, contextMode)
 
       const maxAgentToolTurns = settings.agentToolTurnLimit ?? DEFAULT_AGENT_TOOL_TURN_LIMIT
-      let currentTurnMessages = prepared.messages
-      let turn = 0
-      let toolTurns = 0
-      let reachedTerminalState = false
+      await runAgentRuntime<StreamConsumptionResult>({
+        initialMessages: prepared.messages,
+        agentMode: isAgentMode,
+        maxToolTurns: maxAgentToolTurns,
+        signal: controller.signal,
+        invokeModel: async ({ messages: currentTurnMessages, turn }) => {
+          resetStallTimer()
 
-      while (turn < maxAgentToolTurns + 1) {
-        turn++
-        resetStallTimer()
-
-        const response = await fetch(
-          endpointFor(provider.baseUrl, format),
-          this.withProxy({
-            method: 'POST',
-            headers: buildProviderHeaders(provider, format),
-            body: JSON.stringify(
-              buildRequestBody(
-                format,
-                provider,
-                model,
-                currentTurnMessages,
-                request,
-                maxOutputTokens,
-                effectiveAgentTools.length > 0 ? effectiveAgentTools : undefined,
+          const response = await fetch(
+            endpointFor(provider.baseUrl, format),
+            this.withProxy({
+              method: 'POST',
+              headers: buildProviderHeaders(provider, format),
+              body: JSON.stringify(
+                buildRequestBody(
+                  format,
+                  provider,
+                  model,
+                  currentTurnMessages,
+                  request,
+                  maxOutputTokens,
+                  effectiveAgentTools.length > 0 ? effectiveAgentTools : undefined,
+                ),
               ),
-            ),
-            signal: controller.signal,
-            redirect: 'error',
-          }),
-        )
+              signal: controller.signal,
+              redirect: 'error',
+            }),
+          )
 
-        if (!response.ok) throw await httpError(response)
-        if (!response.body)
-          throw new GatewayError(t('The provider did not return a response stream.'), 'empty_response')
+          if (!response.ok) throw await httpError(response)
+          if (!response.body)
+            throw new GatewayError(t('The provider did not return a response stream.'), 'empty_response')
 
-        const wrappedBody = new ReadableStream<Uint8Array>({
-          async start(ctrl) {
-            const reader = response.body!.getReader()
-            try {
-              while (true) {
-                const { value, done } = await reader.read()
-                resetStallTimer()
-                if (done) {
-                  ctrl.close()
-                  break
+          const wrappedBody = new ReadableStream<Uint8Array>({
+            async start(ctrl) {
+              const reader = response.body!.getReader()
+              try {
+                while (true) {
+                  const { value, done } = await reader.read()
+                  resetStallTimer()
+                  if (done) {
+                    ctrl.close()
+                    break
+                  }
+                  ctrl.enqueue(value)
                 }
-                ctrl.enqueue(value)
+              } catch (e) {
+                ctrl.error(e)
+              } finally {
+                reader.releaseLock()
               }
-            } catch (e) {
-              ctrl.error(e)
-            } finally {
-              reader.releaseLock()
-            }
-          },
-          cancel(reason) {
-            response.body!.cancel(reason).catch(() => {})
-          },
-        })
+            },
+            cancel(reason) {
+              response.body!.cancel(reason).catch(() => {})
+            },
+          })
 
-        const streamResult = await consumeStream(format, wrappedBody, requestId, emit, effectiveAgentTools, turn)
-        // The 120-second watchdog protects network inactivity only. Tool
-        // approval intentionally has its own five-minute timeout and must not
-        // be aborted by a stale response-stream timer.
-        pauseStallTimer()
-
-        if (streamResult.toolCalls.length > 0 && isAgentMode) {
-          if (toolTurns >= maxAgentToolTurns) {
-            for (const rawCall of streamResult.toolCalls) {
-              const tool = effectiveAgentTools.find((item) => (item.modelName || item.name) === rawCall.name)
-              emit({
-                type: 'tool-result',
-                requestId,
-                callId: rawCall.id,
-                toolName: tool?.name || rawCall.name,
-                result: t('The {value0}-turn Agent tool-call limit has been reached; this call was not run.', {
-                  value0: maxAgentToolTurns,
-                }),
-                isError: true,
-                turn,
-              })
-            }
-            emit({ type: 'done', requestId, finishReason: 'tool_turn_limit' })
-            reachedTerminalState = true
-            break
-          }
-          toolTurns += 1
+          const streamResult = await consumeStream(format, wrappedBody, requestId, emit, effectiveAgentTools, turn)
+          // The 120-second watchdog protects network inactivity only. Tool
+          // approval intentionally has its own five-minute timeout and must not
+          // be aborted by a stale response-stream timer.
+          pauseStallTimer()
+          return streamResult
+        },
+        executeTools: async ({ messages: currentTurnMessages, modelResult: streamResult, turn }) => {
           const toolExecutions: ToolCallExecution[] = []
           const agentTrace: AgentTraceItem[] = streamResult.responseOutputItems.map((item) => ({
             type: 'provider_item' as const,
@@ -886,28 +867,35 @@ export class ChatGateway {
               ),
             )
           }
-          currentTurnMessages = prepareMessagesForContext(
-            nextTurnMessages,
-            effectiveContextWindow,
-            maxOutputTokens,
-            contextMode,
-          ).messages
-          continue
-        }
-
-        if (streamResult.toolCalls.length > 0) {
+          return prepareMessagesForContext(nextTurnMessages, effectiveContextWindow, maxOutputTokens, contextMode)
+            .messages
+        },
+        onComplete: ({ modelResult: streamResult }) => {
+          if (!streamResult.completed) {
+            emit({ type: 'done', requestId, finishReason: streamResult.finishReason })
+          }
+        },
+        onUnexpectedToolCall: () => {
           emit({ type: 'done', requestId, finishReason: 'unexpected_tool_call' })
-          reachedTerminalState = true
-          break
-        }
-
-        if (!streamResult.completed) {
-          emit({ type: 'done', requestId, finishReason: streamResult.finishReason })
-        }
-        reachedTerminalState = true
-        break
-      }
-      if (!reachedTerminalState) emit({ type: 'done', requestId, finishReason: 'tool_turn_limit' })
+        },
+        onToolTurnLimit: ({ modelResult: streamResult, turn }) => {
+          for (const rawCall of streamResult.toolCalls) {
+            const tool = effectiveAgentTools.find((item) => (item.modelName || item.name) === rawCall.name)
+            emit({
+              type: 'tool-result',
+              requestId,
+              callId: rawCall.id,
+              toolName: tool?.name || rawCall.name,
+              result: t('The {value0}-turn Agent tool-call limit has been reached; this call was not run.', {
+                value0: maxAgentToolTurns,
+              }),
+              isError: true,
+              turn,
+            })
+          }
+          emit({ type: 'done', requestId, finishReason: 'tool_turn_limit' })
+        },
+      })
     } catch (error) {
       if (isAbortError(error)) {
         emit({ type: 'done', requestId, finishReason: 'cancelled' })
