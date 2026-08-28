@@ -72,6 +72,6 @@ The [quality workflow](../.github/workflows/quality.yml) runs `pnpm check` for b
 - macOS on the runner's native architecture;
 - Ubuntu x64 and arm64.
 
-Each release job installs pnpm 11.24.0 and Node.js 24, installs dependencies with the frozen lockfile, runs `pnpm check` and `pnpm build`, invokes `electron-builder --publish never`, and uploads `release/*.exe`, `release/*.dmg`, and `release/*.AppImage` as GitHub Actions artifacts.
+Each release job installs pnpm 11.24.0 and Node.js 24, installs dependencies with the frozen lockfile, runs `pnpm check` and `pnpm build`, invokes `electron-builder --publish never`, and uploads `release/*.exe`, `release/*.dmg`, and `release/*.AppImage` as GitHub Actions artifacts. Matrix fail-fast is disabled so one platform failure does not hide results from the others.
 
-The release workflow still does not create or publish a GitHub Release. If the product workflow is expected to publish releases automatically, release-publishing steps must be added explicitly; artifact upload alone is not a release.
+After every platform succeeds for a pushed version tag, the publish job downloads the build artifacts, adds platform and architecture suffixes to avoid filename collisions, and creates or updates the matching GitHub Release with the packaged assets. Manual `workflow_dispatch` runs build artifacts only and do not publish a Release.

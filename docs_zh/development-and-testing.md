@@ -72,6 +72,6 @@ pnpm build
 - macOS：runner 原生架构；
 - Ubuntu：x64 与 arm64。
 
-每个发布 job 安装 pnpm 11.24.0、Node.js 24 和冻结锁文件依赖，运行 `pnpm check` 与 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。
+每个发布 job 安装 pnpm 11.24.0、Node.js 24 和冻结锁文件依赖，运行 `pnpm check` 与 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。矩阵已禁用 fail-fast，因此一个平台失败时不会掩盖其他平台的执行结果。
 
-发布工作流仍不会创建或发布 GitHub Release。若产品流程要求自动发布 Release，需要另行增加 release publishing 步骤，不能把 artifact upload 误认为正式发布。
+版本 tag 推送的所有平台构建成功后，publish job 会下载构建 artifact，为文件名补充平台和架构后缀以避免冲突，并创建或更新对应的 GitHub Release、上传打包产物。手动 `workflow_dispatch` 只生成构建 artifact，不发布 Release。
