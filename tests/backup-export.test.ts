@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TextWriter, Uint8ArrayReader, ZipReader, type Entry, type FileEntry } from '@zip.js/zip.js'
@@ -145,7 +145,7 @@ describe('conversation backup export', () => {
         referencedConversationCount: 2,
       })
       expect(manifest.workspaces.items[0]).toMatchObject({
-        resolvedPath: workspace,
+        resolvedPath: await realpath(workspace),
         conversationIds: ['first', 'second'],
         fileCount: 2,
         directoryCount: 3,

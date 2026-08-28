@@ -1,6 +1,6 @@
 {
   "name": "agentbox",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "description": "A private, local-first desktop agent and multi-provider AI client.",
   "type": "module",
   "main": "./out/main/index.cjs",
