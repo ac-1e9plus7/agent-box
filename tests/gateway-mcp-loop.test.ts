@@ -370,7 +370,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       const normalizedPath = normalize(value)
       return process.platform === 'win32' ? normalizedPath.toLowerCase() : normalizedPath
     }
-    expect(comparablePath(reportedWorkingDirectory)).toBe(comparablePath(realpathSync(tempDirectory)))
+    expect(comparablePath(reportedWorkingDirectory)).toBe(comparablePath(realpathSync.native(tempDirectory)))
   }, 15_000)
 
   it('writes and reads workspace files without shell escaping', async () => {

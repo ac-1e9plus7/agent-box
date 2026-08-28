@@ -22,9 +22,15 @@ describe('App renderer integration', () => {
   it('opens the new-conversation flow from the application shortcut', async () => {
     const bridge = createRendererApiMock()
     Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
+    const addEventListener = vi.spyOn(window, 'addEventListener')
 
     render(<App />)
     await screen.findByLabelText('消息输入框')
+    await waitFor(() => {
+      expect(
+        addEventListener.mock.calls.filter(([eventName]) => String(eventName) === 'keydown').length,
+      ).toBeGreaterThanOrEqual(2)
+    })
 
     fireEvent.keyDown(window, { key: 'n', ctrlKey: true })
 
