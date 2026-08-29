@@ -69,7 +69,7 @@ pnpm dist
 
 For ordinary code changes, run focused tests while iterating and finish with `pnpm check` and `pnpm build`. Packaging, preload, entry-point, dependency-externalization, or Electron lifecycle changes also require `pnpm package` and an actual unpacked-application smoke test.
 
-The GitHub quality workflow runs `pnpm check` for branch pushes and pull requests. The release workflow installs Node.js 24 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and uploads artifacts. It does not publish a GitHub Release; do not describe artifact upload as a release publication.
+The GitHub quality workflow runs `pnpm check` for branch pushes and pull requests. The release workflow installs Node.js 24 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and publishes tagged builds to GitHub Releases (while manual `workflow_dispatch` uploads artifacts only).
 
 ## Documentation contract
 
@@ -77,7 +77,7 @@ English is the default repository language for project documentation:
 
 - [`README.md`](./README.md) is the default English overview.
 - [`README_zh.md`](./README_zh.md) is the matching Simplified Chinese overview.
-- [`docs/`](./docs/README.md) contains the English technical index and nine English module documents.
+- [`docs/`](./docs/README.md) contains the English technical index and eleven English module documents.
 - [`docs_zh/`](./docs_zh/README.md) contains matching Chinese files with identical filenames.
 - `CLAUDE.md` and `AGENTS.md` must remain entirely in English.
 
@@ -92,7 +92,9 @@ Documentation rules:
    - renderer state, conversation trees, Markdown/KaTeX, profiles, or attachments: `ui-and-components.md`;
    - working directories, integrated terminal, or developer runtimes: `workspaces-and-runtimes.md`;
    - localization, resource generation, or terminology: `i18n.md`;
-   - scripts, tests, packaging, or CI: `development-and-testing.md`.
+   - scripts, tests, packaging, or CI: `development-and-testing.md`;
+   - Agent state machine, graph transitions, LangGraph runtime, streaming, or recovery: `langgraph-agent-runtime.md`;
+   - encrypted LangGraph checkpoints, record sidecar, BaseCheckpointSaver, message artifacts, or checkpoint quotas: `langgraph-checkpoints.md`.
 2. Behavioral, schema, interface, limit, security, build, or product-copy changes require synchronized updates to both `docs/<name>.md` and `docs_zh/<name>.md`.
 3. Keep `README.md` and `README_zh.md` synchronized at a high level. Put implementation detail in the matching technical documents.
 4. Preserve reciprocal language links in both root READMEs, both documentation indexes, and every paired document. English README links should lead to `docs/`; Chinese README links should lead to `docs_zh/`.
