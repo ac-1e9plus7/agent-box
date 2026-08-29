@@ -77,6 +77,13 @@ describe('ChatContent usage summary', () => {
     expect(screen.getAllByText('Reasoning 20 tokens')).toHaveLength(2)
     expect(screen.getByText('Cached input 900 tokens')).toBeTruthy()
     expect(screen.getByText('Cache write 50 tokens')).toBeTruthy()
+
+    const footer = document.querySelector('.message-model-name')?.closest('.message-footer')
+    expect(footer).toBeTruthy()
+    expect(footer?.querySelector('.message-tools')).toBeTruthy()
+    expect(footer?.querySelector('.message-tools .message-model-info')).toBeNull()
+    expect(footer?.querySelectorAll('.message-usage-summary > span')).toHaveLength(7)
+    expect(footer?.querySelector('.message-usage-summary i')).toBeNull()
   })
 
   it('shows total-only usage for an empty provider response', () => {

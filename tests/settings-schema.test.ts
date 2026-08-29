@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { normalizeAppSettings } from '../src/electron/storage/settings-schema'
 import { MAX_USER_AVATAR_DATA_URL_LENGTH } from '../src/shared/user-profile'
+import { DEFAULT_BROWSER_HOME_PAGE } from '../src/shared/browser-settings'
 
 const legacySettings = {
   theme: 'system',
@@ -91,6 +92,7 @@ describe('settings schema migration', () => {
   it('defaults legacy settings to a disabled built-in browser and validates its opt-ins', () => {
     expect(normalizeAppSettings(legacySettings)).toMatchObject({
       builtInBrowserEnabled: false,
+      browserHomePage: DEFAULT_BROWSER_HOME_PAGE,
       browserAllowHttpLoopback: false,
       browserPersistCookiesEnabled: false,
       browserAgentScreenshotsEnabled: false,
@@ -101,6 +103,7 @@ describe('settings schema migration', () => {
       normalizeAppSettings({
         ...legacySettings,
         builtInBrowserEnabled: true,
+        browserHomePage: 'https://example.com/start',
         browserAllowHttpLoopback: true,
         browserPersistCookiesEnabled: true,
         browserAgentScreenshotsEnabled: true,
@@ -109,6 +112,7 @@ describe('settings schema migration', () => {
       }),
     ).toMatchObject({
       builtInBrowserEnabled: true,
+      browserHomePage: 'https://example.com/start',
       browserAllowHttpLoopback: true,
       browserPersistCookiesEnabled: true,
       browserAgentScreenshotsEnabled: true,
@@ -118,6 +122,16 @@ describe('settings schema migration', () => {
     expect(() => normalizeAppSettings({ ...legacySettings, builtInBrowserEnabled: 'yes' })).toThrow(
       'Invalid built-in browser',
     )
+    expect(() => normalizeAppSettings({ ...legacySettings, browserHomePage: 'http://example.com/' })).toThrow(
+      '浏览器主页必须使用不含凭据的 HTTPS URL',
+    )
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        browserAllowHttpLoopback: true,
+        browserHomePage: 'http://localhost:4173/',
+      }).browserHomePage,
+    ).toBe('http://localhost:4173/')
   })
 
   it('preserves enabled Agent token optimizations and valid boundary values', () => {

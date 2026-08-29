@@ -424,7 +424,7 @@ export function Composer({
             )}
             {agentMode && browserAvailable && (
               <button
-                className={`mcp-indicator-pill browser-tool-pill ${browserToolEnabled ? 'is-active' : ''}`}
+                className={`browser-tool-pill ${browserToolEnabled ? 'is-active' : ''}`}
                 onClick={() => onBrowserToolEnabledChange?.(!browserToolEnabled)}
                 title={t(
                   'Allow this conversation’s Agent to request isolated browser navigation, page reading, and approved interactions.',

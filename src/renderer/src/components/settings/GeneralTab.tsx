@@ -17,6 +17,7 @@ import {
   MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS,
 } from '../../../../shared/agent-token-optimization'
 import { MAX_USER_NICKNAME_LENGTH } from '../../../../shared/user-profile'
+import { MAX_BROWSER_HOME_PAGE_LENGTH } from '../../../../shared/browser-settings'
 import { t } from '../../../../shared/i18n'
 import { Icon } from '../Icon'
 import { AgentTurnLimitInput, BoundedNumberInput, FieldLabel, SettingsToggle } from './SettingsControls'
@@ -136,6 +137,28 @@ export function GeneralTab({
         </div>
         {preferenceDraft.builtInBrowserEnabled && (
           <>
+            <div className="settings-row browser-home-page-row">
+              <label htmlFor="browser-home-page">
+                <strong>{t('Browser home page')}</strong>
+                <small>
+                  {t(
+                    'Opened for new browser sessions and tabs. Use HTTPS, or enable HTTP loopback pages for local development.',
+                  )}
+                </small>
+              </label>
+              <input
+                aria-label={t('Browser home page')}
+                className="browser-home-page-input"
+                id="browser-home-page"
+                maxLength={MAX_BROWSER_HOME_PAGE_LENGTH}
+                onChange={(event) =>
+                  setPreferenceDraft((current) => ({ ...current, browserHomePage: event.target.value }))
+                }
+                spellCheck={false}
+                type="url"
+                value={preferenceDraft.browserHomePage}
+              />
+            </div>
             <div className="settings-row">
               <div>
                 <strong>{t('Persist browser cookies')}</strong>

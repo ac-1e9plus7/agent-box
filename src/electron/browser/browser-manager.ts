@@ -154,6 +154,77 @@ export class BrowserManager {
       existing.lastUsedAt = Date.now()
       return this.publicState(existing)
     }
+    const managed = await this.createSession(conversationId)
+    return this.exclusive(managed, async () => {
+      const tab = this.requireTab(managed, managed.activeTabId)
+      return this.navigateTab(managed, tab, this.repository.getSettings().browserHomePage)
+    })
+  }
+
+  async newTab(conversationId: string, url?: string): Promise<BrowserState> {
+    const managed = await this.requireSession(conversationId)
+    return this.exclusive(managed, async () => {
+      if (managed.tabs.size >= MAX_BROWSER_TABS) {
+        throw new BrowserError(t('The browser tab limit has been reached.'), 'browser_operation_failed')
+      }
+      const created = this.createTabInternal(managed)
+      this.activateTab(managed, created.id)
+      return this.navigateTab(managed, created, url ?? this.repository.getSettings().browserHomePage)
+    })
+  }
+
+  async switchTab(conversationId: string, tabId: string): Promise<BrowserState> {
+    const managed = await this.requireSession(conversationId)
+    return this.exclusive(managed, async () => {
+      this.requireTab(managed, tabId)
+      this.activateTab(managed, tabId)
+      this.refreshState(managed)
+      this.emitState(managed)
+      return this.publicState(managed)
+    })
+  }
+
+  async closeTab(conversationId: string, tabId: string): Promise<BrowserState> {
+    const managed = await this.requireSession(conversationId)
+    return this.exclusive(managed, async () => {
+      const tab = this.requireTab(managed, tabId)
+      const wasActive = managed.activeTabId === tabId
+      this.destroyTab(managed, tab)
+      managed.tabs.delete(tabId)
+      if (managed.tabs.size === 0) {
+        const replacement = this.createTabInternal(managed)
+        managed.activeTabId = replacement.id
+        if (managed.state.visible) this.attachActiveView(managed)
+        return this.navigateTab(managed, replacement, this.repository.getSettings().browserHomePage)
+      }
+      if (wasActive) managed.activeTabId = Array.from(managed.tabs.keys()).at(-1)!
+      if (managed.state.visible) this.attachActiveView(managed)
+      this.refreshState(managed)
+      this.emitState(managed)
+      return this.publicState(managed)
+    })
+  }
+
+  listTabs(conversationId: string): BrowserState | undefined {
+    const managed = this.sessions.get(conversationId)
+    if (!managed) return undefined
+    this.refreshState(managed)
+    return this.publicState(managed)
+  }
+
+  async navigate(
+    conversationId: string,
+    value: string,
+    options: { signal?: AbortSignal; timeoutMs?: number; tabId?: string } = {},
+  ): Promise<BrowserState> {
+    const managed = await this.requireSession(conversationId)
+    return this.exclusive(managed, async () => {
+      const tab = this.requireTab(managed, options.tabId)
+      return this.navigateTab(managed, tab, value, options)
+    })
+  }
+
+  private async createSession(conversationId: string): Promise<ManagedBrowserSession> {
     if (!this.repository.getSettings().builtInBrowserEnabled) {
       throw new BrowserError(t('Enable the built-in browser in Settings first.'), 'browser_disabled')
     }
@@ -197,108 +268,7 @@ export class BrowserManager {
     managed.state.phase = 'ready'
     this.refreshState(managed)
     this.emitState(managed)
-    return this.publicState(managed)
-  }
-
-  async newTab(conversationId: string, url?: string): Promise<BrowserState> {
-    const managed = await this.requireSession(conversationId)
-    const tab = await this.exclusive(managed, async () => {
-      if (managed.tabs.size >= MAX_BROWSER_TABS) {
-        throw new BrowserError(t('The browser tab limit has been reached.'), 'browser_operation_failed')
-      }
-      const created = this.createTabInternal(managed)
-      this.activateTab(managed, created.id)
-      this.refreshState(managed)
-      this.emitState(managed)
-      return created
-    })
-    return url ? this.navigate(conversationId, url, { tabId: tab.id }) : this.publicState(managed)
-  }
-
-  async switchTab(conversationId: string, tabId: string): Promise<BrowserState> {
-    const managed = await this.requireSession(conversationId)
-    return this.exclusive(managed, async () => {
-      this.requireTab(managed, tabId)
-      this.activateTab(managed, tabId)
-      this.refreshState(managed)
-      this.emitState(managed)
-      return this.publicState(managed)
-    })
-  }
-
-  async closeTab(conversationId: string, tabId: string): Promise<BrowserState> {
-    const managed = await this.requireSession(conversationId)
-    return this.exclusive(managed, async () => {
-      const tab = this.requireTab(managed, tabId)
-      const wasActive = managed.activeTabId === tabId
-      this.destroyTab(managed, tab)
-      managed.tabs.delete(tabId)
-      if (managed.tabs.size === 0) {
-        const replacement = this.createTabInternal(managed)
-        managed.activeTabId = replacement.id
-      } else if (wasActive) {
-        managed.activeTabId = Array.from(managed.tabs.keys()).at(-1)!
-      }
-      if (managed.state.visible) this.attachActiveView(managed)
-      this.refreshState(managed)
-      this.emitState(managed)
-      return this.publicState(managed)
-    })
-  }
-
-  listTabs(conversationId: string): BrowserState | undefined {
-    const managed = this.sessions.get(conversationId)
-    if (!managed) return undefined
-    this.refreshState(managed)
-    return this.publicState(managed)
-  }
-
-  async navigate(
-    conversationId: string,
-    value: string,
-    options: { signal?: AbortSignal; timeoutMs?: number; tabId?: string } = {},
-  ): Promise<BrowserState> {
-    const managed = await this.requireSession(conversationId)
-    return this.exclusive(managed, async () => {
-      const tab = this.requireTab(managed, options.tabId)
-      const target = normalizeBrowserUrl(value, this.policyOptions())
-      await this.configureProxy(managed.browserSession)
-      await assertPublicBrowserDestination(target, managed.browserSession, this.policyOptions())
-      tab.lastSnapshot = undefined
-      tab.lastUsedAt = Date.now()
-      if (tab.id === managed.activeTabId) {
-        managed.state.phase = 'navigating'
-        managed.state.loading = true
-      }
-      this.emitState(managed)
-      const timeoutMs = Math.min(Math.max(options.timeoutMs ?? DEFAULT_NAVIGATION_TIMEOUT_MS, 3_000), 30_000)
-      try {
-        await withAbortAndTimeout(
-          () => tab.view.webContents.loadURL(target.toString()),
-          options.signal,
-          timeoutMs,
-          () => tab.view.webContents.stop(),
-        )
-      } catch (error) {
-        const message = redactBrowserError(error instanceof Error ? error.message : String(error), target.toString())
-        if (tab.id === managed.activeTabId) {
-          managed.state.phase = 'failed'
-          managed.state.loading = false
-          managed.state.error = message || t('Browser navigation failed.')
-        }
-        this.emitState(managed)
-        if (error instanceof BrowserError) throw error
-        throw new BrowserError(t('Browser navigation failed: {value0}', { value0: message }), 'navigation_failed')
-      }
-      if (tab.id === managed.activeTabId) {
-        managed.state.phase = 'ready'
-        managed.state.loading = false
-        managed.state.error = undefined
-      }
-      this.refreshState(managed)
-      this.emitState(managed)
-      return this.publicState(managed)
-    })
+    return managed
   }
 
   async command(conversationId: string, command: BrowserCommand, tabId?: string): Promise<BrowserState> {
@@ -643,7 +613,9 @@ export class BrowserManager {
     const existing = this.sessions.get(input.conversationId)
     if (!existing && !input.visible)
       throw new BrowserError(t('The browser session is unavailable.'), 'browser_unavailable')
-    const managed = existing ?? (await this.requireSession(input.conversationId))
+    if (!existing) await this.ensure(input.conversationId)
+    const managed = existing ?? this.sessions.get(input.conversationId)
+    if (!managed) throw new BrowserError(t('The browser session is unavailable.'), 'browser_unavailable')
     managed.bounds = this.clampBounds(input.bounds)
     if (input.visible) {
       for (const other of this.sessions.values()) {
@@ -713,6 +685,51 @@ export class BrowserManager {
     await Promise.all(Array.from(this.sessions.keys(), (conversationId) => this.close(conversationId)))
   }
 
+  private async navigateTab(
+    managed: ManagedBrowserSession,
+    tab: ManagedBrowserTab,
+    value: string,
+    options: { signal?: AbortSignal; timeoutMs?: number } = {},
+  ): Promise<BrowserState> {
+    const target = normalizeBrowserUrl(value, this.policyOptions())
+    await this.configureProxy(managed.browserSession)
+    await assertPublicBrowserDestination(target, managed.browserSession, this.policyOptions())
+    tab.lastSnapshot = undefined
+    tab.lastUsedAt = Date.now()
+    if (tab.id === managed.activeTabId) {
+      managed.state.phase = 'navigating'
+      managed.state.loading = true
+    }
+    this.emitState(managed)
+    const timeoutMs = Math.min(Math.max(options.timeoutMs ?? DEFAULT_NAVIGATION_TIMEOUT_MS, 3_000), 30_000)
+    try {
+      await withAbortAndTimeout(
+        () => tab.view.webContents.loadURL(target.toString()),
+        options.signal,
+        timeoutMs,
+        () => tab.view.webContents.stop(),
+      )
+    } catch (error) {
+      const message = redactBrowserError(error instanceof Error ? error.message : String(error), target.toString())
+      if (tab.id === managed.activeTabId) {
+        managed.state.phase = 'failed'
+        managed.state.loading = false
+        managed.state.error = message || t('Browser navigation failed.')
+      }
+      this.emitState(managed)
+      if (error instanceof BrowserError) throw error
+      throw new BrowserError(t('Browser navigation failed: {value0}', { value0: message }), 'navigation_failed')
+    }
+    if (tab.id === managed.activeTabId) {
+      managed.state.phase = 'ready'
+      managed.state.loading = false
+      managed.state.error = undefined
+    }
+    this.refreshState(managed)
+    this.emitState(managed)
+    return this.publicState(managed)
+  }
+
   private createTabInternal(managed: ManagedBrowserSession): ManagedBrowserTab {
     const view = new WebContentsView({
       webPreferences: {
@@ -764,9 +781,7 @@ export class BrowserManager {
   }
 
   private async requireSession(conversationId: string): Promise<ManagedBrowserSession> {
-    await this.ensure(conversationId)
-    const managed = this.sessions.get(conversationId)
-    if (!managed) throw new BrowserError(t('The browser session is unavailable.'), 'browser_unavailable')
+    const managed = this.sessions.get(conversationId) ?? (await this.createSession(conversationId))
     managed.lastUsedAt = Date.now()
     return managed
   }

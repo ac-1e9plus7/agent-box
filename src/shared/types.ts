@@ -188,6 +188,8 @@ export interface AppSettings {
   agentProviderContextOptimizationMode: AgentProviderContextOptimizationMode
   /** Global opt-in for the isolated built-in browser. Missing legacy values default to disabled. */
   builtInBrowserEnabled: boolean
+  /** Page opened by new browser sessions and tabs. Missing legacy values default to Google. */
+  browserHomePage: string
   /** Allows explicitly approved plain-HTTP loopback navigation for local development only. */
   browserAllowHttpLoopback: boolean
   /** Encrypt browser cookies in the Vault and restore them for the same conversation. */

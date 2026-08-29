@@ -86,7 +86,7 @@ Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和�
 
 启用原生续接时，助手消息可以保存经过校验的 `providerContinuation`，其中包含 OpenAI Responses 句柄和从 1 开始的模型轮次。句柄最多 200 个安全标识符字符，只能属于助手消息，并保留在加密 Vault 中；会话备份也会把它作为消息 JSON 的一部分导出。它是不透明的服务方侧状态引用，不是 API 凭据；删除本地会话数据会移除本地引用，但不会覆盖服务方自己的数据保留政策。
 
-`builtInBrowserEnabled`、持久 Cookie、Agent 截图、文件上传、下载和环回 HTTP 是互相独立的保守应用级显式开关，旧 Vault 缺少它们时均默认为 `false`。`Conversation.browserToolEnabled` 同样可选且默认关闭。活动浏览器 session 始终使用不带 `persist:` 的 partition。启用 Cookie 持久化时，主进程会把 Chromium 接受的 Cookie 快照写入可选 `browserProfiles`，按对话 ID 标识并随 Vault 一起加密；Chromium Cookie 变化后使用一秒防抖，关闭/回收 session 时再尽力写入最终快照。恢复的 Cookie 由该新 session 的全部标签共享。Cookie profile 和 Cookie 值都不会通过 IPC 返回。缓存、localStorage、导航历史、DOM 状态、已批准来源和元素引用只存在于内存中。经过脱敏的浏览器调用、语义文本和已批准截图属于普通 `toolExecutions`/`agentTrace` 数据，会随对话一起加密。
+`builtInBrowserEnabled`、持久 Cookie、Agent 截图、文件上传、下载和环回 HTTP 是互相独立的保守应用级显式开关，旧 Vault 缺少它们时均默认为 `false`。缺少 `browserHomePage` 时默认使用 `https://www.google.com/`；规范化只接受不含凭据的 HTTPS URL，并且仅在环回访问已启用时接受环回 HTTP URL。`Conversation.browserToolEnabled` 同样可选且默认关闭。活动浏览器 session 始终使用不带 `persist:` 的 partition。启用 Cookie 持久化时，主进程会把 Chromium 接受的 Cookie 快照写入可选 `browserProfiles`，按对话 ID 标识并随 Vault 一起加密；Chromium Cookie 变化后使用一秒防抖，关闭/回收 session 时再尽力写入最终快照。恢复的 Cookie 由该新 session 的全部标签共享。Cookie profile 和 Cookie 值都不会通过 IPC 返回。缓存、localStorage、导航历史、DOM 状态、已批准来源和元素引用只存在于内存中。经过脱敏的浏览器调用、语义文本和已批准截图属于普通 `toolExecutions`/`agentTrace` 数据，会随对话一起加密。
 
 更改总浏览器或 Cookie 持久化设置会关闭全部活动浏览器 session。关闭 Cookie 持久化开关后会删除全部已存 `browserProfiles`；如果只关闭总浏览器功能、但 Cookie 持久化偏好仍开启，则会保留加密 Cookie profile。
 

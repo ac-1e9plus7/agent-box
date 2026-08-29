@@ -40,6 +40,7 @@ import {
   DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
   DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
 } from '../../shared/agent-token-optimization'
+import { DEFAULT_BROWSER_HOME_PAGE } from '../../shared/browser-settings'
 import { createOpenRouterAutoModel } from './default-models'
 import { DEFAULT_SKILLS, localizedDefaultSkills } from './default-skills'
 import { defaultDeveloperRuntimeSettings, normalizeAppSettings } from './settings-schema'
@@ -106,6 +107,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   agentContextCompactionKeepRecentTurns: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
   agentProviderContextOptimizationMode: DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
   builtInBrowserEnabled: false,
+  browserHomePage: DEFAULT_BROWSER_HOME_PAGE,
   browserAllowHttpLoopback: false,
   browserPersistCookiesEnabled: false,
   browserAgentScreenshotsEnabled: false,
@@ -216,6 +218,9 @@ export class AppRepository {
       }
       if (patch.builtInBrowserEnabled !== undefined) {
         next.builtInBrowserEnabled = patch.builtInBrowserEnabled
+      }
+      if (patch.browserHomePage !== undefined) {
+        next.browserHomePage = patch.browserHomePage
       }
       if (patch.browserAllowHttpLoopback !== undefined) {
         next.browserAllowHttpLoopback = patch.browserAllowHttpLoopback

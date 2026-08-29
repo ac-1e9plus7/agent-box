@@ -76,11 +76,8 @@ function TokenUsageSummary({ usage }: { usage?: TokenUsage }): JSX.Element | nul
   ]
   return (
     <span className="message-usage-summary" title={t('Total token usage across all model requests')}>
-      {items.map((item, index) => (
-        <span key={item}>
-          {index > 0 && <i aria-hidden="true">·</i>}
-          {item}
-        </span>
+      {items.map((item) => (
+        <span key={item}>{item}</span>
       ))}
     </span>
   )
@@ -729,63 +726,66 @@ function AssistantMessage({
         ) : null}
         <CitationSources citations={message.citations} usage={message.usage} />
         {!isStreaming && message.status !== 'error' && Boolean(message.content.trim() || message.usage) && (
-          <div className="message-tools">
-            {total > 1 && (
-              <div className="message-pagination">
-                <button
-                  aria-label={t('Previous answer')}
-                  className="pagination-arrow"
-                  disabled={currentIndex === 0 || isStreaming}
-                  onClick={() => {
-                    const target = siblings[currentIndex - 1]
-                    if (target) onSwitchVersion?.(target.id)
-                  }}
-                  title={t('Previous answer')}
-                >
-                  <Icon name="chevron-left" size={13} />
+          <div className="message-footer">
+            <div className="message-tools">
+              {total > 1 && (
+                <div className="message-pagination">
+                  <button
+                    aria-label={t('Previous answer')}
+                    className="pagination-arrow"
+                    disabled={currentIndex === 0 || isStreaming}
+                    onClick={() => {
+                      const target = siblings[currentIndex - 1]
+                      if (target) onSwitchVersion?.(target.id)
+                    }}
+                    title={t('Previous answer')}
+                  >
+                    <Icon name="chevron-left" size={13} />
+                  </button>
+                  <span className="pagination-label">
+                    {currentIndex + 1} / {total}
+                  </span>
+                  <button
+                    aria-label={t('Next answer')}
+                    className="pagination-arrow"
+                    disabled={currentIndex === total - 1 || isStreaming}
+                    onClick={() => {
+                      const target = siblings[currentIndex + 1]
+                      if (target) onSwitchVersion?.(target.id)
+                    }}
+                    title={t('Next answer')}
+                  >
+                    <Icon name="chevron-right" size={13} />
+                  </button>
+                </div>
+              )}
+              {Boolean(message.content.trim()) && (
+                <button onClick={() => navigator.clipboard?.writeText(message.content)}>
+                  <Icon name="copy" size={14} />
+                  {t('Copy')}
                 </button>
-                <span className="pagination-label">
-                  {currentIndex + 1} / {total}
-                </span>
-                <button
-                  aria-label={t('Next answer')}
-                  className="pagination-arrow"
-                  disabled={currentIndex === total - 1 || isStreaming}
-                  onClick={() => {
-                    const target = siblings[currentIndex + 1]
-                    if (target) onSwitchVersion?.(target.id)
-                  }}
-                  title={t('Next answer')}
-                >
-                  <Icon name="chevron-right" size={13} />
+              )}
+              {showRegenerate && (
+                <button onClick={() => onRegenerate(message.id)}>
+                  <Icon name="refresh" size={14} />
+                  {t('Regenerate')}
                 </button>
-              </div>
-            )}
-            {Boolean(message.content.trim()) && (
-              <button onClick={() => navigator.clipboard?.writeText(message.content)}>
-                <Icon name="copy" size={14} />
-                {t('Copy')}
-              </button>
-            )}
-            {showRegenerate && (
-              <button onClick={() => onRegenerate(message.id)}>
-                <Icon name="refresh" size={14} />
-                {t('Regenerate')}
-              </button>
-            )}
-            {!isStreaming && (
-              <button
-                onClick={() => onDelete?.(message.id)}
-                title={
-                  total > 1
-                    ? t('Delete this response version and all that follow')
-                    : t('Delete this response and all that follow')
-                }
-              >
-                <Icon name="trash" size={14} />
-                {t('Delete')}
-              </button>
-            )}
+              )}
+              {!isStreaming && (
+                <button
+                  className="message-delete-action"
+                  onClick={() => onDelete?.(message.id)}
+                  title={
+                    total > 1
+                      ? t('Delete this response version and all that follow')
+                      : t('Delete this response and all that follow')
+                  }
+                >
+                  <Icon name="trash" size={14} />
+                  {t('Delete')}
+                </button>
+              )}
+            </div>
             <ModelUsageInfo modelName={model?.name ?? message.modelId ?? t('Unknown model')} usage={message.usage} />
           </div>
         )}

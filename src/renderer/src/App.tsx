@@ -47,6 +47,7 @@ import {
   DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
   DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
 } from '../../shared/agent-token-optimization'
+import { DEFAULT_BROWSER_HOME_PAGE } from '../../shared/browser-settings'
 import { resolveNaturalAgentResumeMessageId } from './agent-continuation'
 import { cleanGeneratedTitle, cleanManualTitle, firstUserQuestion, TITLE_SYSTEM_PROMPT } from './title'
 import { languageFromSystemLocale, setLanguage } from '../../shared/i18n'
@@ -81,6 +82,7 @@ const emptySettings: AppSettings = {
   agentContextCompactionKeepRecentTurns: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
   agentProviderContextOptimizationMode: DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
   builtInBrowserEnabled: false,
+  browserHomePage: DEFAULT_BROWSER_HOME_PAGE,
   browserAllowHttpLoopback: false,
   browserPersistCookiesEnabled: false,
   browserAgentScreenshotsEnabled: false,

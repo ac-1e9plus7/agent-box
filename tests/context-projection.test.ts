@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { projectContext, type ProjectionMessage } from '../src/renderer/src/context-projection'
 import type { AppSettings, ModelConfig } from '../src/shared/types'
+import { DEFAULT_BROWSER_HOME_PAGE } from '../src/shared/browser-settings'
 
 const baseSettings: AppSettings = {
   language: 'en-US',
@@ -19,6 +20,7 @@ const baseSettings: AppSettings = {
   agentContextCompactionKeepRecentTurns: 3,
   agentProviderContextOptimizationMode: 'off',
   builtInBrowserEnabled: false,
+  browserHomePage: DEFAULT_BROWSER_HOME_PAGE,
   browserAllowHttpLoopback: false,
   browserPersistCookiesEnabled: false,
   browserAgentScreenshotsEnabled: false,

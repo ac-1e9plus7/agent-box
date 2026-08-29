@@ -26,6 +26,7 @@ import {
   MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS,
 } from '../../shared/agent-token-optimization'
 import { MAX_USER_AVATAR_DATA_URL_LENGTH, MAX_USER_NICKNAME_LENGTH } from '../../shared/user-profile'
+import { DEFAULT_BROWSER_HOME_PAGE, MAX_BROWSER_HOME_PAGE_LENGTH } from '../../shared/browser-settings'
 import { isLoopbackUrl } from '../api/provider-policy'
 import { normalizeRuntimePathInput } from '../runtime-path'
 import { isAppLanguage, type AppLanguage } from '../../shared/i18n'
@@ -130,6 +131,7 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     false,
     'browser HTTP loopback access',
   )
+  const browserHomePage = normalizeBrowserHomePage(value.browserHomePage, browserAllowHttpLoopback)
   const browserPersistCookiesEnabled = normalizeOptionalBoolean(
     value.browserPersistCookiesEnabled,
     false,
@@ -189,6 +191,7 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     agentProviderContextOptimizationMode:
       agentProviderContextOptimizationMode as AppSettings['agentProviderContextOptimizationMode'],
     builtInBrowserEnabled,
+    browserHomePage,
     browserAllowHttpLoopback,
     browserPersistCookiesEnabled,
     browserAgentScreenshotsEnabled,
@@ -208,6 +211,34 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     settings.titleGenerationModelId = value.titleGenerationModelId
   }
   return settings
+}
+
+function normalizeBrowserHomePage(value: unknown, allowHttpLoopback: boolean): string {
+  if (value === undefined) return DEFAULT_BROWSER_HOME_PAGE
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    value.length > MAX_BROWSER_HOME_PAGE_LENGTH ||
+    /[\0\r\n]/.test(value)
+  ) {
+    throw new Error(t('The browser home page is invalid.'))
+  }
+  let url: URL
+  try {
+    url = new URL(value.trim())
+  } catch {
+    throw new Error(t('The browser home page is invalid.'))
+  }
+  if (
+    url.username ||
+    url.password ||
+    (url.protocol !== 'https:' && !(url.protocol === 'http:' && allowHttpLoopback && isLoopbackUrl(url.toString())))
+  ) {
+    throw new Error(
+      t('The browser home page must use HTTPS without credentials, or loopback HTTP when loopback access is enabled.'),
+    )
+  }
+  return url.toString()
 }
 
 function normalizeOptionalBoolean(value: unknown, fallback: boolean, label: string): boolean {

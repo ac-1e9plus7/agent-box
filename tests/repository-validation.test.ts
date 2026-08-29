@@ -163,6 +163,14 @@ describe('AppRepository business constraints and relational integrity', () => {
     expect(repo.getSettings()).toMatchObject(updated)
   })
 
+  it('persists a custom browser home page through a settings patch', async () => {
+    const browserHomePage = 'https://example.com/start'
+    const updated = await repo.updateSettings({ browserHomePage })
+
+    expect(updated.browserHomePage).toBe(browserHomePage)
+    expect(repo.getSettings().browserHomePage).toBe(browserHomePage)
+  })
+
   it('prevents removing a provider if it is still referenced by models', async () => {
     const provider = await repo.upsertProvider({
       name: 'Custom Provider',

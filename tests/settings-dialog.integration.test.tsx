@@ -84,6 +84,36 @@ describe('SettingsDialog renderer integration', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
+  it('stages a custom browser home page', async () => {
+    const onSave = vi.fn(async () => undefined)
+
+    render(
+      <SettingsDialog
+        initialSection="general"
+        models={[rendererModel]}
+        mcpServers={[]}
+        open
+        preferences={{ ...rendererSettings, builtInBrowserEnabled: true }}
+        providers={[rendererProvider]}
+        skills={[]}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText(t('Browser home page')), {
+      target: { value: 'https://example.com/start' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: t('Save changes') }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferences: expect.objectContaining({ browserHomePage: 'https://example.com/start' }),
+      }),
+    )
+  })
+
   it('stages independent Agent token optimizations and reveals only enabled numeric controls', async () => {
     const onSave = vi.fn(async () => undefined)
 

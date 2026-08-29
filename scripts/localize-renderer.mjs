@@ -53,6 +53,12 @@ const reviewedZh = {
   'Built-in browser': '内置浏览器',
   Browser: '浏览器',
   'Enable the isolated built-in browser': '启用隔离式内置浏览器',
+  'Browser home page': '浏览器主页',
+  'Opened for new browser sessions and tabs. Use HTTPS, or enable HTTP loopback pages for local development.':
+    '新建浏览器会话和标签页时打开。请使用 HTTPS；本地开发如需 HTTP，请先启用 HTTP 环回页面。',
+  'The browser home page is invalid.': '浏览器主页无效。',
+  'The browser home page must use HTTPS without credentials, or loopback HTTP when loopback access is enabled.':
+    '浏览器主页必须使用不含凭据的 HTTPS URL；启用环回访问后，也可使用环回 HTTP URL。',
   'Allow HTTP loopback pages': '允许访问 HTTP 环回页面',
   'Allow explicitly approved http://localhost and loopback URLs for local web development only.':
     '仅为本地 Web 开发允许经过明确批准的 http://localhost 和环回 URL。',

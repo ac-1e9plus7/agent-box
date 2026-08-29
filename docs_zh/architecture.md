@@ -105,7 +105,7 @@ graph TB
 - **默认拒绝权限**：默认 session 的权限请求和权限检查均返回拒绝。
 - **阻止 renderer 导航**：`will-navigate` 阻止离开当前页面；`setWindowOpenHandler` 总是拒绝创建新窗口。只有语法有效、使用 `http:`/`https:` 且不含嵌入式用户名或密码的 URL 才会交给 `shell.openExternal`。这里没有域名白名单。
 - **单实例与资源回收**：应用使用单实例锁。窗口关闭时会取消活动生成、结束相关工具审批并关闭 MCP 客户端；应用退出时还会销毁内存中的 Vault 状态与密钥。
-- **隔离式多标签浏览器**：可选内置浏览器由主进程中的 `BrowserManager` 持有。Session 按需创建；AgentBox 最多保留三个活动 Session，同时只显示一个 Session，每个 Session 最多十二个沙箱化 `WebContentsView` 标签页。打开第四个 Session 会关闭最久未使用的隐藏 Session。远程页面没有 preload、Node.js、AgentBox IPC、DevTools 或已授予的 Web 权限；新窗口会转换为经过策略检查的标签页。设置或新建对话框打开时会隐藏浏览器 View；删除对话、关闭窗口或退出应用时会销毁对应会话。Chromium Session 流量通过 `Session.setProxy` 使用自定义代理；供应商/MCP 的 `undici.ProxyAgent` 调度保持独立。下载、上传、截图、环回 HTTP 和 Cookie 持久化均使用互相独立的显式设置。
+- **隔离式多标签浏览器**：可选内置浏览器由主进程中的 `BrowserManager` 持有。Session 按需创建；新会话、用户新建的标签页以及关闭最后一个标签后补建的标签页都会导航到经过校验的 `AppSettings.browserHomePage`，其默认值为 Google。AgentBox 最多保留三个活动 Session，同时只显示一个 Session，每个 Session 最多十二个沙箱化 `WebContentsView` 标签页。打开第四个 Session 会关闭最久未使用的隐藏 Session。远程页面没有 preload、Node.js、AgentBox IPC、DevTools 或已授予的 Web 权限；新窗口会转换为经过策略检查的标签页。设置或新建对话框打开时会隐藏浏览器 View；删除对话、关闭窗口或退出应用时会销毁对应会话。Chromium Session 流量通过 `Session.setProxy` 使用自定义代理；供应商/MCP 的 `undici.ProxyAgent` 调度保持独立。下载、上传、截图、环回 HTTP 和 Cookie 持久化均使用互相独立的显式设置。
 
 ---
 

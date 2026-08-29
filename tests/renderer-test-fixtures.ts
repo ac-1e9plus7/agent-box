@@ -10,6 +10,7 @@ import type {
   Skill,
   StreamEvent,
 } from '../src/shared/types'
+import { DEFAULT_BROWSER_HOME_PAGE } from '../src/shared/browser-settings'
 
 const now = '2026-08-23T00:00:00.000Z'
 
@@ -34,6 +35,7 @@ export const rendererSettings: AppSettings = {
   agentContextCompactionKeepRecentTurns: 3,
   agentProviderContextOptimizationMode: 'off',
   builtInBrowserEnabled: false,
+  browserHomePage: DEFAULT_BROWSER_HOME_PAGE,
   browserAllowHttpLoopback: false,
   browserPersistCookiesEnabled: false,
   browserAgentScreenshotsEnabled: false,

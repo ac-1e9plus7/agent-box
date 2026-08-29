@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AppSettings, BrowserCookieProfile } from '../src/shared/types'
 import type { AppRepository } from '../src/electron/storage/app-repository'
+import { DEFAULT_BROWSER_HOME_PAGE } from '../src/shared/browser-settings'
 
 const fakes = vi.hoisted(() => {
   class Emitter {
@@ -127,6 +128,7 @@ const { BrowserManager, formatChromiumProxyRules } = await import('../src/electr
 function repositoryMock(profile?: BrowserCookieProfile, settingsPatch: Partial<AppSettings> = {}) {
   const settings = {
     builtInBrowserEnabled: true,
+    browserHomePage: DEFAULT_BROWSER_HOME_PAGE,
     browserAllowHttpLoopback: false,
     browserPersistCookiesEnabled: Boolean(profile),
     browserAgentScreenshotsEnabled: false,
@@ -166,11 +168,13 @@ describe('BrowserManager multi-tab lifecycle', () => {
     const manager = new BrowserManager(repositoryMock())
     const first = await manager.ensure('conversation-1')
     expect(first.tabs).toHaveLength(1)
+    expect(first.url).toBe(DEFAULT_BROWSER_HOME_PAGE)
     const firstTabId = first.activeTabId
 
     const second = await manager.newTab('conversation-1')
     expect(second.tabs).toHaveLength(2)
     expect(second.activeTabId).not.toBe(firstTabId)
+    expect(second.url).toBe(DEFAULT_BROWSER_HOME_PAGE)
 
     const navigated = await manager.navigate('conversation-1', 'https://example.com/', { tabId: firstTabId })
     expect(navigated.tabs.find((tab) => tab.id === firstTabId)?.url).toBe('https://example.com/')
@@ -178,6 +182,25 @@ describe('BrowserManager multi-tab lifecycle', () => {
 
     expect((await manager.switchTab('conversation-1', firstTabId)).activeTabId).toBe(firstTabId)
     expect((await manager.closeTab('conversation-1', firstTabId)).tabs).toHaveLength(1)
+    await manager.closeAll()
+  })
+
+  it('opens the configured home page for sessions, new tabs, and the final replacement tab', async () => {
+    const homePage = 'https://start.example/'
+    const manager = new BrowserManager(repositoryMock(undefined, { browserHomePage: homePage }))
+
+    const first = await manager.ensure('conversation-home')
+    expect(first.url).toBe(homePage)
+
+    const second = await manager.newTab('conversation-home')
+    expect(second.url).toBe(homePage)
+    const firstTabId = first.activeTabId
+    const secondTabId = second.activeTabId
+
+    await manager.closeTab('conversation-home', firstTabId)
+    const replacement = await manager.closeTab('conversation-home', secondTabId)
+    expect(replacement.tabs).toHaveLength(1)
+    expect(replacement.url).toBe(homePage)
     await manager.closeAll()
   })
 
