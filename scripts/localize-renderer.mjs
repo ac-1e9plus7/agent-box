@@ -49,6 +49,7 @@ const reviewedZh = {
   '(empty)': '(空)',
   '{value0}: {value1}': '{value0}：{value1}',
   invalid: '无效',
+  'Could not prepare the default working directory: {value0}': '无法准备默认工作目录：{value0}',
   'Built-in browser': '内置浏览器',
   Browser: '浏览器',
   'Enable the isolated built-in browser': '启用隔离式内置浏览器',

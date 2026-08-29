@@ -37,6 +37,31 @@ describe('App renderer integration', () => {
     expect(await screen.findByRole('dialog', { name: '新建对话' })).toBeTruthy()
   })
 
+  it('offers the application-adjacent default workspace for every new conversation', async () => {
+    const bridge = createRendererApiMock({
+      settings: { ...rendererSettings, defaultWorkingDirectory: '' },
+    })
+    Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
+
+    render(<App />)
+    await screen.findByLabelText('消息输入框')
+    fireEvent.keyDown(window, { key: 'n', ctrlKey: true })
+
+    const useDefault = await screen.findByRole('button', { name: /使用默认工作目录/ })
+    expect(useDefault.getAttribute('aria-label')).toContain('.default-agent-box-workspace')
+    fireEvent.click(useDefault)
+
+    await waitFor(() => {
+      expect(bridge.mocks.conversationSave).toHaveBeenCalledWith(
+        expect.objectContaining({ workingDirectory: 'C:\\AgentBox\\.default-agent-box-workspace' }),
+      )
+    })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '新建对话' })).toBeNull())
+
+    fireEvent.keyDown(window, { key: 'n', ctrlKey: true })
+    expect(await screen.findByRole('dialog', { name: '新建对话' })).toBeTruthy()
+  })
+
   it('sends through the bridge and applies streamed content to the active conversation', async () => {
     const bridge = createRendererApiMock()
     Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })

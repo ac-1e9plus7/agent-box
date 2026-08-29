@@ -738,6 +738,7 @@ export interface AgentboxAPI {
     testShell(config: IntegratedTerminalShellConfig): Promise<TerminalShellTestResult>
   }
   workspace: {
+    getDefaultDirectory(): Promise<string>
     selectDirectory(initialPath?: string): Promise<string | undefined>
   }
   runtimes: {

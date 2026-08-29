@@ -2637,7 +2637,7 @@ select:disabled {
   transform: translateY(-1px);
 }
 
-.workspace-choice-card.is-current {
+.workspace-choice-card.is-default {
   border-color: color-mix(in srgb, var(--accent), var(--border) 64%);
   background: color-mix(in srgb, var(--accent-soft), var(--surface) 30%);
 }

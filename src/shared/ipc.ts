@@ -21,6 +21,7 @@ export const IPC_CHANNELS = {
   mcpTestServer: 'mcp:test-server',
   mcpListTools: 'mcp:list-tools',
   terminalTestShell: 'terminal:test-shell',
+  workspaceGetDefaultDirectory: 'workspace:get-default-directory',
   workspaceSelectDirectory: 'workspace:select-directory',
   runtimeTest: 'runtime:test',
   runtimeListCondaEnvironments: 'runtime:list-conda-environments',

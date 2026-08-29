@@ -37,7 +37,7 @@ function WorkspaceOptionButton({
     option.conversationCount > 0
       ? t('{value0} existing conversations', { value0: option.conversationCount })
       : option.source === 'default'
-        ? t('Default directory from Settings')
+        ? t('Default working directory')
         : t('Current conversation directory')
 
   return (
@@ -59,7 +59,7 @@ function WorkspaceOptionButton({
         <small>{option.path}</small>
       </span>
       <span className="workspace-choice-meta">
-        {option.source === 'current' && <em>{t('Recommended')}</em>}
+        {option.source === 'default' && <em>{t('Recommended')}</em>}
         <small>{meta}</small>
         <Icon name="chevron-right" size={14} />
       </span>

@@ -57,8 +57,8 @@ describe('workspace conversation grouping', () => {
         source: option.source,
       })),
     ).toEqual([
-      { count: 2, path: 'C:\\code\\alpha', source: 'current' },
       { count: 0, path: 'D:\\projects\\default', source: 'default' },
+      { count: 2, path: 'C:\\code\\alpha', source: 'current' },
       { count: 1, path: 'C:\\code\\beta', source: 'recent' },
     ])
   })

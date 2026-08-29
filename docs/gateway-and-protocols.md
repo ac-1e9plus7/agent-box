@@ -158,7 +158,7 @@ The `model -> tools -> model -> terminal` transitions are executed by a request-
 Under **Settings → General → Network proxy**, `off` connects directly. In `custom` mode, the gateway and remote MCP manager each cache an `undici.ProxyAgent`. A configuration change closes the previous dispatcher and creates a new one on the next request. Built-in browser sessions use the same setting through Electron `Session.setProxy` when created and before navigation; that Chromium path is distinct from `undici` dispatch.
 
 - A loopback proxy may use HTTP; a remote proxy must use HTTPS.
-- A proxy URL may carry a username and password in its userinfo. Settings IPC replaces them with `***` on output, and saving that unchanged masked URL retains the original credentials. Browser proxy credentials are supplied only to a matching Chromium proxy-auth challenge and remain in the main process.
+- A proxy URL may carry a username and password in its userinfo. Settings IPC replaces them with `***` on output, and saving that unchanged masked URL retains the original credentials. The built-in browser passes only the proxy scheme, host, and port to Chromium's fixed-server rules; credentials are supplied only to a matching proxy-auth challenge and remain in the main process.
 - Before returning a gateway error to the UI, AgentBox replaces the provider API key and the proxy username and password. Ordinary error text must never be used to diagnose or echo secret values.
 
 ### Limits and timeouts

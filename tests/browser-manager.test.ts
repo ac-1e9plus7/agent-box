@@ -122,7 +122,7 @@ vi.mock('electron', () => ({
   WebContentsView: fakes.FakeView,
 }))
 
-const { BrowserManager } = await import('../src/electron/browser/browser-manager')
+const { BrowserManager, formatChromiumProxyRules } = await import('../src/electron/browser/browser-manager')
 
 function repositoryMock(profile?: BrowserCookieProfile, settingsPatch: Partial<AppSettings> = {}) {
   const settings = {
@@ -144,6 +144,24 @@ function repositoryMock(profile?: BrowserCookieProfile, settingsPatch: Partial<A
 }
 
 describe('BrowserManager multi-tab lifecycle', () => {
+  it('formats custom proxy URLs as Chromium proxy rules without paths or credentials', async () => {
+    expect(formatChromiumProxyRules('http://127.0.0.1:7890')).toBe('http://127.0.0.1:7890')
+    expect(formatChromiumProxyRules('https://user:pass@proxy.example.com:8443/path?query=value#fragment')).toBe(
+      'https://proxy.example.com:8443',
+    )
+
+    fakes.fakeSession.setProxy.mockClear()
+    const manager = new BrowserManager(
+      repositoryMock(undefined, { proxy: { mode: 'custom', url: 'http://127.0.0.1:7890' } }),
+    )
+    await manager.ensure('conversation-proxy')
+    expect(fakes.fakeSession.setProxy).toHaveBeenLastCalledWith({
+      mode: 'fixed_servers',
+      proxyRules: 'http://127.0.0.1:7890',
+    })
+    await manager.closeAll()
+  })
+
   it('creates, identifies, navigates, switches, and closes independent tabs', async () => {
     const manager = new BrowserManager(repositoryMock())
     const first = await manager.ensure('conversation-1')

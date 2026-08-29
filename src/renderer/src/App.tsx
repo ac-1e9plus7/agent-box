@@ -141,6 +141,7 @@ export default function App(): JSX.Element {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [newConversationOpen, setNewConversationOpen] = useState(false)
+  const [appDefaultWorkingDirectory, setAppDefaultWorkingDirectory] = useState('')
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState('')
   const [toast, setToast] = useState('')
@@ -269,7 +270,10 @@ export default function App(): JSX.Element {
   const handleChooseNewConversationDirectory = useCallback(async (): Promise<void> => {
     try {
       const selected = await window.agentbox.workspace.selectDirectory(
-        activeConversation?.workingDirectory || settings.defaultWorkingDirectory || undefined,
+        activeConversation?.workingDirectory ||
+          settings.defaultWorkingDirectory ||
+          appDefaultWorkingDirectory ||
+          undefined,
       )
       if (selected) await handleNewConversationInWorkspace(selected)
     } catch (error) {
@@ -277,6 +281,7 @@ export default function App(): JSX.Element {
     }
   }, [
     activeConversation?.workingDirectory,
+    appDefaultWorkingDirectory,
     handleNewConversationInWorkspace,
     settings.defaultWorkingDirectory,
     showToast,
@@ -295,6 +300,7 @@ export default function App(): JSX.Element {
         initialSkills,
         initialMcpServers,
         initialMcpTools,
+        initialAppDefaultWorkingDirectory,
       ] = await Promise.all([
         window.agentbox.settings.get(),
         window.agentbox.providers.list(),
@@ -303,6 +309,10 @@ export default function App(): JSX.Element {
         window.agentbox.skills.list(),
         window.agentbox.mcp.listServers(),
         window.agentbox.mcp.listTools(),
+        window.agentbox.workspace.getDefaultDirectory().catch((error) => {
+          showToast(t('Could not prepare the default working directory: {value0}', { value0: normalizeError(error) }))
+          return ''
+        }),
       ])
       const uiProviders: ProviderConfig[] = providerViews.map((provider) => ({
         ...provider,
@@ -316,6 +326,7 @@ export default function App(): JSX.Element {
       setSkills(initialSkills)
       setMcpServers(initialMcpServers)
       setMcpTools(initialMcpTools)
+      setAppDefaultWorkingDirectory(initialAppDefaultWorkingDirectory)
 
       const initialConversation = uiConversations[0]
       const initialModel =
@@ -345,7 +356,7 @@ export default function App(): JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [hydrateConversations])
+  }, [hydrateConversations, showToast])
 
   useEffect(() => {
     void bootstrap()
@@ -629,7 +640,10 @@ export default function App(): JSX.Element {
     if (!activeConversation) return undefined
     try {
       const selected = await window.agentbox.workspace.selectDirectory(
-        activeConversation.workingDirectory || settings.defaultWorkingDirectory || undefined,
+        activeConversation.workingDirectory ||
+          settings.defaultWorkingDirectory ||
+          appDefaultWorkingDirectory ||
+          undefined,
       )
       if (!selected) return undefined
       const nextConversation: Conversation = {
@@ -645,7 +659,14 @@ export default function App(): JSX.Element {
       showToast(t('Could not select a working directory: {value0}', { value0: normalizeError(error) }))
       return undefined
     }
-  }, [activeConversation, persistConversation, replaceConversations, settings.defaultWorkingDirectory, showToast])
+  }, [
+    activeConversation,
+    appDefaultWorkingDirectory,
+    persistConversation,
+    replaceConversations,
+    settings.defaultWorkingDirectory,
+    showToast,
+  ])
 
   const handleToggleReasoning = (): void => {
     if (!activeModel?.supportsReasoning) return
@@ -1568,7 +1589,7 @@ export default function App(): JSX.Element {
           busy={creatingConversation}
           conversations={conversations}
           currentDirectory={activeConversation?.workingDirectory}
-          defaultDirectory={settings.defaultWorkingDirectory}
+          defaultDirectory={settings.defaultWorkingDirectory || appDefaultWorkingDirectory}
           onCancel={() => setNewConversationOpen(false)}
           onChooseDirectory={() => void handleChooseNewConversationDirectory()}
           onSelectWorkspace={(workingDirectory) => void handleNewConversationInWorkspace(workingDirectory)}

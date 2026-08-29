@@ -184,6 +184,7 @@ export function createRendererApiMock({
       testShell: vi.fn(async () => ({ ok: true, platform: 'win32', latencyMs: 1, message: 'ok' })),
     },
     workspace: {
+      getDefaultDirectory: vi.fn(async () => 'C:\\AgentBox\\.default-agent-box-workspace'),
       selectDirectory: vi.fn(async () => 'C:\\workspace'),
     },
     runtimes: {

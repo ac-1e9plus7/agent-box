@@ -67,8 +67,8 @@ export function getNewConversationWorkspaceOptions(
     })
   }
 
-  addOption(currentDirectory, 'current')
   addOption(defaultDirectory, 'default')
+  addOption(currentDirectory, 'current')
   for (const group of existingGroups) addOption(group.path, 'recent')
   return options
 }

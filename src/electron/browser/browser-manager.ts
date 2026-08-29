@@ -38,6 +38,11 @@ const MAX_UPLOAD_TOTAL_BYTES = 100 * 1024 * 1024
 const MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 const MAX_SCREENSHOT_BASE64_CHARACTERS = 2 * 1024 * 1024
 
+export function formatChromiumProxyRules(proxyUrl: string): string {
+  const parsed = new URL(proxyUrl)
+  return `${parsed.protocol}//${parsed.host}`
+}
+
 interface BrowserSnapshotRecord {
   id: string
   pageId: string
@@ -1107,15 +1112,10 @@ export class BrowserManager {
   private async configureProxy(browserSession: Session): Promise<void> {
     const proxy = this.repository.getSettings().proxy
     try {
-      let proxyRules = proxy.url
-      if (proxy.mode === 'custom' && proxy.url) {
-        const parsed = new URL(proxy.url)
-        parsed.username = ''
-        parsed.password = ''
-        proxyRules = parsed.toString()
-      }
       await browserSession.setProxy(
-        proxy.mode === 'custom' && proxy.url ? { mode: 'fixed_servers', proxyRules } : { mode: 'direct' },
+        proxy.mode === 'custom' && proxy.url
+          ? { mode: 'fixed_servers', proxyRules: formatChromiumProxyRules(proxy.url) }
+          : { mode: 'direct' },
       )
     } catch {
       throw new BrowserError(t('The browser proxy could not be configured.'), 'browser_operation_failed')

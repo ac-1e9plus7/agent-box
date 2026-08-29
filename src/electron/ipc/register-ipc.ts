@@ -28,6 +28,7 @@ import { createBackupArchive, createBackupFileName, normalizeExportBackupInput }
 import { setLanguage } from '../../shared/i18n'
 import { t } from '../../shared/i18n'
 import { BrowserManager } from '../browser/browser-manager'
+import { ensureDefaultAgentBoxWorkspace } from '../api/default-workspace'
 
 export function registerIpcHandlers(
   window: BrowserWindow,
@@ -141,6 +142,19 @@ export function registerIpcHandlers(
   register(IPC_CHANNELS.terminalTestShell, (_event, input: IntegratedTerminalShellConfig) => {
     assertRecord(input, t('Terminal shell configuration'))
     return testIntegratedTerminalShell(normalizeIntegratedTerminalShell(input))
+  })
+
+  register(IPC_CHANNELS.workspaceGetDefaultDirectory, async () => {
+    try {
+      return await ensureDefaultAgentBoxWorkspace(app.getPath('exe'))
+    } catch (error) {
+      throw new Error(
+        t('Could not prepare the default working directory: {value0}', {
+          value0: error instanceof Error ? error.message : String(error),
+        }),
+        { cause: error },
+      )
+    }
   })
 
   register(IPC_CHANNELS.workspaceSelectDirectory, async (_event, initialPath?: string) => {
