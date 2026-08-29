@@ -74,7 +74,7 @@ interface VaultState {
 }
 ```
 
-`skills`、`mcpServers` 和加密 `browserProfiles` 在接口中可选是为了兼容旧 Vault；加载和校验后都会补齐为数组。设置中缺失的较新字段也由 [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) 迁移为安全默认值。
+`skills`、`mcpServers` 和加密 `browserProfiles` 在接口中可选是为了兼容旧 Vault。加载/校验时，缺失的 `skills` 会使用本地化内置 Skill 集；缺失的 `mcpServers` 和 `browserProfiles` 则变为数组空值；不再属于任何会话的 Profile 会被丢弃。设置中缺失的较新字段也由 [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) 迁移为安全默认值。
 
 LangGraph checkpoint sidecar 刻意不是 `VaultState` 字段，superstep 写入因此不会重写完整会话 Vault。它是本机执行状态；`agentTrace` 仍位于会话 Schema 和可移植备份中。
 
@@ -82,13 +82,13 @@ LangGraph checkpoint sidecar 刻意不是 `VaultState` 字段，superstep 写入
 
 Assistant 的 `usage` 同时保存聚合 token 计数和可选的 `modelRequests` 明细，后者按从 1 开始的 Agent 模型轮次标识。每条明细只允许有界非负整数计数，最多保存 101 次请求（100 个工具轮次加终态模型请求）。加载有效明细时会重新计算聚合总计；旧消息只有聚合 usage 时仍可原样读取。
 
-Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和旧版 Vault 均默认关闭全部优化。功能关闭时仍保留参数值：工具结果压缩使用 `agentToolResultMaxCharacters: 16000`（2,000–100,000），动态工具暴露使用 `agentDynamicToolLimit: 4`（1–16），Agent 单次运行上下文压缩默认在 70%（50%–95%）触发并保留最近 3 轮（1–10）。`agentProviderContextOptimizationMode` 接受 `off`、`auto`、`prefix-cache` 或 `native-continuation`，默认使用 `off`。设置规范化会拒绝未知模式、非布尔开关、非整数及越界参数，不会静默强制转换。
+Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和旧版 Vault 均默认关闭全部优化。功能关闭时仍保留参数值：工具结果压缩使用 `agentToolResultMaxCharacters: 16000`（2,000–100,000），动态工具暴露使用 `agentDynamicToolLimit: 4`（1–16），Skill 资源懒加载使用 `agentLazySkillResourcesEnabled: false`，Agent 单次运行上下文压缩默认在 70%（50%–95%）触发并保留最近 3 轮（1–10）。`agentProviderContextOptimizationMode` 接受 `off`、`auto`、`prefix-cache` 或 `native-continuation`，默认使用 `off`。设置规范化会拒绝未知模式、非布尔开关、非整数及越界参数，不会静默强制转换。
 
 启用原生续接时，助手消息可以保存经过校验的 `providerContinuation`，其中包含 OpenAI Responses 句柄和从 1 开始的模型轮次。句柄最多 200 个安全标识符字符，只能属于助手消息，并保留在加密 Vault 中；会话备份也会把它作为消息 JSON 的一部分导出。它是不透明的服务方侧状态引用，不是 API 凭据；删除本地会话数据会移除本地引用，但不会覆盖服务方自己的数据保留政策。
 
-`builtInBrowserEnabled`、持久 Cookie、Agent 截图、文件上传、下载和环回 HTTP 是互相独立的保守应用级显式开关，旧 Vault 缺少它们时均默认为 `false`。`Conversation.browserToolEnabled` 同样可选且默认关闭。活动浏览器 session 始终使用不带 `persist:` 的 partition。启用 Cookie 持久化时，主进程会把 Chromium 接受的 Cookie 快照写入可选 `browserProfiles`，按对话 ID 标识并随 Vault 一起加密；Cookie profile 不会通过 IPC 返回。缓存、localStorage、导航历史、DOM 状态、已批准来源和元素引用只存在于内存中。经过脱敏的浏览器调用、语义文本和已批准截图属于普通 `toolExecutions`/`agentTrace` 数据，会随对话一起加密。
+`builtInBrowserEnabled`、持久 Cookie、Agent 截图、文件上传、下载和环回 HTTP 是互相独立的保守应用级显式开关，旧 Vault 缺少它们时均默认为 `false`。`Conversation.browserToolEnabled` 同样可选且默认关闭。活动浏览器 session 始终使用不带 `persist:` 的 partition。启用 Cookie 持久化时，主进程会把 Chromium 接受的 Cookie 快照写入可选 `browserProfiles`，按对话 ID 标识并随 Vault 一起加密；Chromium Cookie 变化后使用一秒防抖，关闭/回收 session 时再尽力写入最终快照。恢复的 Cookie 由该新 session 的全部标签共享。Cookie profile 和 Cookie 值都不会通过 IPC 返回。缓存、localStorage、导航历史、DOM 状态、已批准来源和元素引用只存在于内存中。经过脱敏的浏览器调用、语义文本和已批准截图属于普通 `toolExecutions`/`agentTrace` 数据，会随对话一起加密。
 
-关闭 Cookie 持久化开关时，会先关闭活动浏览器会话，再删除全部已存 `browserProfiles`。如果只关闭总浏览器功能、但 Cookie 持久化偏好仍开启，则会关闭活动标签，但保留加密 Cookie profile。
+更改总浏览器或 Cookie 持久化设置会关闭全部活动浏览器 session。关闭 Cookie 持久化开关后会删除全部已存 `browserProfiles`；如果只关闭总浏览器功能、但 Cookie 持久化偏好仍开启，则会保留加密 Cookie profile。
 
 ---
 
@@ -96,28 +96,28 @@ Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和�
 
 主要限制由 [`app-repository.ts`](../src/electron/storage/app-repository.ts)、[`vault-resource-limits.ts`](../src/electron/storage/vault-resource-limits.ts) 和 [`web-metadata-schema.ts`](../src/electron/storage/web-metadata-schema.ts) 执行：
 
-| 资源                                          |          当前上限 |
-| --------------------------------------------- | ----------------: |
-| 供应商                                        |               100 |
-| 模型                                          |             2,000 |
-| 会话                                          |            10,000 |
-| Skills                                        |               500 |
-| MCP servers                                   |               100 |
-| 单会话消息                                    |            20,000 |
-| 单条消息正文或推理字段                        | 各 2,000,000 字符 |
-| 单会话计入校验的总内容                        |   50,000,000 字符 |
-| 全部会话序列化数据                            |            50 MiB |
-| 全部会话消息 / 引用                           |        各 100,000 |
-| 单条消息引用                                  |               100 |
-| 单条消息附件                                  |                20 |
-| 单个 Skill 文件数 / 单文件内容                | 50 / 500,000 字符 |
-| 单个 MCP server 参数数 / 环境变量数           |          50 / 100 |
-| 单项 MCP 参数或环境变量值                     |        8,192 字符 |
-| 单个浏览器 Profile 的 Cookie 数               |             2,000 |
-| 浏览器 Cookie Profile 数                      |            10,000 |
-| 浏览器 Cookie Profile 序列化数据              |   10,000,000 字符 |
-| 加密 checkpoint thread / 单 thread checkpoint |         256 / 512 |
-| 单 thread / 完整 namespace checkpoint 数据    |  64 MiB / 256 MiB |
+| 资源                                                       |          当前上限 |
+| ---------------------------------------------------------- | ----------------: |
+| 供应商                                                     |               100 |
+| 模型                                                       |             2,000 |
+| 会话                                                       |            10,000 |
+| Skills                                                     |               500 |
+| MCP servers                                                |               100 |
+| 单会话消息                                                 |            20,000 |
+| 单条消息正文或推理字段                                     | 各 2,000,000 字符 |
+| 单会话计入校验的总内容                                     |   50,000,000 字符 |
+| 全部会话序列化数据                                         |            50 MiB |
+| 全部会话消息 / 引用                                        |        各 100,000 |
+| 单条消息引用                                               |               100 |
+| 单条消息附件                                               |                20 |
+| 单个 Skill 文件数 / 单文件内容                             | 50 / 500,000 字符 |
+| 单个 MCP server 参数数 / 环境变量数                        |          50 / 100 |
+| 单项 MCP 参数或环境变量值                                  |        8,192 字符 |
+| 单个浏览器 Profile 的 Cookie 数                            |             2,000 |
+| 浏览器 Cookie Profile 数                                   |            10,000 |
+| 浏览器 Cookie Profile 序列化数据                           |   10,000,000 字符 |
+| 加密 checkpoint thread / 单 thread checkpoint              |         256 / 512 |
+| 单 thread / 有效 manifest 计量的 namespace checkpoint 数据 |  64 MiB / 256 MiB |
 
 保存会话时同时执行单会话和聚合配额。为避免新配额把旧数据永久锁死，旧 Vault 即使已经超过聚合上限也可以加载，并允许删除或缩小数据；任何仍会增大超限维度的保存都会被拒绝。
 
@@ -127,37 +127,37 @@ Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和�
 
 「设置 → 数据与安全 → 清除全部会话数据」执行以下流程：
 
-1. `ChatGateway.cancelAll()` 中止全部活动请求并结束待处理的工具审批。
+1. `ChatGateway.cancelAll()` 中止全部活动请求，并将待处理的工具审批按拒绝处理。
 2. 先清空加密 checkpoint namespace。清理失败时中止，不报告会话数据已清除。
 3. Repository 将 `conversations` 替换为空数组；设置、供应商与 API Key、模型、Skills 和 MCP server 配置保持不变。
 4. 完整 Vault 使用新的随机 IV 再次加密并写入；safeStorage 封装的主密钥不轮换。
 
 该操作清除活动 Vault 中的会话，不是面向磁盘取证场景的安全擦除保证。
 
-该操作还会在删除对话前关闭全部内存浏览器会话并删除全部加密浏览器 Cookie profile；删除单个对话时会关闭其全部标签并只删除对应 Cookie profile。隐藏浏览器面板不会清理临时状态；关闭会话、删除对话、关闭窗口或退出应用时才会清理。应用退出会等待最后一次已启用的 Cookie 快照完成，再销毁 Vault 密钥。
+该操作还会在删除对话前关闭全部内存浏览器会话并删除全部加密浏览器 Cookie profile；删除单个对话时会关闭其全部标签并只删除对应 Cookie profile。隐藏浏览器面板不会清理临时状态；关闭会话、删除对话、关闭窗口或退出应用时才会清理。启用 Cookie 持久化时，会话关闭与应用退出都会尽力写入最后一次 Cookie 快照。直接 `before-quit` 路径会在销毁 Vault 密钥前等待清理尝试，但快照失败不会阻塞退出。
 
 ---
 
 ## 📦 会话 ZIP 备份
 
-「设置 → 数据与安全 → 导出加密备份」调用 [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts)。Renderer 只提交模式和可选的一次性密码；系统保存对话框、Vault 快照读取和文件创建均在主进程中进行。
+「设置 → 数据与安全 → 导出备份」调用 [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts)。Renderer 只提交模式和可选的一次性密码；系统保存对话框、Vault 快照读取和文件创建均在主进程中进行。
 
 ### 备份模式
 
 - **浅备份（shallow）**：导出全部会话。每个会话同时包含一份完整 JSON 和一份可读 Markdown；JSON 保留会话树中的全部分支、附件、引用、用量、Skill 激活、工具执行、Agent trace 与中断元数据。
 - 已经写入消息的浏览器文本与截图工具结果会进入备份；加密浏览器 Cookie profile 以及活动 Cookie、缓存、站点存储、DOM 状态、来源授权、标签状态和导航历史不会进入备份。
-- **深备份（deep）**：在浅备份基础上，递归加入所有被会话引用的工作目录。实现使用 `realpath` 对同一目录去重；保留空目录和符号链接，但不跟随符号链接；跳过其他特殊文件并把路径写入清单警告。
+- **深备份（deep）**：在浅备份基础上，递归加入所有被会话引用的工作目录。实现使用 `realpath` 对同一目录去重；保留空目录和符号链接，但不跟随工作目录根下遇到的符号链接；跳过其他特殊文件并把路径写入清单警告。若工作目录位于当前 AgentBox user-data 根目录之内，深备份会拒绝该工作目录；若 user-data 根目录嵌套在其他有效工作目录中，遍历会跳过该根目录，因此活动 Vault、封装密钥、浏览器 Profile 和 checkpoint sidecar 不会通过工作区遍历进入深备份。
 
 ### 加密与隐私边界
 
 - 密码可选，最长 256 个字符。设置非空密码时，`@zip.js/zip.js` 对 ZIP 条目使用 WinZip AES-256（AE-2）；密码不写入设置或 Vault，AgentBox 也无法恢复密码。
 - ZIP 中的 JSON、Markdown 和工作区文件在进入归档前都是原始内容。没有密码时可直接读取；有密码时由条目加密提供静态保护。
 - ZIP 中央目录不加密条目名称。会话文件使用序号而不是标题；深备份的工作区相对文件名仍会出现在条目名称中。`manifest.json` 还包含工作目录绝对路径映射，但设置密码后其文件内容会被加密。
-- 备份不包含供应商 API Key、认证凭据、Vault 主密钥、Vault 文件和本机 LangGraph checkpoint sidecar，也不包含供应商、模型、MCP server、Skill 或应用设置。`agentTrace` 仍位于会话 JSON 中，因此恢复可移植。会话正文和工作区本身仍可能包含敏感数据。
+- 结构化会话导出不包含供应商 API Key、认证凭据、Vault 主密钥、Vault 文件和本机 LangGraph checkpoint sidecar，也不包含供应商、模型、MCP server、Skill 或应用设置。深备份遍历还会排除当前 AgentBox user-data 根目录。`agentTrace` 仍位于会话 JSON 中，因此恢复可移植。会话正文和工作区本身仍可能包含敏感数据，包括用户手动复制到工作区中的原本受排除保护的数据。
 
 ### 写入与替换
 
-归档先写入目标目录中权限模式为 `0600` 的随机 `.partial` 文件。ZIP writer 正常关闭且输出流结束后才替换用户选择的目标文件；替换已有文件时会先把旧文件临时移开，失败则尝试恢复。失败路径会清理不完整文件。深备份会排除所选目标路径；扫描发生在 `.partial` 文件创建前，因此不会把正在生成的归档递归收进自身。
+归档先写入目标目录中权限模式为 `0600` 的随机 `.partial` 文件。ZIP writer 正常关闭且输出流结束后才替换用户选择的目标文件；替换已有文件时会先把旧文件临时移开，替换失败时 AgentBox 会尝试恢复。未完成的 `.partial` 文件和被移开的文件都会尽力清理，因此文件系统或权限错误仍可能使其残留。深备份会排除所选目标路径；扫描发生在 `.partial` 文件创建前，因此不会把正在生成的归档递归收进自身。
 
 ZIP 根目录布局：
 

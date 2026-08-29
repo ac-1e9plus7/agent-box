@@ -696,6 +696,10 @@ function toResponsesToolOutput(result?: AgentTurnResult): string | Array<Record<
     return result?.result || ''
   }
   const content: Array<Record<string, unknown>> = []
+  const hasTextContent = result.resultContent.some(
+    (item) => item.type === 'text' || (item.type === 'resource' && Boolean(item.text)),
+  )
+  if (result.result && !hasTextContent) content.push({ type: 'input_text', text: result.result })
   for (const item of result.resultContent) {
     if (item.type === 'text') content.push({ type: 'input_text', text: item.text })
     else if (item.type === 'image' && item.data) {
@@ -713,6 +717,10 @@ function toAnthropicToolResultContent(result?: AgentTurnResult): string | Array<
     return result?.result || ''
   }
   const content: Array<Record<string, unknown>> = []
+  const hasTextContent = result.resultContent.some(
+    (item) => item.type === 'text' || (item.type === 'resource' && Boolean(item.text)),
+  )
+  if (result.result && !hasTextContent) content.push({ type: 'text', text: result.result })
   for (const item of result.resultContent) {
     if (item.type === 'text') content.push({ type: 'text', text: item.text })
     else if (item.type === 'image' && item.data) {

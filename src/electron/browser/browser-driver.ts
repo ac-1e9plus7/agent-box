@@ -35,8 +35,8 @@ export class BrowserDriver {
     return result
   }
 
-  async click(snapshotId: string, ref: string): Promise<BrowserResolvedElement> {
-    const result = await this.run({ action: 'resolve', snapshotId, ref })
+  async click(snapshotId: string, ref: string, signal?: AbortSignal): Promise<BrowserResolvedElement> {
+    const result = await withAbort(() => this.run({ action: 'resolve', snapshotId, ref }), signal)
     if (!isResolvedElement(result)) {
       throw new BrowserError(t('The browser element could not be resolved.'), 'element_not_found')
     }
@@ -44,31 +44,46 @@ export class BrowserDriver {
       throw new BrowserError(t('The Agent cannot operate sensitive browser fields.'), 'sensitive_input')
     }
     try {
+      throwIfAborted(signal)
       if (!this.contents.debugger.isAttached()) this.contents.debugger.attach('1.3')
-      await this.contents.debugger
-        .sendCommand('Page.setInterceptFileChooserDialog', { enabled: true })
-        .catch(() => undefined)
-      await this.contents.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mouseMoved',
-        x: result.x,
-        y: result.y,
-      })
-      await this.contents.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mousePressed',
-        x: result.x,
-        y: result.y,
-        button: 'left',
-        clickCount: 1,
-      })
-      await this.contents.debugger.sendCommand('Input.dispatchMouseEvent', {
-        type: 'mouseReleased',
-        x: result.x,
-        y: result.y,
-        button: 'left',
-        clickCount: 1,
-      })
+      await withAbort(
+        () => this.contents.debugger.sendCommand('Page.setInterceptFileChooserDialog', { enabled: true }),
+        signal,
+      ).catch(() => undefined)
+      await withAbort(
+        () =>
+          this.contents.debugger.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseMoved',
+            x: result.x,
+            y: result.y,
+          }),
+        signal,
+      )
+      await withAbort(
+        () =>
+          this.contents.debugger.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mousePressed',
+            x: result.x,
+            y: result.y,
+            button: 'left',
+            clickCount: 1,
+          }),
+        signal,
+      )
+      await withAbort(
+        () =>
+          this.contents.debugger.sendCommand('Input.dispatchMouseEvent', {
+            type: 'mouseReleased',
+            x: result.x,
+            y: result.y,
+            button: 'left',
+            clickCount: 1,
+          }),
+        signal,
+      )
       return result
     } catch (error) {
+      throwIfAborted(signal)
       throw new BrowserError(
         t('The browser click could not be completed: {value0}', {
           value0: error instanceof Error ? error.message : String(error),
@@ -89,37 +104,54 @@ export class BrowserDriver {
     ref: string,
     text: string,
     mode: 'replace' | 'append',
+    signal?: AbortSignal,
   ): Promise<BrowserActionPayload> {
-    const result = await this.run({ action: 'type', snapshotId, ref, text, mode })
+    const result = await withAbort(() => this.run({ action: 'type', snapshotId, ref, text, mode }), signal)
     if (!isActionPayload(result, 'typed')) {
       throw new BrowserError(t('The browser text input could not be completed.'), 'browser_operation_failed')
     }
     return result
   }
 
-  async uploadFiles(snapshotId: string, ref: string, files: string[]): Promise<BrowserResolvedElement> {
+  async uploadFiles(
+    snapshotId: string,
+    ref: string,
+    files: string[],
+    signal?: AbortSignal,
+  ): Promise<BrowserResolvedElement> {
+    throwIfAborted(signal)
     const token = randomUUID().replaceAll('-', '')
-    const result = await this.run({ action: 'mark-upload', snapshotId, ref, token })
+    const result = await withAbort(() => this.run({ action: 'mark-upload', snapshotId, ref, token }), signal)
     if (!isResolvedElement(result) || result.inputType !== 'file' || result.uploadToken !== token) {
       throw new BrowserError(t('The browser element is not a file input.'), 'element_not_found')
     }
     try {
+      throwIfAborted(signal)
       if (!this.contents.debugger.isAttached()) this.contents.debugger.attach('1.3')
-      await this.contents.debugger.sendCommand('DOM.enable')
-      const documentResult = (await this.contents.debugger.sendCommand('DOM.getDocument', { depth: 1 })) as {
+      await withAbort(() => this.contents.debugger.sendCommand('DOM.enable'), signal)
+      const documentResult = (await withAbort(
+        () => this.contents.debugger.sendCommand('DOM.getDocument', { depth: 1 }),
+        signal,
+      )) as {
         root?: { nodeId?: number }
       }
       const rootNodeId = documentResult.root?.nodeId
       if (!rootNodeId) throw new Error('Missing DOM root')
-      const queryResult = (await this.contents.debugger.sendCommand('DOM.querySelector', {
-        nodeId: rootNodeId,
-        selector: `[data-agentbox-upload-token="${token}"]`,
-      })) as { nodeId?: number }
+      const queryResult = (await withAbort(
+        () =>
+          this.contents.debugger.sendCommand('DOM.querySelector', {
+            nodeId: rootNodeId,
+            selector: `[data-agentbox-upload-token="${token}"]`,
+          }),
+        signal,
+      )) as { nodeId?: number }
       if (!queryResult.nodeId) throw new Error('File input disappeared')
+      throwIfAborted(signal)
       await this.contents.debugger.sendCommand('DOM.setFileInputFiles', {
         nodeId: queryResult.nodeId,
         files,
       })
+      throwIfAborted(signal)
       await this.contents.debugger
         .sendCommand('DOM.removeAttribute', {
           nodeId: queryResult.nodeId,
@@ -128,12 +160,17 @@ export class BrowserDriver {
         .catch(() => undefined)
       return result
     } catch {
+      throwIfAborted(signal)
       throw new BrowserError(t('The browser upload could not be completed.'), 'browser_operation_failed')
     }
   }
 
-  async scroll(direction: 'up' | 'down', amount: 'half-page' | 'page'): Promise<BrowserActionPayload> {
-    const result = await this.run({ action: 'scroll', direction, amount })
+  async scroll(
+    direction: 'up' | 'down',
+    amount: 'half-page' | 'page',
+    signal?: AbortSignal,
+  ): Promise<BrowserActionPayload> {
+    const result = await withAbort(() => this.run({ action: 'scroll', direction, amount }), signal)
     if (!isActionPayload(result, 'scrolled')) {
       throw new BrowserError(t('The browser page could not be scrolled.'), 'browser_operation_failed')
     }
@@ -170,6 +207,37 @@ export class BrowserDriver {
         'browser_operation_failed',
       )
     }
+  }
+}
+
+function abortError(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError')
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortError(signal)
+}
+
+async function withAbort<T>(operation: () => Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  throwIfAborted(signal)
+  const promise = operation()
+  if (!signal) return promise
+  let interrupted = false
+  let abortListener: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    abortListener = () => {
+      interrupted = true
+      reject(abortError(signal))
+    }
+    signal.addEventListener('abort', abortListener, { once: true })
+  })
+  try {
+    return await Promise.race([promise, aborted])
+  } catch (error) {
+    if (interrupted) await promise.catch(() => undefined)
+    throw error
+  } finally {
+    if (abortListener) signal.removeEventListener('abort', abortListener)
   }
 }
 

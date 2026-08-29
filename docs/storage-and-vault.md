@@ -74,7 +74,7 @@ interface VaultState {
 }
 ```
 
-`skills`, `mcpServers`, and encrypted `browserProfiles` remain optional in the interface for compatibility with older Vaults; loading and validation normalize them to arrays. [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) similarly migrates missing newer settings to safe defaults.
+`skills`, `mcpServers`, and encrypted `browserProfiles` remain optional in the interface for compatibility with older Vaults. Loading/validation gives a missing `skills` field the localized built-in Skill set, while missing `mcpServers` and `browserProfiles` become empty arrays; profiles whose conversation no longer exists are discarded. [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) similarly migrates missing newer settings to safe defaults.
 
 The LangGraph checkpoint sidecar is deliberately not a `VaultState` field. Superstep writes therefore do not rewrite the complete conversation Vault. It is machine-local execution state; `agentTrace` remains in the conversation schema and portable backups.
 
@@ -82,13 +82,13 @@ The LangGraph checkpoint sidecar is deliberately not a `VaultState` field. Super
 
 Assistant `usage` retains aggregate token counters plus an optional `modelRequests` breakdown keyed by one-based Agent model turn. Each breakdown contains only bounded non-negative integer counters and at most 101 requests (100 tool turns plus the terminal model request). Loading recomputes aggregate totals from a valid breakdown, while legacy messages containing only aggregate usage remain readable unchanged.
 
-Agent token optimizations are persisted as independent `AppSettings` preferences and all default to disabled for new and legacy Vaults. Their retained parameter defaults remain available while a feature is off: tool-result compaction uses `agentToolResultMaxCharacters: 16000` (2,000–100,000), dynamic tool exposure uses `agentDynamicToolLimit: 4` (1–16), and in-run context compaction uses a 70% threshold (50%–95%) while keeping 3 recent turns (1–10). `agentProviderContextOptimizationMode` accepts `off`, `auto`, `prefix-cache`, or `native-continuation` and defaults to `off`. Settings normalization rejects unknown modes, non-boolean switches, and non-integer or out-of-range parameters instead of silently coercing them.
+Agent token optimizations are persisted as independent `AppSettings` preferences and all default to disabled for new and legacy Vaults. Their retained parameter defaults remain available while a feature is off: tool-result compaction uses `agentToolResultMaxCharacters: 16000` (2,000–100,000), dynamic tool exposure uses `agentDynamicToolLimit: 4` (1–16), lazy Skill resource loading uses `agentLazySkillResourcesEnabled: false`, and in-run context compaction uses a 70% threshold (50%–95%) while keeping 3 recent turns (1–10). `agentProviderContextOptimizationMode` accepts `off`, `auto`, `prefix-cache`, or `native-continuation` and defaults to `off`. Settings normalization rejects unknown modes, non-boolean switches, and non-integer or out-of-range parameters instead of silently coercing them.
 
 When native continuation is active, an Assistant message may store a validated `providerContinuation` containing an OpenAI Responses handle and one-based model turn. The handle is bounded to 200 safe identifier characters, belongs only to Assistant messages, remains inside the encrypted Vault, and is included in conversation backups as part of the message JSON. It is an opaque provider-side state reference rather than an API credential; deleting local conversation data removes the local reference but does not override the provider’s own retention policy.
 
-`builtInBrowserEnabled`, persistent cookies, Agent screenshots, file uploads, downloads, and loopback HTTP are independent conservative application opt-ins and default to `false` for older Vaults. `Conversation.browserToolEnabled` is also optional and defaults to disabled. Live browser sessions always use partitions without `persist:`. When cookie persistence is enabled, the main process snapshots accepted cookies into optional `browserProfiles`, keyed by conversation ID and encrypted as part of the Vault; no cookie profile is returned through IPC. Cache, local storage, navigation history, DOM state, approved origins, and element references remain memory only. Sanitized browser calls, semantic text, and approved screenshot images are ordinary `toolExecutions`/`agentTrace` data and remain encrypted with the conversation.
+`builtInBrowserEnabled`, persistent cookies, Agent screenshots, file uploads, downloads, and loopback HTTP are independent conservative application opt-ins and default to `false` for older Vaults. `Conversation.browserToolEnabled` is also optional and defaults to disabled. Live browser sessions always use partitions without `persist:`. When Cookie persistence is enabled, the main process snapshots accepted cookies into optional `browserProfiles`, keyed by conversation ID and encrypted as part of the Vault; a one-second debounce follows Chromium Cookie changes and session close/eviction makes a final best-effort snapshot attempt. Restored cookies are shared by the new session's tabs. No Cookie profile or Cookie value is returned through IPC. Cache, local storage, navigation history, DOM state, approved origins, and element references remain memory only. Sanitized browser calls, semantic text, and approved screenshot images are ordinary `toolExecutions`/`agentTrace` data and remain encrypted with the conversation.
 
-Turning Cookie persistence off first closes active browser sessions and then deletes all stored `browserProfiles`. Disabling only the overall browser feature closes live tabs but retains encrypted Cookie profiles while the persistence preference remains enabled.
+Changing the overall browser or Cookie-persistence setting closes all live browser sessions. Turning Cookie persistence off then deletes all stored `browserProfiles`; disabling only the overall browser feature retains encrypted Cookie profiles while the persistence preference remains enabled.
 
 ---
 
@@ -96,28 +96,28 @@ Turning Cookie persistence off first closes active browser sessions and then del
 
 The main limits are enforced by [`app-repository.ts`](../src/electron/storage/app-repository.ts), [`vault-resource-limits.ts`](../src/electron/storage/vault-resource-limits.ts), and [`web-metadata-schema.ts`](../src/electron/storage/web-metadata-schema.ts):
 
-| Resource                                              |             Current limit |
-| ----------------------------------------------------- | ------------------------: |
-| Providers                                             |                       100 |
-| Models                                                |                     2,000 |
-| Conversations                                         |                    10,000 |
-| Skills                                                |                       500 |
-| MCP servers                                           |                       100 |
-| Messages per conversation                             |                    20,000 |
-| Message content or reasoning field                    | 2,000,000 characters each |
-| Counted content per conversation                      |     50,000,000 characters |
-| Serialized data across all conversations              |                    50 MiB |
-| Messages / citations across all conversations         |              100,000 each |
-| Citations per message                                 |                       100 |
-| Attachments per message                               |                        20 |
-| Files per skill / content per skill file              |   50 / 500,000 characters |
-| Arguments / environment variables per MCP server      |                  50 / 100 |
-| Each MCP argument or environment-variable value       |          8,192 characters |
-| Cookies per browser profile                           |                     2,000 |
-| Browser Cookie profiles                               |                    10,000 |
-| Serialized browser Cookie profile data                |     10,000,000 characters |
-| Encrypted checkpoint threads / checkpoints per thread |                 256 / 512 |
-| Checkpoint data per thread / complete namespace       |          64 MiB / 256 MiB |
+| Resource                                                        |             Current limit |
+| --------------------------------------------------------------- | ------------------------: |
+| Providers                                                       |                       100 |
+| Models                                                          |                     2,000 |
+| Conversations                                                   |                    10,000 |
+| Skills                                                          |                       500 |
+| MCP servers                                                     |                       100 |
+| Messages per conversation                                       |                    20,000 |
+| Message content or reasoning field                              | 2,000,000 characters each |
+| Counted content per conversation                                |     50,000,000 characters |
+| Serialized data across all conversations                        |                    50 MiB |
+| Messages / citations across all conversations                   |              100,000 each |
+| Citations per message                                           |                       100 |
+| Attachments per message                                         |                        20 |
+| Files per skill / content per skill file                        |   50 / 500,000 characters |
+| Arguments / environment variables per MCP server                |                  50 / 100 |
+| Each MCP argument or environment-variable value                 |          8,192 characters |
+| Cookies per browser profile                                     |                     2,000 |
+| Browser Cookie profiles                                         |                    10,000 |
+| Serialized browser Cookie profile data                          |     10,000,000 characters |
+| Encrypted checkpoint threads / checkpoints per thread           |                 256 / 512 |
+| Checkpoint data per thread / valid manifest-accounted namespace |          64 MiB / 256 MiB |
 
 Saving a conversation applies both per-conversation and aggregate quotas. To avoid locking users out of legacy data when a newer aggregate quota is introduced, an already-over-limit Vault can still load and the user can delete or shrink data. A save that would further increase any over-limit dimension is rejected.
 
@@ -125,7 +125,7 @@ Saving a conversation applies both per-conversation and aggregate quotas. To avo
 
 ## 🧹 Clearing conversation data
 
-**Settings → Data & Security → Clear all conversation data** performs these steps:
+**Settings → Data and security → Clear all conversation data** performs these steps:
 
 1. `ChatGateway.cancelAll()` aborts every active request and resolves pending tool approvals as denied.
 2. The encrypted checkpoint namespace is cleared. A failure stops the operation rather than reporting that conversation data was cleared.
@@ -134,30 +134,30 @@ Saving a conversation applies both per-conversation and aggregate quotas. To avo
 
 This operation removes conversations from the active Vault. It is not a forensic secure-erasure guarantee for the underlying storage medium.
 
-The operation also closes every in-memory browser session and removes every encrypted browser Cookie profile before deleting conversations. Removing one conversation closes its tabs and removes only its Cookie profile. Hiding the browser panel does not clear temporary state; closing the session, deleting the conversation, closing the window, or quitting the application does. Application quit waits for the final enabled Cookie snapshot before destroying the Vault key.
+The operation also closes every in-memory browser session and removes every encrypted browser Cookie profile before deleting conversations. Removing one conversation closes its tabs and removes only its Cookie profile. Hiding the browser panel does not clear temporary state; closing the session, deleting the conversation, closing the window, or quitting the application does. Session close and shutdown make a best-effort final Cookie-snapshot attempt when persistence is enabled. The direct `before-quit` path waits for its cleanup attempt before destroying the Vault key, but snapshot failures do not block shutdown.
 
 ---
 
 ## 📦 Conversation ZIP backups
 
-**Settings → Data & Security → Export encrypted backup** invokes [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts). The renderer submits only the mode and optional one-time password; the system save dialog, Vault snapshot access, and file creation all run in the main process.
+**Settings → Data and security → Export backup** invokes [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts). The renderer submits only the mode and optional one-time password; the system save dialog, Vault snapshot access, and file creation all run in the main process.
 
 ### Backup modes
 
 - **Shallow:** Exports every conversation. Each conversation has both a complete JSON representation and readable Markdown. JSON preserves every branch in the conversation tree, attachments, citations, usage, skill activations, tool executions, Agent trace, and interruption metadata.
 - Browser text and screenshot tool results already stored in messages are included. Encrypted browser Cookie profiles and live cookies, cache, storage, DOM state, origin grants, tab state, and navigation history are excluded.
-- **Deep:** Adds every working directory referenced by a conversation. The implementation deduplicates identical directories by `realpath`, preserves empty directories and symbolic links without following symlinks, and skips other special files while recording their paths in manifest warnings.
+- **Deep:** Adds every working directory referenced by a conversation. The implementation deduplicates identical directories by `realpath`, preserves empty directories and symbolic links without following nested links, and skips other special files while recording their paths in manifest warnings. It rejects a workspace located within the current AgentBox user-data root and skips that root when it is nested beneath an otherwise valid workspace, so the active Vault, wrapped key, browser profiles, and checkpoint sidecar cannot enter a deep backup through workspace traversal.
 
 ### Encryption and privacy boundary
 
 - The password is optional and limited to 256 characters. With a non-empty password, `@zip.js/zip.js` encrypts ZIP entries using WinZip AES-256 (AE-2). The password is not written to settings or the Vault, and AgentBox cannot recover it.
 - JSON, Markdown, and workspace files enter the archive as their original content. They are directly readable without a password; with a password, at-rest protection comes from ZIP entry encryption.
 - The ZIP central directory does not encrypt entry names. Conversation files use sequence numbers rather than titles, while relative workspace filenames remain visible in a deep backup. `manifest.json` also records absolute working-directory mappings, but its contents are encrypted when a password is set.
-- A backup excludes provider API keys, authentication credentials, the Vault key and Vault files, the machine-local LangGraph checkpoint sidecar, as well as provider, model, MCP server, skill, and application settings. `agentTrace` remains in conversation JSON so recovery is portable. Conversation text and workspace files may still contain sensitive information.
+- The structured conversation export excludes provider API keys, authentication credentials, the Vault key and Vault files, the machine-local LangGraph checkpoint sidecar, and provider, model, MCP server, Skill, and application settings. The current AgentBox user-data root is also excluded during deep workspace traversal. `agentTrace` remains in conversation JSON so recovery is portable. Conversation text and workspace files may still contain sensitive information, including user-created copies of otherwise excluded data.
 
 ### Writing and replacement
 
-The archive is first written to a randomly named `.partial` file in the target directory with mode `0600`. The selected destination is replaced only after the ZIP writer closes successfully and the output stream finishes. If the destination already exists, it is temporarily displaced and restored if replacement fails. Failure paths remove the incomplete file. A deep backup excludes the selected destination path; workspace scanning finishes before the `.partial` file is created, so the archive cannot recursively include itself.
+The archive is first written to a randomly named `.partial` file in the target directory with mode `0600`. The selected destination is replaced only after the ZIP writer closes successfully and the output stream finishes. If the destination already exists, it is temporarily displaced; on replacement failure AgentBox attempts to restore it. Incomplete `.partial` files and displaced files are cleaned up on a best-effort basis, so filesystem or permission failures can still leave them behind. A deep backup excludes the selected destination path; workspace scanning finishes before the `.partial` file is created, so the archive cannot recursively include itself.
 
 ZIP root layout:
 

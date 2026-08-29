@@ -64,6 +64,7 @@ interface PendingDownload {
   resolve: (result: { absolutePath: string; relativePath: string; fileName: string }) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>
+  item?: DownloadItem
 }
 
 interface ManagedBrowserSession {
@@ -267,8 +268,11 @@ export class BrowserManager {
       this.emitState(managed)
       const timeoutMs = Math.min(Math.max(options.timeoutMs ?? DEFAULT_NAVIGATION_TIMEOUT_MS, 3_000), 30_000)
       try {
-        await withAbortAndTimeout(tab.view.webContents.loadURL(target.toString()), options.signal, timeoutMs, () =>
-          tab.view.webContents.stop(),
+        await withAbortAndTimeout(
+          () => tab.view.webContents.loadURL(target.toString()),
+          options.signal,
+          timeoutMs,
+          () => tab.view.webContents.stop(),
         )
       } catch (error) {
         const message = redactBrowserError(error instanceof Error ? error.message : String(error), target.toString())
@@ -359,14 +363,17 @@ export class BrowserManager {
     tabId: string | undefined,
     snapshotId: string,
     ref: string,
+    signal?: AbortSignal,
   ): Promise<BrowserActionResult> {
     const managed = await this.requireSession(conversationId)
     return this.exclusive(managed, async () => {
+      throwIfAborted(signal)
       const tab = this.requireTab(managed, tabId)
       this.assertCurrentSnapshot(tab, snapshotId)
       const beforeUrl = tab.view.webContents.getURL()
-      const resolved = await tab.driver.click(snapshotId, ref)
+      const resolved = await tab.driver.click(snapshotId, ref, signal)
       tab.lastSnapshot = undefined
+      throwIfAborted(signal)
       await delay(650)
       this.refreshState(managed)
       const result = {
@@ -391,13 +398,16 @@ export class BrowserManager {
     ref: string,
     text: string,
     mode: 'replace' | 'append',
+    signal?: AbortSignal,
   ): Promise<BrowserActionResult> {
     const managed = await this.requireSession(conversationId)
     return this.exclusive(managed, async () => {
+      throwIfAborted(signal)
       const tab = this.requireTab(managed, tabId)
       this.assertCurrentSnapshot(tab, snapshotId)
-      await tab.driver.typeText(snapshotId, ref, text, mode)
+      await tab.driver.typeText(snapshotId, ref, text, mode, signal)
       tab.lastSnapshot = undefined
+      throwIfAborted(signal)
       const result = {
         action: 'type',
         tab_id: tab.id,
@@ -417,12 +427,15 @@ export class BrowserManager {
     tabId: string | undefined,
     direction: 'up' | 'down',
     amount: 'half-page' | 'page',
+    signal?: AbortSignal,
   ): Promise<BrowserActionResult> {
     const managed = await this.requireSession(conversationId)
     return this.exclusive(managed, async () => {
+      throwIfAborted(signal)
       const tab = this.requireTab(managed, tabId)
-      const payload = await tab.driver.scroll(direction, amount)
+      const payload = await tab.driver.scroll(direction, amount, signal)
       tab.lastSnapshot = undefined
+      throwIfAborted(signal)
       const result = {
         action: 'scroll',
         tab_id: tab.id,
@@ -441,14 +454,17 @@ export class BrowserManager {
     conversationId: string,
     tabId: string | undefined,
     maxDimension = 1_280,
+    signal?: AbortSignal,
   ): Promise<BrowserActionResult> {
     if (!this.repository.getSettings().browserAgentScreenshotsEnabled) {
       throw new BrowserError(t('Agent browser screenshots are disabled in Settings.'), 'browser_disabled')
     }
     const managed = await this.requireSession(conversationId)
     return this.exclusive(managed, async () => {
+      throwIfAborted(signal)
       const tab = this.requireTab(managed, tabId)
-      let image = await tab.view.webContents.capturePage()
+      let image = await withAbort(() => tab.view.webContents.capturePage(), signal)
+      throwIfAborted(signal)
       const limit = Math.min(Math.max(Math.trunc(maxDimension), 512), 1_600)
       const original = image.getSize()
       if (original.width < 1 || original.height < 1) {
@@ -468,6 +484,7 @@ export class BrowserManager {
         buffer = image.toJPEG(70)
       }
       const data = buffer.toString('base64')
+      throwIfAborted(signal)
       if (data.length > MAX_SCREENSHOT_BASE64_CHARACTERS) {
         throw new BrowserError(t('The browser screenshot exceeds the size limit.'), 'browser_operation_failed')
       }
@@ -495,17 +512,20 @@ export class BrowserManager {
     snapshotId: string,
     ref: string,
     paths: string[],
+    signal?: AbortSignal,
   ): Promise<BrowserActionResult> {
     if (!this.repository.getSettings().browserFileUploadsEnabled) {
       throw new BrowserError(t('Browser file uploads are disabled in Settings.'), 'browser_disabled')
     }
     const managed = await this.requireSession(conversationId)
     return this.exclusive(managed, async () => {
+      throwIfAborted(signal)
       const tab = this.requireTab(managed, tabId)
       this.assertCurrentSnapshot(tab, snapshotId)
       const resolvedPaths: string[] = []
       let totalBytes = 0
       for (const requestedPath of paths) {
+        throwIfAborted(signal)
         const target = await resolveWorkspaceFilePath(workingDirectory, requestedPath)
         const stat = await lstat(target.absolutePath)
         if (!stat.isFile()) throw new BrowserError(t('Browser uploads accept regular files only.'), 'blocked_url')
@@ -518,8 +538,12 @@ export class BrowserManager {
       if (totalBytes > MAX_UPLOAD_TOTAL_BYTES) {
         throw new BrowserError(t('Browser uploads exceed the 100 MiB total limit.'), 'browser_operation_failed')
       }
-      await tab.driver.uploadFiles(snapshotId, ref, resolvedPaths)
-      tab.lastSnapshot = undefined
+      try {
+        await tab.driver.uploadFiles(snapshotId, ref, resolvedPaths, signal)
+      } finally {
+        tab.lastSnapshot = undefined
+      }
+      throwIfAborted(signal)
       const result = {
         action: 'upload',
         tab_id: tab.id,
@@ -539,12 +563,14 @@ export class BrowserManager {
     snapshotId: string,
     ref: string,
     requestedPath?: string,
+    signal?: AbortSignal,
   ): Promise<BrowserActionResult> {
     if (!this.repository.getSettings().browserDownloadsEnabled) {
       throw new BrowserError(t('Browser downloads are disabled in Settings.'), 'browser_disabled')
     }
     const managed = await this.requireSession(conversationId)
     return this.exclusive(managed, async () => {
+      throwIfAborted(signal)
       const tab = this.requireTab(managed, tabId)
       this.assertCurrentSnapshot(tab, snapshotId)
       if (managed.pendingDownload)
@@ -559,8 +585,10 @@ export class BrowserManager {
       const downloadPromise = new Promise<{ absolutePath: string; relativePath: string; fileName: string }>(
         (resolve, reject) => {
           const timer = setTimeout(() => {
-            if (managed.pendingDownload?.timer === timer) managed.pendingDownload = undefined
-            reject(new BrowserError(t('The browser download did not start in time.'), 'browser_operation_failed'))
+            this.cancelPendingDownload(
+              managed,
+              new BrowserError(t('The browser download did not start in time.'), 'browser_operation_failed'),
+            )
           }, 10_000)
           managed.pendingDownload = {
             tabId: tab.id,
@@ -574,9 +602,18 @@ export class BrowserManager {
           managed.agentDownloadGuardUntil = Date.now() + 15_000
         },
       )
+      void downloadPromise.catch(() => undefined)
       try {
-        await tab.driver.click(snapshotId, ref)
-        const downloaded = await downloadPromise
+        await withAbort(
+          () => tab.driver.click(snapshotId, ref),
+          signal,
+          () => this.cancelPendingDownload(managed, abortError(signal)),
+        )
+        const downloaded = await withAbort(
+          () => downloadPromise,
+          signal,
+          () => this.cancelPendingDownload(managed, abortError(signal)),
+        )
         tab.lastSnapshot = undefined
         const result = {
           action: 'download',
@@ -587,7 +624,7 @@ export class BrowserManager {
         }
         return { result: JSON.stringify(result), structuredResult: result }
       } catch (error) {
-        this.cancelPendingDownload(managed)
+        this.cancelPendingDownload(managed, error instanceof Error ? error : abortError(signal))
         throw error
       }
     })
@@ -656,11 +693,7 @@ export class BrowserManager {
     if (this.repository.getSettings().browserPersistCookiesEnabled) {
       await this.persistCookies(managed, true).catch(() => undefined)
     }
-    if (managed.pendingDownload) {
-      clearTimeout(managed.pendingDownload.timer)
-      managed.pendingDownload.reject(new BrowserError(t('The browser session was closed.'), 'browser_unavailable'))
-      managed.pendingDownload = undefined
-    }
+    this.cancelPendingDownload(managed, new BrowserError(t('The browser session was closed.'), 'browser_unavailable'))
     for (const tab of managed.tabs.values()) this.destroyTab(managed, tab)
     managed.tabs.clear()
     managed.browserSession.webRequest.onBeforeRequest(null)
@@ -721,9 +754,7 @@ export class BrowserManager {
     tab.driver.close()
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
     if (managed.pendingDownload?.tabId === tab.id) {
-      clearTimeout(managed.pendingDownload.timer)
-      managed.pendingDownload.reject(new BrowserError(t('The browser tab was closed.'), 'browser_unavailable'))
-      managed.pendingDownload = undefined
+      this.cancelPendingDownload(managed, new BrowserError(t('The browser tab was closed.'), 'browser_unavailable'))
     }
   }
 
@@ -872,8 +903,12 @@ export class BrowserManager {
     if (!tab || !this.repository.getSettings().browserDownloadsEnabled) {
       event.preventDefault()
       item.cancel()
-      pending?.reject(new BrowserError(t('Browser downloads are disabled in Settings.'), 'browser_disabled'))
-      managed.pendingDownload = undefined
+      if (pending) {
+        this.cancelPendingDownload(
+          managed,
+          new BrowserError(t('Browser downloads are disabled in Settings.'), 'browser_disabled'),
+        )
+      }
       return
     }
     if (!pending && Date.now() < managed.agentDownloadGuardUntil) {
@@ -881,7 +916,7 @@ export class BrowserManager {
       item.cancel()
       return
     }
-    if (pending && pending.tabId !== tab.id) {
+    if (pending && (pending.tabId !== tab.id || pending.item)) {
       event.preventDefault()
       item.cancel()
       return
@@ -892,7 +927,7 @@ export class BrowserManager {
     const savePath = pending?.explicitPath ?? uniqueDownloadPath(downloadDirectory, fileName)
     if (pending) {
       clearTimeout(pending.timer)
-      managed.pendingDownload = undefined
+      pending.item = item
     }
     item.setSavePath(savePath)
     const downloadId = `download-${randomUUID()}`
@@ -904,7 +939,6 @@ export class BrowserManager {
           tabId: tab.id,
           downloadId,
           fileName,
-          filePath: savePath,
           receivedBytes: item.getReceivedBytes(),
           totalBytes: item.getTotalBytes(),
           status,
@@ -918,7 +952,8 @@ export class BrowserManager {
     })
     item.once('done', (_event, state) => {
       emit(state === 'completed' ? 'completed' : state === 'cancelled' ? 'cancelled' : 'interrupted')
-      if (!pending) return
+      if (!pending || managed.pendingDownload !== pending) return
+      this.clearPendingDownload(managed, pending)
       if (state === 'completed') {
         pending.resolve({
           absolutePath: savePath,
@@ -942,11 +977,17 @@ export class BrowserManager {
     }, 1_000)
   }
 
-  private cancelPendingDownload(managed: ManagedBrowserSession): void {
+  private cancelPendingDownload(managed: ManagedBrowserSession, error: Error): void {
     const pending = managed.pendingDownload
     if (!pending) return
+    pending.item?.cancel()
+    this.clearPendingDownload(managed, pending)
+    pending.reject(error)
+  }
+
+  private clearPendingDownload(managed: ManagedBrowserSession, pending: PendingDownload): void {
     clearTimeout(pending.timer)
-    managed.pendingDownload = undefined
+    if (managed.pendingDownload === pending) managed.pendingDownload = undefined
   }
 
   private async restoreCookies(managed: ManagedBrowserSession): Promise<void> {
@@ -1218,30 +1259,76 @@ function uniqueDownloadPath(directory: string, fileName: string): string {
   return join(directory, `${stem}-${randomUUID()}${extension}`)
 }
 
+function abortError(signal: AbortSignal | undefined): Error {
+  return signal?.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError')
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortError(signal)
+}
+
+async function withAbort<T>(
+  operation: () => Promise<T>,
+  signal: AbortSignal | undefined,
+  cancel?: () => void,
+): Promise<T> {
+  if (signal?.aborted) {
+    cancel?.()
+    throw abortError(signal)
+  }
+  const promise = operation()
+  if (!signal) return promise
+  let interrupted = false
+  let abortListener: (() => void) | undefined
+  const interruption = new Promise<never>((_resolve, reject) => {
+    abortListener = () => {
+      interrupted = true
+      cancel?.()
+      reject(abortError(signal))
+    }
+    signal.addEventListener('abort', abortListener, { once: true })
+  })
+  try {
+    return await Promise.race([promise, interruption])
+  } catch (error) {
+    if (interrupted) await promise.catch(() => undefined)
+    throw error
+  } finally {
+    if (abortListener) signal.removeEventListener('abort', abortListener)
+  }
+}
+
 async function withAbortAndTimeout<T>(
-  promise: Promise<T>,
+  operation: () => Promise<T>,
   signal: AbortSignal | undefined,
   timeoutMs: number,
   cancel: () => void,
 ): Promise<T> {
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+  if (signal?.aborted) throw abortError(signal)
+  const promise = operation()
+  let interrupted = false
   let timeout: ReturnType<typeof setTimeout> | undefined
   let abortListener: (() => void) | undefined
   const interruption = new Promise<never>((_resolve, reject) => {
     timeout = setTimeout(() => {
+      interrupted = true
       cancel()
       reject(new BrowserError(t('Browser navigation timed out.'), 'navigation_timeout'))
     }, timeoutMs)
     if (signal) {
       abortListener = () => {
+        interrupted = true
         cancel()
-        reject(new DOMException('Aborted', 'AbortError'))
+        reject(abortError(signal))
       }
       signal.addEventListener('abort', abortListener, { once: true })
     }
   })
   try {
     return await Promise.race([promise, interruption])
+  } catch (error) {
+    if (interrupted) await promise.catch(() => undefined)
+    throw error
   } finally {
     clearTimeout(timeout)
     if (signal && abortListener) signal.removeEventListener('abort', abortListener)

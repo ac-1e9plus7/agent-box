@@ -23,11 +23,12 @@ skill-package/
     └── validator.sh
 ```
 
-支持的文件分类为 `markdown`、`python`、`shell` 和 `other`：
+存储的文本资源分类为 `markdown`、`python`、`shell` 和 `other`：
 
-- 激活 Skill 时，Gateway 会注入入口文档、其他 Markdown、Python 和 Shell 文件，并明确把脚本标记为“未自动执行”的参考代码。
-- `other` 文件可以存储和随 ZIP 导入/导出，但当前不会加入 Agent System Instructions。
-- Skill 最多包含 50 个文件，每个文件最多 500,000 字符；路径最长 255 字符，必须是包内相对路径，禁止绝对路径和 `..` 穿越。Vault 内最多保存 500 个 Skill（包含内置 Skill）。
+- 新保存的 Skill 必须把包内一个 Markdown 文档指定为入口。激活 Skill 时，Gateway 会注入该入口文档、其他 Markdown、Python 和 Shell 文件，并明确把脚本标记为“未自动执行”的参考代码。
+- `other` 资源会作为 UTF-8 文本保存在 Skill 存储和 ZIP 归档中，但不会加入 System Instructions、资源懒加载或模糊检索，也不能成为入口文档。
+- Skill 最多包含 50 个文件，每个文件最多 500,000 字符；路径最长 255 字符，会规范化为包内相对的正斜杠分段，不能是绝对路径、盘符路径、空段、`.` 或 `..`。Vault 内最多保存 500 个 Skill（包含内置 Skill）。
+- 归档解析还会在进入 Vault 校验前应用资源上限：ZIP 压缩输入最多 64 MiB，最多扫描 128 个中央目录条目，最多 51 个非目录文件（包含一个可选导入清单）和 50 个实际 Skill 资源，解压后总量最多 100 MiB，单个条目最多解码为 2 MiB UTF-8 数据和 500,000 字符。
 - 内置 Skill 不可删除，但可停用；“重置默认技能”会恢复内置内容并保留自定义 Skill。
 
 存储校验与迁移见 [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts)。
@@ -36,13 +37,13 @@ skill-package/
 
 ## ZIP 与文本导入/导出
 
-[`src/shared/skill-zip.ts`](../src/shared/skill-zip.ts) 使用 `fflate` 在 Renderer 中读写普通 ZIP：
+[`src/shared/skill-zip.ts`](../src/shared/skill-zip.ts) 使用 `fflate` 在 Renderer 中写出普通 ZIP，并使用 `@zip.js/zip.js` 异步读取导入归档且有界地提取条目：
 
-- **导出**：保留 Skill 的全部文件；如果入口文档没有 Frontmatter，会补写 `name`、`description`、`version`、`author` 和 `icon`。
-- **ZIP 导入**：忽略 `__MACOSX` 与 `.DS_Store`；如果所有文件共用一个顶层目录，会移除该目录。入口优先级为 manifest 指定路径、`SKILL.md`、`README.md`、第一个 Markdown、首个文件。
-- 元数据优先读取根目录的 `skill.json` / `manifest.json`；没有 manifest 时读取入口文档的简单 Frontmatter。仍缺少名称或描述时，再回退到 H1、首段或默认值。
-- **JSON 文本导入**：设置页也接受单个对象或数组；每项至少需要非空 `name` 与 `systemPrompt`，可附带 `files`、`entryFile`、作者和版本。
-- 新导入的 Skill 默认启用，最终仍经过主进程的文件数量、路径和内容大小校验。
+- **导出**：保存每个 Skill 文本资源，并写入根目录元数据清单以保留选定的入口文件路径；若入口文档没有 Frontmatter，导出还会把 `name`、`description`、`version`、`author` 和 `icon` 写入该文档。
+- **ZIP 导入**：以异步且有界的方式读取条目，忽略路径中每个名为 `__MACOSX` 或 `.DS_Store` 的分段，并拒绝格式非法的归档路径或非 UTF-8 文件内容；若所有保留文件共用一个顶层目录，会移除该目录。入口优先级为 manifest 指定路径、`SKILL.md`、`README.md`、第一个 Markdown；没有 Markdown 入口的归档会被拒绝。
+- 元数据优先读取根目录的 `skill.json`、`manifest.json` 或带 AgentBox 生成标记的清单；没有 manifest 时读取 Markdown 入口的简单 Frontmatter。仍缺少名称或描述时，再回退到 H1、首段或默认值。只有被识别为元数据清单的文件才不会作为 Skill 资源保存；仅与生成清单基础名称相同的用户资源会被保留。
+- **JSON 文本导入**：设置页也接受单个对象或数组；每项至少需要非空 `name` 与 `systemPrompt`，可附带 `id`、`files`、`entryFile`、作者和版本。匹配的 `id` 会更新现有 Skill（包括内置 Skill 的自定义存储内容，同时保留其内置标记）。数组项按顺序持久化而非事务提交，因此后续项失败不会回滚此前导入。提供 `files` 时，所有条目必须是有效文本资源对象；格式错误的数组会被拒绝，而不会被丢弃。
+- 新导入的 Skill 默认启用，最终仍经过主进程的文件数量、路径、入口文档和内容大小校验。
 
 Skill ZIP 归档与会话备份是不同格式。会话备份由 [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts) 流式生成，并可使用 WinZip AES-256；Skill ZIP 归档不包含 Vault 密钥、密码或外部工作目录，也不提供密码保护。
 
@@ -54,7 +55,7 @@ Skill ZIP 归档与会话备份是不同格式。会话备份由 [`src/electron/
 
 1. **代码执行与算法助手**（`code-interpreter`）：代码、调试、算法、复杂度、测试和性能优化。
 2. **数据分析与表格可视化**（`data-analyst`）：CSV/Excel、统计、趋势分析和图表规范。
-3. **研究与浏览器分析**（`web-extractor`）：提取 PDF、网页、论文、研报和长文信息，并为可选隔离式浏览器提供基于元素引用的工作流。
+3. **研报萃取与长文精读**（`web-extractor`）：提取 PDF、网页、论文、研报和长文信息，并为可选隔离式浏览器提供基于元素引用的工作流。
 4. **专业多语言精翻与本地化**（`translator-polyglot`）：翻译、本地化和术语一致性。
 5. **提示词工程专家**（`prompt-optimizer`）：系统提示词、任务指令、角色与结构化模板。
 
@@ -69,13 +70,13 @@ Skill ZIP 归档与会话备份是不同格式。会话备份由 [`src/electron/
 Skill 只在 **Agent 模式**下参与路由。流程如下：
 
 1. Gateway 读取全部 `enabled: true` 的 Skill，并把名称、ID 和描述组成轻量目录。
-2. 会话固定的 `skillIds` 优先；否则先识别 `$id`、`@id`、独立出现的完整 ID 或完整 Skill 名称。
-3. 没有显式命中时，检索最近 3 条用户消息。文本附件最多贡献前 2,000 字符，二进制附件只贡献文件名和 MIME type；最多自动激活 2 个达到阈值的 Skill。
-4. 默认情况下，已激活 Skill 的入口文档、Markdown 参考资料及 Python/Shell 参考源码会加入 System Instructions。开启可选的资源懒加载后，只注入各 Skill 的入口文档和包含路径/类型/字符数的清单。
-5. 如果初始路由不足，模型可调用只读的 `agentbox_load_skill`，按目录中的 `skill_id` 加载另一个已启用 Skill。该工具不会执行脚本，也不要求工具审批。
-6. 自动、显式和模型按需激活都会发送 `skill-activated` 事件，Renderer 会记录激活来源。
+2. 会话固定的 `skillIds` 优先，最多 50 个去重 ID；否则显式路由只检查最新一条用户消息中的 `$id`、`@id`、独立出现的完整 ID 或完整 Skill 名称。
+3. 没有显式命中时，模糊检索最近 3 条用户消息。文本附件最多贡献前 2,000 字符，二进制附件只贡献文件名和 MIME type；它会对 ID、名称、描述以及最多前 20 个非 `other` 文件（每个只取前 4,000 字符）评分，最低分数为 2。最多自动激活 2 个达到阈值的 Skill；该自动上限不限制固定或显式激活。
+4. 默认情况下，已激活 Skill 的入口文档、Markdown 参考资料及 Python/Shell 参考源码会加入 System Instructions。一次性注入除存储校验和服务方上下文预算外没有额外的聚合提示词上限。开启可选的资源懒加载后，只注入各 Skill 的入口文档和包含路径/类型/字符数的清单。
+5. 如果初始路由不足且 loader 位于当前模型工具集内，模型可调用只读的 `agentbox_load_skill`，按目录中的 `skill_id` 加载另一个已启用 Skill。动态工具暴露时，可能需要先用 `agentbox_search_tools` 挂载 loader。该工具不会执行脚本，也不要求工具审批。
+6. 自动、显式和模型按需激活都会发送 `skill-activated` 事件，Renderer 会记录激活来源。一条持久化 Assistant 消息最多接受 50 条不同的激活记录。
 
-在资源懒加载模式中，始终可用的只读工具 `agentbox_read_skill_resource` 只能从当前已激活 Skill 中读取清单里的精确路径。Markdown、Python 和 Shell 资源会按有界字符片段返回；Python 和 Shell 内容仍只是参考源码，绝不会被执行。兼容性默认仍是一次性完整注入。
+在资源懒加载模式中，始终可用的只读工具 `agentbox_read_skill_resource` 只能从当前已激活 Skill 中读取清单里的精确路径。Markdown、Python 和 Shell 资源从给定 offset 按字符片段返回，默认 8,000 字符，最多 32,000。启用工具结果压缩时，读取器实际响应还会受 `max(256, 配置的结果上限 − 512)` 约束。Python 和 Shell 内容仍只是参考源码，绝不会被执行。兼容性默认仍是一次性完整注入。
 
 检索实现见 [`src/electron/api/skill-retriever.ts`](../src/electron/api/skill-retriever.ts)，提示词装配和按需加载见 [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts)。
 
@@ -92,7 +93,7 @@ Skill 只在 **Agent 模式**下参与路由。流程如下：
 只要至少一个已启用 Skill 含 Python 文件，Gateway 就会提供内置代码运行器。它接收模型在调用参数中提交的短代码，而不是自动运行 Skill 包内的脚本：
 
 - JavaScript 在独立 Worker 的 `vm` context 中运行，只暴露受限 `console` 和 `input`；禁用字符串代码生成和 WebAssembly，并设置 Worker 内存上限。
-- Python 使用“设置 → 开发运行时”解析出的解释器，或回退到可用的本机 Python 3。包装器使用 `-I`、精简环境变量、受限 builtins 和标准库白名单，并拒绝文件打开、动态执行和双下划线属性等操作。
+- Python 使用“设置 → 开发运行时”解析出的解释器。主解析器会接受任何能响应 `--version` 的解释器（包括 Python 2）；只有主解析失败时使用的本机回退才要求 Python 3 版本字符串。应为该工具明确选择 Python 3。Python 子进程以会话工作目录作为 `cwd`；包装器使用 `-I`、精简环境变量、受限 builtins 和标准库白名单，并拒绝文件打开、动态执行和双下划线属性等操作。
 - 代码最多 100,000 字符，输出最多 200,000 字符；默认超时 8 秒，可请求 0.5–20 秒。
 - 代码运行器是降低风险的受限执行环境，不应视为完整的操作系统级沙箱。除 Full Access 外，每次运行都需要用户审批。
 

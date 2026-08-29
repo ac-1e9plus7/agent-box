@@ -69,6 +69,16 @@ describe('Agent interruption continuation', () => {
         {
           type: 'done',
           requestId: 'request',
+          finishReason: 'max_output_tokens',
+        },
+        true,
+      ),
+    ).toMatchObject({ reason: 'output_limit', finishReason: 'max_output_tokens' })
+    expect(
+      interruptionFromStreamEvent(
+        {
+          type: 'done',
+          requestId: 'request',
           finishReason: 'stop',
         },
         true,

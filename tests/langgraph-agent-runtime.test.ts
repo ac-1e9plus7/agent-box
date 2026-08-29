@@ -34,6 +34,26 @@ describe('LangGraph Agent runtime', () => {
     expect(onComplete).toHaveBeenCalledOnce()
   })
 
+  it('preserves an output-limited model result instead of treating it as complete', async () => {
+    const onOutputLimit = vi.fn()
+    const onComplete = vi.fn()
+    const runtimeResult = await runAgentRuntime({
+      initialMessages,
+      agentMode: true,
+      maxToolTurns: 3,
+      invokeModel: vi.fn(async () => ({ ...result('truncated'), finishReason: 'max_output_tokens' })),
+      executeTools: vi.fn(async () => initialMessages),
+      onComplete,
+      onOutputLimit,
+      onUnexpectedToolCall: vi.fn(),
+      onToolTurnLimit: vi.fn(),
+    })
+
+    expect(runtimeResult).toMatchObject({ terminalReason: 'output_limit', toolTurns: 0 })
+    expect(onOutputLimit).toHaveBeenCalledOnce()
+    expect(onComplete).not.toHaveBeenCalled()
+  })
+
   it('runs repeated model and tool nodes while counting a multi-call response as one tool turn', async () => {
     const modelResults = [
       result('first', [{ id: 'call-1' }, { id: 'call-2' }]),

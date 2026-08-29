@@ -892,6 +892,193 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     ).toBe(true)
   })
 
+  it('deduplicates identical citations across model turns in one Agent request', async () => {
+    const citation = {
+      type: 'url_citation',
+      url_citation: { url: 'https://example.com/source', title: 'Source', content: 'Excerpt' },
+    }
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'cite_tool',
+        description: 'Returns a short result',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'citation-server',
+        serverName: 'Citation Server',
+      },
+    ])
+    vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: 'complete',
+      isError: false,
+      serverName: 'Citation Server',
+    })
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    fetchMock
+      .mockResolvedValueOnce(
+        makeSseResponse([
+          `data: ${JSON.stringify({
+            choices: [
+              {
+                delta: {
+                  annotations: [citation],
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: 'call-citation',
+                      type: 'function',
+                      function: { name: 'cite_tool', arguments: '{}' },
+                    },
+                  ],
+                },
+                finish_reason: 'tool_calls',
+              },
+            ],
+          })}\n\n`,
+          'data: [DONE]\n\n',
+        ]),
+      )
+      .mockResolvedValueOnce(
+        makeSseResponse([
+          `data: ${JSON.stringify({
+            choices: [{ delta: { content: 'Done', annotations: [citation] }, finish_reason: 'stop' }],
+          })}\n\n`,
+          'data: [DONE]\n\n',
+        ]),
+      )
+    const events: StreamEvent[] = []
+
+    await gateway.stream(
+      'req-citations-across-turns',
+      {
+        conversationId: 'conversation-citations-across-turns',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-citations',
+            role: 'user',
+            content: 'Use the tool and cite the source',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        workingDirectory: tempDirectory,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
+
+    expect(events.filter((event) => event.type === 'citation')).toHaveLength(1)
+  })
+
+  it('emits a terminal output-limit event when a truncated model response contains a tool call', async () => {
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'never_run',
+        description: 'Should not run after an output limit.',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'limit-server',
+        serverName: 'Limit Server',
+      },
+    ])
+    const executeTool = vi.spyOn(mcpManager, 'executeTool')
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeSseResponse([
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                tool_calls: [
+                  { index: 0, id: 'call-limited', type: 'function', function: { name: 'never_run', arguments: '{}' } },
+                ],
+              },
+              finish_reason: 'length',
+            },
+          ],
+        })}\n\n`,
+        'data: [DONE]\n\n',
+      ]),
+    )
+    const events: StreamEvent[] = []
+
+    await gateway.stream(
+      'req-output-limit-tool-call',
+      {
+        conversationId: 'conversation-output-limit-tool-call',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-output-limit-tool-call',
+            role: 'user',
+            content: 'Do the work',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        workingDirectory: tempDirectory,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
+
+    expect(events.some((event) => event.type === 'done' && event.finishReason === 'length')).toBe(true)
+    expect(executeTool).not.toHaveBeenCalled()
+  })
+
+  it('retains a checkpoint when OpenAI Responses reaches max_output_tokens', async () => {
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const sourceModel = repo.listModels().find((item) => item.remoteId === 'test/auto-model')!
+    const responsesModel = await repo.upsertModel({
+      name: 'Test Responses Model',
+      remoteId: 'test/responses-model',
+      providerId: sourceModel.providerId,
+      apiFormat: 'openai-responses',
+      contextWindow: 128_000,
+      maxOutputTokens: 4_096,
+      supportsReasoning: false,
+      defaultReasoningEnabled: false,
+      defaultReasoningEffort: 'medium',
+    })
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeSseResponse([
+        `data: ${JSON.stringify({
+          type: 'response.incomplete',
+          response: { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
+        })}\n\n`,
+      ]),
+    )
+    const conversationId = 'conversation-responses-output-limit'
+    const responseMessageId = 'assistant-responses-output-limit'
+    const events: StreamEvent[] = []
+
+    await gateway.stream(
+      'req-responses-output-limit',
+      {
+        conversationId,
+        responseMessageId,
+        modelId: responsesModel.id,
+        messages: [
+          {
+            id: 'user-responses-output-limit',
+            role: 'user',
+            content: 'Write a long answer',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        workingDirectory: tempDirectory,
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      (event) => events.push(event),
+    )
+
+    expect(events.some((event) => event.type === 'done' && event.finishReason === 'max_output_tokens')).toBe(true)
+    await expect(
+      repo.getAgentCheckpointSaver().getThreadDescriptor(agentCheckpointThreadId(conversationId, responseMessageId)),
+    ).resolves.toMatchObject({
+      lifecycle: 'interrupted',
+      responseMessageId,
+    })
+  })
+
   it('replays an interrupted Agent checkpoint when the user continues', async () => {
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
     let requestBody = ''

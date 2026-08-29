@@ -3,6 +3,7 @@ import { t } from './i18n'
 export const DEFAULT_AGENT_TOOL_TURN_LIMIT = 30
 export const MIN_AGENT_TOOL_TURN_LIMIT = 1
 export const MAX_AGENT_TOOL_TURN_LIMIT = 100
+export const MAX_AGENT_SKILL_ACTIVATIONS = 50
 
 export function normalizeAgentToolTurnLimit(value: unknown): number {
   const resolved = value === undefined || value === null ? DEFAULT_AGENT_TOOL_TURN_LIMIT : value

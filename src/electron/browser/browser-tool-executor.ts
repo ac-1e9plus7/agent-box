@@ -173,6 +173,7 @@ export class BrowserToolExecutor {
     signal: AbortSignal,
     workingDirectory?: string,
   ): Promise<BrowserToolExecutionResult> {
+    if (signal.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
     const tabId = typeof args.tab_id === 'string' ? args.tab_id : undefined
     if (tool.name === BROWSER_TABS_TOOL_NAME) {
       const action = String(args.action || 'list')
@@ -226,7 +227,7 @@ export class BrowserToolExecutor {
       }
     }
     if (tool.name === BROWSER_CLICK_TOOL_NAME) {
-      return this.manager.click(conversationId, tabId, String(args.snapshot_id || ''), String(args.ref || ''))
+      return this.manager.click(conversationId, tabId, String(args.snapshot_id || ''), String(args.ref || ''), signal)
     }
     if (tool.name === BROWSER_TYPE_TOOL_NAME) {
       return this.manager.typeText(
@@ -236,6 +237,7 @@ export class BrowserToolExecutor {
         String(args.ref || ''),
         String(args.text ?? ''),
         args.mode === 'append' ? 'append' : 'replace',
+        signal,
       )
     }
     if (tool.name === BROWSER_SCROLL_TOOL_NAME) {
@@ -244,6 +246,7 @@ export class BrowserToolExecutor {
         tabId,
         args.direction === 'up' ? 'up' : 'down',
         args.amount === 'half-page' ? 'half-page' : 'page',
+        signal,
       )
     }
     if (tool.name === BROWSER_SCREENSHOT_TOOL_NAME) {
@@ -251,6 +254,7 @@ export class BrowserToolExecutor {
         conversationId,
         tabId,
         typeof args.max_dimension === 'number' ? args.max_dimension : undefined,
+        signal,
       )
       return {
         result: result.result,
@@ -269,6 +273,7 @@ export class BrowserToolExecutor {
         String(args.snapshot_id || ''),
         String(args.ref || ''),
         paths,
+        signal,
       )
     }
     if (tool.name === BROWSER_DOWNLOAD_TOOL_NAME) {
@@ -279,6 +284,7 @@ export class BrowserToolExecutor {
         String(args.snapshot_id || ''),
         String(args.ref || ''),
         typeof args.path === 'string' ? args.path : undefined,
+        signal,
       )
     }
     if (tool.name === BROWSER_CLOSE_TOOL_NAME) {

@@ -15,7 +15,9 @@ import { t } from '../../shared/i18n'
 const MAX_TOOL_LIST_PAGES = 64
 const MAX_TOOLS_PER_SERVER = 2_000
 const MAX_TOOL_RESULT_CHARACTERS = 100_000
+const MAX_TOOL_RESULT_CONTENT_ITEMS = 100
 const MAX_BINARY_RESULT_CHARACTERS = 2 * 1024 * 1024
+const MAX_BINARY_RESULT_TOTAL_CHARACTERS = 2 * 1024 * 1024
 
 export interface McpConnectionInfo {
   protocolVersion?: string
@@ -256,62 +258,88 @@ function sanitizeObjectSchema(value: Record<string, unknown>): McpToolParameterS
   }
 }
 
-function normalizeToolResult(value: unknown): McpToolExecutionResult {
+export function normalizeToolResult(value: unknown): McpToolExecutionResult {
   if (!isRecord(value) || !Array.isArray(value.content)) {
     const fallback = limitString(JSON.stringify(value), MAX_TOOL_RESULT_CHARACTERS) || ''
     return { result: fallback, isError: false, truncated: fallback.length >= MAX_TOOL_RESULT_CHARACTERS }
   }
 
-  let truncated = false
+  let truncated = value.content.length > MAX_TOOL_RESULT_CONTENT_ITEMS
+  let remainingTextCharacters = MAX_TOOL_RESULT_CHARACTERS
+  let remainingBinaryCharacters = MAX_BINARY_RESULT_TOTAL_CHARACTERS
   const content: McpToolResultContent[] = []
   const textParts: string[] = []
-  for (const raw of value.content.slice(0, 100)) {
+  for (const raw of value.content.slice(0, MAX_TOOL_RESULT_CONTENT_ITEMS)) {
     if (!isRecord(raw) || typeof raw.type !== 'string') continue
     if (raw.type === 'text' && typeof raw.text === 'string') {
-      const text = limitString(raw.text, MAX_TOOL_RESULT_CHARACTERS) || ''
+      const text = takeBoundedText(raw.text, remainingTextCharacters)
       truncated ||= text.length < raw.text.length
-      content.push({ type: 'text', text })
-      textParts.push(text)
+      remainingTextCharacters -= text.length
+      if (text) {
+        content.push({ type: 'text', text })
+        textParts.push(text)
+      }
     } else if ((raw.type === 'image' || raw.type === 'audio') && typeof raw.mimeType === 'string') {
-      const data =
-        typeof raw.data === 'string' && raw.data.length <= MAX_BINARY_RESULT_CHARACTERS ? raw.data : undefined
+      const mimeType = limitString(raw.mimeType, 255) || ''
+      truncated ||= mimeType.length < raw.mimeType.length
+      const data = takeBoundedBinary(raw.data, remainingBinaryCharacters)
       truncated ||= typeof raw.data === 'string' && !data
-      content.push({ type: raw.type, data, mimeType: raw.mimeType })
-      textParts.push(`[${raw.type === 'image' ? 'Image' : 'Audio'}: ${raw.mimeType}]`)
+      if (data) remainingBinaryCharacters -= data.length
+      content.push({ type: raw.type, data, mimeType })
+      textParts.push(`[${raw.type === 'image' ? 'Image' : 'Audio'}: ${mimeType}]`)
     } else if (raw.type === 'resource' && isRecord(raw.resource) && typeof raw.resource.uri === 'string') {
-      const text = limitString(
-        typeof raw.resource.text === 'string' ? raw.resource.text : undefined,
-        MAX_TOOL_RESULT_CHARACTERS,
-      )
-      const blob =
-        typeof raw.resource.blob === 'string' && raw.resource.blob.length <= MAX_BINARY_RESULT_CHARACTERS
-          ? raw.resource.blob
-          : undefined
+      const uri = takeBoundedText(raw.resource.uri, Math.min(4_096, remainingTextCharacters))
+      remainingTextCharacters -= uri.length
+      truncated ||= uri.length < raw.resource.uri.length
+      if (!uri) continue
+      const textSource = typeof raw.resource.text === 'string' ? raw.resource.text : undefined
+      const text = textSource === undefined ? undefined : takeBoundedText(textSource, remainingTextCharacters)
+      truncated ||= textSource !== undefined && text?.length !== textSource.length
+      if (text) remainingTextCharacters -= text.length
+      const blob = takeBoundedBinary(raw.resource.blob, remainingBinaryCharacters)
       truncated ||= typeof raw.resource.blob === 'string' && !blob
+      if (blob) remainingBinaryCharacters -= blob.length
       content.push({
         type: 'resource',
-        uri: raw.resource.uri,
-        mimeType: typeof raw.resource.mimeType === 'string' ? raw.resource.mimeType : undefined,
+        uri,
+        mimeType: typeof raw.resource.mimeType === 'string' ? limitString(raw.resource.mimeType, 255) : undefined,
         text,
         blob,
       })
-      textParts.push(text || `[Resource: ${raw.resource.uri}]`)
+      textParts.push(text || `[Resource: ${uri}]`)
     } else if (raw.type === 'resource_link' && typeof raw.uri === 'string' && typeof raw.name === 'string') {
+      const uri = takeBoundedText(raw.uri, Math.min(4_096, remainingTextCharacters))
+      remainingTextCharacters -= uri.length
+      truncated ||= uri.length < raw.uri.length
+      const name = takeBoundedText(raw.name, Math.min(4_096, remainingTextCharacters))
+      remainingTextCharacters -= name.length
+      truncated ||= name.length < raw.name.length
+      const description =
+        typeof raw.description === 'string'
+          ? takeBoundedText(raw.description, Math.min(4_000, remainingTextCharacters))
+          : undefined
+      if (description) remainingTextCharacters -= description.length
+      truncated ||= typeof raw.description === 'string' && description?.length !== raw.description.length
+      if (!uri || !name) continue
       content.push({
         type: 'resource_link',
-        uri: raw.uri,
-        name: raw.name,
-        description: limitString(typeof raw.description === 'string' ? raw.description : undefined, 4_000),
-        mimeType: typeof raw.mimeType === 'string' ? raw.mimeType : undefined,
+        uri,
+        name,
+        description,
+        mimeType: typeof raw.mimeType === 'string' ? limitString(raw.mimeType, 255) : undefined,
       })
-      textParts.push(`[Resource link: ${raw.name} (${raw.uri})]`)
+      textParts.push(`[Resource link: ${name} (${uri})]`)
     }
   }
 
-  const structuredContent = isRecord(value.structuredContent)
-    ? limitStructuredContent(value.structuredContent)
+  const limitedStructured = isRecord(value.structuredContent)
+    ? limitStructuredContent(value.structuredContent, remainingTextCharacters)
     : undefined
-  if (structuredContent) textParts.push(JSON.stringify(structuredContent))
+  const structuredContent = limitedStructured?.value
+  truncated ||= limitedStructured?.truncated === true
+  if (structuredContent) {
+    textParts.push(JSON.stringify(structuredContent))
+  }
   const joined = textParts.join('\n')
   const result =
     joined.length > MAX_TOOL_RESULT_CHARACTERS
@@ -327,15 +355,37 @@ function normalizeToolResult(value: unknown): McpToolExecutionResult {
   }
 }
 
-function limitStructuredContent(value: Record<string, unknown>): Record<string, unknown> | undefined {
+function takeBoundedText(value: string, remainingCharacters: number): string {
+  return value.slice(0, Math.max(0, remainingCharacters))
+}
+
+function takeBoundedBinary(value: unknown, remainingCharacters: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  if (value.length > MAX_BINARY_RESULT_CHARACTERS || value.length > remainingCharacters) return undefined
+  return value
+}
+
+function limitStructuredContent(
+  value: Record<string, unknown>,
+  maxCharacters: number,
+): { value?: Record<string, unknown>; truncated: boolean } {
+  if (maxCharacters <= 0) return { truncated: true }
   try {
     const json = JSON.stringify(value)
-    if (json.length > MAX_TOOL_RESULT_CHARACTERS) {
-      return { truncated: true, preview: json.slice(0, MAX_TOOL_RESULT_CHARACTERS) }
+    if (json.length <= maxCharacters) {
+      return { value: JSON.parse(json) as Record<string, unknown>, truncated: false }
     }
-    return JSON.parse(json) as Record<string, unknown>
+    let preview = json.slice(0, maxCharacters)
+    let replacement: Record<string, unknown> = { truncated: true, preview }
+    let serialized = JSON.stringify(replacement)
+    while (serialized.length > maxCharacters && preview.length > 0) {
+      preview = preview.slice(0, Math.max(0, preview.length - (serialized.length - maxCharacters)))
+      replacement = { truncated: true, preview }
+      serialized = JSON.stringify(replacement)
+    }
+    return { value: replacement, truncated: true }
   } catch {
-    return undefined
+    return { truncated: true }
   }
 }
 

@@ -20,7 +20,7 @@ import type {
 } from '../../shared/types'
 import { estimateTextTokens } from '../../shared/token-estimate'
 import { isValidProviderContinuation } from '../../shared/provider-context'
-import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import { DEFAULT_AGENT_TOOL_TURN_LIMIT, MAX_AGENT_SKILL_ACTIVATIONS } from '../../shared/agent-limits'
 import {
   DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
   DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
@@ -190,6 +190,7 @@ export class ChatGateway {
     const controller = new AbortController()
     let requestSecret: string | undefined
     let activeCheckpoint: { saver: AgentBoxCheckpointSaver; threadId: string; hasTraceFallback: boolean } | undefined
+    const citationState = createCitationEmissionState()
     this.controllers.set(requestId, controller)
     emit({ type: 'start', requestId })
 
@@ -213,7 +214,6 @@ export class ChatGateway {
     }
 
     try {
-      resetStallTimer()
       const settings = this.repository.getSettings()
       const requestMessages = validateChatRequest(
         request,
@@ -271,8 +271,13 @@ export class ChatGateway {
       let authorizedAgentTools: McpToolDefinition[] = []
       let effectiveSystemPrompt = settings.systemPrompt
       if (isAgentMode) {
-        enabledSkills = this.repository.listSkills().filter((skill) => skill.enabled)
-        const mentionedSkills = retrieveExplicitlyMentionedSkills(lastUserMessage, enabledSkills)
+        enabledSkills = this.repository
+          .listSkills()
+          .filter((skill) => skill.enabled && getSkillEntryDocument(skill) !== undefined)
+        const mentionedSkills = retrieveExplicitlyMentionedSkills(lastUserMessage, enabledSkills).slice(
+          0,
+          MAX_AGENT_SKILL_ACTIVATIONS,
+        )
         const initialSource =
           request.skillIds?.length || mentionedSkills.length > 0 ? ('explicit' as const) : ('automatic' as const)
         activeSkills = request.skillIds?.length
@@ -434,7 +439,6 @@ export class ChatGateway {
         threadId: activeCheckpoint?.threadId,
         resumeExisting: resumeExistingCheckpoint,
         invokeModel: async ({ messages: currentTurnMessages, turn }) => {
-          resetStallTimer()
           // Also normalize checkpoint state from older versions. The graph may
           // resume messages that predate model-only P1 compaction.
           const modelVisibleMessages = prepareAgentMessagesForModel(currentTurnMessages)
@@ -452,6 +456,7 @@ export class ChatGateway {
                 : undefined
             const requestMessagesForStrategy =
               strategy === 'native-continuation' && nativeContinuation ? nativeSourceMessages : modelVisibleMessages
+            resetStallTimer()
             const response = await fetch(
               endpointFor(provider.baseUrl, format),
               this.withProxy({
@@ -524,6 +529,7 @@ export class ChatGateway {
               effectiveAgentTools,
               turn,
               strategy === 'native-continuation',
+              citationState,
             )
             if (strategy === 'native-continuation' && !streamResult.responseId) {
               disabledProviderContextStrategies.add('native-continuation')
@@ -620,6 +626,7 @@ export class ChatGateway {
           }
 
           for (const rawCall of streamResult.toolCalls) {
+            if (controller.signal.aborted) throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError')
             const toolDef = turnExposedAgentTools.find((tool) => (tool.modelName || tool.name) === rawCall.name)
             const displayName = toolDef?.name || rawCall.name
             let parsedValue: unknown
@@ -853,24 +860,29 @@ export class ChatGateway {
               const skillId = typeof parsedArgs.skill_id === 'string' ? parsedArgs.skill_id : ''
               const skill = enabledSkills.find((item) => item.id === skillId)
               const alreadyActive = Boolean(skill && activeSkills.some((item) => item.id === skill.id))
-              const loadFailed = !skill
+              const activationLimitReached = Boolean(
+                skill && !alreadyActive && activeSkills.length >= MAX_AGENT_SKILL_ACTIVATIONS,
+              )
+              const loadFailed = !skill || activationLimitReached
               const result = !skill
                 ? t('Skill {value0} was not found, is disabled, or is unavailable for this turn.', {
                     value0: skillId || t('(empty)'),
                   })
-                : alreadyActive
-                  ? t('The skill "{value0}" is already active.', { value0: skill.name })
-                  : lazySkillResourcesEnabled
-                    ? t(
-                        'Skill "{value0}" entry instructions and resource manifest have been loaded. Follow the entry instructions and read listed resources only when needed.',
-                        { value0: skill.name },
-                      )
-                    : t(
-                        'Skill "{value0}" has been loaded; subsequent answers must follow the complete instructions for this skill.',
-                        { value0: skill.name },
-                      )
+                : activationLimitReached
+                  ? t('The maximum number of active Skills has been reached.')
+                  : alreadyActive
+                    ? t('The skill "{value0}" is already active.', { value0: skill.name })
+                    : lazySkillResourcesEnabled
+                      ? t(
+                          'Skill "{value0}" entry instructions and resource manifest have been loaded. Follow the entry instructions and read listed resources only when needed.',
+                          { value0: skill.name },
+                        )
+                      : t(
+                          'Skill "{value0}" has been loaded; subsequent answers must follow the complete instructions for this skill.',
+                          { value0: skill.name },
+                        )
 
-              if (skill && !alreadyActive) {
+              if (skill && !alreadyActive && !activationLimitReached) {
                 activeSkills = [...activeSkills, skill]
                 skillLoadedThisTurn = true
                 emit({
@@ -1047,6 +1059,9 @@ export class ChatGateway {
                   workingDirectory,
                 )
               } catch (error) {
+                if (controller.signal.aborted || isAbortError(error)) {
+                  throw controller.signal.reason ?? error
+                }
                 browserError = error instanceof Error ? error.message : String(error)
                 browserResult = { result: browserError }
               }
@@ -1414,6 +1429,11 @@ export class ChatGateway {
             emit({ type: 'done', requestId, finishReason: streamResult.finishReason })
           }
         },
+        onOutputLimit: ({ modelResult: streamResult }) => {
+          if (streamResult.toolCalls.length > 0 || !streamResult.completed) {
+            emit({ type: 'done', requestId, finishReason: streamResult.finishReason || 'max_output_tokens' })
+          }
+        },
         onUnexpectedToolCall: () => {
           emit({ type: 'done', requestId, finishReason: 'unexpected_tool_call' })
         },
@@ -1445,20 +1465,14 @@ export class ChatGateway {
           })
         } else {
           await activeCheckpoint.saver
-            .setThreadDescriptor(activeCheckpoint.threadId, {
-              lifecycle: 'interrupted',
-              hasTraceFallback: activeCheckpoint.hasTraceFallback,
-            })
+            .setThreadDescriptor(activeCheckpoint.threadId, { lifecycle: 'interrupted' })
             .catch(() => undefined)
         }
       }
     } catch (error) {
       if (activeCheckpoint) {
         await activeCheckpoint.saver
-          .setThreadDescriptor(activeCheckpoint.threadId, {
-            lifecycle: 'interrupted',
-            hasTraceFallback: activeCheckpoint.hasTraceFallback,
-          })
+          .setThreadDescriptor(activeCheckpoint.threadId, { lifecycle: 'interrupted' })
           .catch(() => undefined)
       }
       if (isAbortError(error)) {
@@ -1623,7 +1637,7 @@ function buildAgentSystemPrompt(
   resumeFromMessageId?: string,
   options: { lazySkillResourcesEnabled?: boolean } = {},
 ): string {
-  const activeSkills = skills.filter((skill) => skill.enabled)
+  const activeSkills = skills.filter((skill) => skill.enabled && getSkillEntryDocument(skill) !== undefined)
   const externalTools = (mcpTools ?? []).filter((tool) => !BUILTIN_AGENT_TOOL_SERVER_IDS.has(tool.serverId))
   const skillLoaderAvailable = (mcpTools ?? []).some((tool) => tool.serverId === SKILL_LOADER_SERVER_ID)
   const codeRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === CODE_RUNNER_SERVER_ID)
@@ -1752,26 +1766,14 @@ function buildAgentSystemPrompt(
       t('=== Active Skills ===\n') +
         activeSkills
           .map((skill, index) => {
-            const files =
-              skill.files && skill.files.length > 0
-                ? skill.files
-                : [
-                    {
-                      path: skill.entryFile || 'SKILL.md',
-                      content: skill.systemPrompt || '',
-                      kind: 'markdown' as const,
-                    },
-                  ]
+            const files = getSkillFiles(skill)
+            const entryDocument = getSkillEntryDocument(skill)
+            if (!entryDocument) return ''
 
-            const entryDoc =
-              files.find((f) => f.path === (skill.entryFile || 'SKILL.md'))?.content ||
-              skill.systemPrompt ||
-              files[0]?.content ||
-              ''
-
-            const pythonScripts = files.filter((f) => f.kind === 'python')
-            const shellScripts = files.filter((f) => f.kind === 'shell')
-            const otherDocs = files.filter((f) => f.kind === 'markdown' && f.path !== (skill.entryFile || 'SKILL.md'))
+            const entryDoc = entryDocument.content
+            const pythonScripts = files.filter((file) => file.kind === 'python')
+            const shellScripts = files.filter((file) => file.kind === 'shell')
+            const otherDocs = files.filter((file) => file.kind === 'markdown' && file.path !== entryDocument.path)
 
             const skillSections: string[] = [
               t(
@@ -1790,7 +1792,7 @@ function buildAgentSystemPrompt(
             if (options.lazySkillResourcesEnabled) {
               const resources = files.filter(
                 (file) =>
-                  file.path !== (skill.entryFile || 'SKILL.md') &&
+                  file.path !== entryDocument.path &&
                   (file.kind === 'markdown' || file.kind === 'python' || file.kind === 'shell'),
               )
               if (resources.length > 0) {
@@ -1858,6 +1860,23 @@ function buildAgentSystemPrompt(
   }
 
   return parts.join('\n\n')
+}
+
+function getSkillFiles(skill: Skill): Skill['files'] {
+  if (skill.files.length > 0) return skill.files
+  return [
+    {
+      path: skill.entryFile || 'SKILL.md',
+      content: skill.systemPrompt || '',
+      kind: 'markdown',
+    },
+  ]
+}
+
+function getSkillEntryDocument(skill: Skill): { path: string; content: string } | undefined {
+  const entryPath = skill.entryFile || 'SKILL.md'
+  const entryFile = getSkillFiles(skill).find((file) => file.path === entryPath && file.kind === 'markdown')
+  return entryFile ? { path: entryFile.path, content: entryFile.content } : undefined
 }
 
 function addConfiguredSystemPrompt(messages: Message[], systemPrompt: string): Message[] {
@@ -1930,7 +1949,9 @@ function validateChatRequest(
   }
   if (
     request.skillIds !== undefined &&
-    (!Array.isArray(request.skillIds) || request.skillIds.some((id) => typeof id !== 'string' || id.length > 100))
+    (!Array.isArray(request.skillIds) ||
+      request.skillIds.length > MAX_AGENT_SKILL_ACTIVATIONS ||
+      request.skillIds.some((id) => typeof id !== 'string' || id.length > 100))
   ) {
     throw new GatewayError(t('The skill list configuration is invalid.'), 'invalid_request')
   }
@@ -2294,11 +2315,11 @@ async function consumeStream(
   effectiveMcpTools: McpToolDefinition[] = [],
   turn = 1,
   captureContinuation = false,
+  citationState = createCitationEmissionState(),
 ): Promise<StreamConsumptionResult> {
   let completed = false
   let finishReason: string | undefined
   let text = ''
-  const citationState = createCitationEmissionState()
   const toolCallsMap = new Map<number | string, AccumulatedToolCall>()
   const anthropicThinking = new Map<number, { blockIndex: number; thinking: string; signature: string }>()
   const responseOutputItems: Record<string, unknown>[] = []

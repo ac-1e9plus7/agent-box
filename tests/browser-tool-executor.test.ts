@@ -75,6 +75,19 @@ describe('built-in browser tool executor', () => {
     expect(executor.approvalFor('sensitive', 'conversation-1', type, {}, false).required).toBe(true)
   })
 
+  it('does not begin a browser operation after request cancellation', async () => {
+    const manager = managerMock()
+    const executor = new BrowserToolExecutor(manager as unknown as BrowserManager)
+    const click = createBrowserTools().find((tool) => tool.name === 'click')!
+    const controller = new AbortController()
+    controller.abort(new DOMException('cancelled', 'AbortError'))
+
+    await expect(
+      executor.execute('conversation-1', click, { snapshot_id: 'snapshot-1', ref: 'e1' }, controller.signal),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(manager.click).not.toHaveBeenCalled()
+  })
+
   it('redacts navigation secrets in audit arguments while using the original URL for execution', async () => {
     const manager = managerMock()
     const executor = new BrowserToolExecutor(manager as unknown as BrowserManager)
@@ -169,10 +182,16 @@ describe('built-in browser tool executor', () => {
       'C:\\workspace',
     )
 
-    expect(manager.screenshot).toHaveBeenCalledWith('conversation-1', 'tab-2', undefined)
-    expect(manager.upload).toHaveBeenCalledWith('conversation-1', 'C:\\workspace', 'tab-2', 'snapshot-2', 'e1', [
-      'upload.txt',
-    ])
+    expect(manager.screenshot).toHaveBeenCalledWith('conversation-1', 'tab-2', undefined, expect.any(AbortSignal))
+    expect(manager.upload).toHaveBeenCalledWith(
+      'conversation-1',
+      'C:\\workspace',
+      'tab-2',
+      'snapshot-2',
+      'e1',
+      ['upload.txt'],
+      expect.any(AbortSignal),
+    )
     expect(manager.download).toHaveBeenCalledWith(
       'conversation-1',
       'C:\\workspace',
@@ -180,6 +199,7 @@ describe('built-in browser tool executor', () => {
       'snapshot-2',
       'e2',
       'downloads/report.pdf',
+      expect.any(AbortSignal),
     )
   })
 })

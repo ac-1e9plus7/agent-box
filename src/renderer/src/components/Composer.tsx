@@ -7,6 +7,7 @@ import { handleComposerKeyDown } from '../composer-helper'
 import { WEB_SEARCH_MODE_LABELS } from '../web-search'
 import { Icon } from './Icon'
 import { t } from '../../../shared/i18n'
+import { MAX_AGENT_SKILL_ACTIVATIONS } from '../../../shared/agent-limits'
 
 interface ComposerProps {
   activeModel?: ModelConfig
@@ -350,25 +351,29 @@ export function Composer({
                     {t('Automatically select relevant skills')}
                   </button>
                   <div className="mcp-conversation-options">
-                    {enabledSkills.map((skill) => (
-                      <label key={skill.id} title={skill.description}>
-                        <input
-                          type="checkbox"
-                          checked={fixedSkillIds.includes(skill.id)}
-                          onChange={(event) => {
-                            const next = event.target.checked
-                              ? [...new Set([...fixedSkillIds, skill.id])]
-                              : fixedSkillIds.filter((id) => id !== skill.id)
-                            onSkillSelectionChange?.(next)
-                          }}
-                        />
-                        <span>{skill.name}</span>
-                      </label>
-                    ))}
+                    {enabledSkills.map((skill) => {
+                      const selected = fixedSkillIds.includes(skill.id)
+                      return (
+                        <label key={skill.id} title={skill.description}>
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={!selected && fixedSkillIds.length >= MAX_AGENT_SKILL_ACTIVATIONS}
+                            onChange={(event) => {
+                              const next = event.target.checked
+                                ? [...new Set([...fixedSkillIds, skill.id])]
+                                : fixedSkillIds.filter((id) => id !== skill.id)
+                              onSkillSelectionChange?.(next)
+                            }}
+                          />
+                          <span>{skill.name}</span>
+                        </label>
+                      )
+                    })}
                   </div>
                   <small>
                     {t(
-                      'Fixed skills are preloaded each round; automatic mode matches on request, and the model can also load other skills from the catalog on demand.',
+                      'Fixed skills are preloaded each round; automatic mode matches on request, and the model can also load other skills from the catalog on demand. You can pin up to 50 Skills.',
                     )}
                   </small>
                   <button type="button" onClick={onOpenSkillsSettings}>

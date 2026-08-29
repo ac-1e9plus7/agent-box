@@ -12,6 +12,7 @@ import { retrieveRelevantTools } from '../mcp/tool-retriever'
 const MODEL_CONTEXT_SUMMARY_ID = 'agentbox-model-context-summary'
 const MODEL_CONTEXT_SUMMARY_PREFIX = '[AgentBox compacted earlier complete Agent tool turns]'
 const SUMMARY_RESULT_PREVIEW_CHARACTERS = 320
+const MAX_MODEL_REPLAY_IMAGE_CHARACTERS = 2 * 1024 * 1024
 
 export interface FullToolResult {
   result: string
@@ -72,6 +73,7 @@ export function compactToolResultsForModel(messages: readonly Message[], maxChar
   return messages.map((message) => {
     if (!message.toolExecutions?.length && !message.agentTrace?.length) return message
     const next: Message = { ...message }
+    const agentTraceOwnsToolResults = message.agentTrace?.some((item) => item.type === 'tool_result') ?? false
     if (message.toolExecutions?.length) {
       next.toolExecutions = message.toolExecutions.map((execution) => {
         if (execution.result === undefined) return execution
@@ -81,7 +83,9 @@ export function compactToolResultsForModel(messages: readonly Message[], maxChar
           : {
               ...execution,
               result: compacted,
-              resultContent: undefined,
+              resultContent: agentTraceOwnsToolResults
+                ? undefined
+                : retainModelReplayContent(resultFromExecution(execution).resultContent),
               structuredResult: undefined,
               resultTruncated: true,
             }
@@ -96,7 +100,7 @@ export function compactToolResultsForModel(messages: readonly Message[], maxChar
           : {
               ...item,
               result: compacted,
-              resultContent: undefined,
+              resultContent: retainModelReplayContent(resultFromTrace(item).resultContent),
               structuredResult: undefined,
               resultTruncated: true,
             }
@@ -111,9 +115,18 @@ export function compactFullToolResult(
   callId: string,
   maxCharacters: number,
 ): string | undefined {
-  const fullText = formatFullToolResult(result)
-  if (fullText.length <= maxCharacters) return undefined
-  return compactTextHeadTail(fullText, callId, maxCharacters)
+  if (isCompactedToolResultPreview(result.result, callId)) return undefined
+  const modelVisibleText = formatToolResultForModelBudget(result)
+  if (modelVisibleText.length <= maxCharacters) return undefined
+  return compactTextHeadTail(modelVisibleText, callId, maxCharacters)
+}
+
+function isCompactedToolResultPreview(result: string, callId: string): boolean {
+  const quotedCallId = JSON.stringify(callId)
+  return (
+    result.includes(`[AgentBox tool result compacted; call_id=${quotedCallId};`) ||
+    result.includes(`[compacted call_id=${quotedCallId}]`)
+  )
 }
 
 export function compactTextHeadTail(text: string, callId: string, maxCharacters: number): string {
@@ -139,6 +152,48 @@ export function formatFullToolResult(result: FullToolResult): string {
     sections.push(`[structured_result]\n${stableJson(result.structuredResult)}`)
   }
   return sections.filter((section) => section.length > 0).join('\n\n')
+}
+
+function formatToolResultForModelBudget(result: FullToolResult): string {
+  const sections: string[] = [result.result]
+  if (result.resultContent?.length) {
+    sections.push(`[result_content]\n${stableJson(result.resultContent.map(describeModelResultContent))}`)
+  }
+  if (result.structuredResult) {
+    sections.push(`[structured_result]\n${stableJson(result.structuredResult)}`)
+  }
+  return sections.filter((section) => section.length > 0).join('\n\n')
+}
+
+function describeModelResultContent(content: McpToolResultContent): Record<string, unknown> {
+  if (content.type === 'image' || content.type === 'audio') {
+    return {
+      type: content.type,
+      mimeType: content.mimeType,
+      ...(content.data ? { data: `[${content.data.length} character binary payload retained separately]` } : {}),
+    }
+  }
+  if (content.type === 'resource') {
+    return {
+      type: content.type,
+      uri: content.uri,
+      mimeType: content.mimeType,
+      text: content.text,
+      ...(content.blob ? { blob: `[${content.blob.length} character binary payload retained separately]` } : {}),
+    }
+  }
+  return content
+}
+
+function retainModelReplayContent(content: McpToolResultContent[] | undefined): McpToolResultContent[] | undefined {
+  let remainingCharacters = MAX_MODEL_REPLAY_IMAGE_CHARACTERS
+  const replayable: McpToolResultContent[] = []
+  for (const item of content ?? []) {
+    if (item.type !== 'image' || !item.data || item.data.length > remainingCharacters) continue
+    replayable.push(item)
+    remainingCharacters -= item.data.length
+  }
+  return replayable.length ? replayable : undefined
 }
 
 export function readTextChunk(text: string, requestedOffset: number, requestedMaxCharacters: number): TextChunk {

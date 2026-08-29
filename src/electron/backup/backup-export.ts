@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import { lstat, mkdir, readlink, realpath, readdir, rename, rm, stat } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path'
 import { finished } from 'node:stream/promises'
 import { Readable, Writable } from 'node:stream'
 import { TextReader, ZipWriter } from '@zip.js/zip.js'
@@ -96,6 +96,8 @@ export interface CreateBackupArchiveOptions {
   input: ExportBackupInput
   conversations: Conversation[]
   appInfo: AppInfo
+  /** Application-managed roots that deep workspace traversal must not archive. */
+  protectedPaths?: string[]
   createdAt?: Date
 }
 
@@ -108,7 +110,10 @@ export async function createBackupArchive(options: CreateBackupArchiveOptions): 
   const conversations = structuredClone(options.conversations)
   const conversationIndex = buildConversationIndex(conversations)
   const warnings: string[] = []
-  const workspaces = input.mode === 'deep' ? await collectWorkspaces(conversations, outputPath, warnings) : []
+  const workspaces =
+    input.mode === 'deep'
+      ? await collectWorkspaces(conversations, outputPath, options.protectedPaths ?? [], warnings)
+      : []
   const manifest = buildManifest({
     appInfo: options.appInfo,
     conversationIndex,
@@ -260,6 +265,7 @@ function buildConversationIndex(conversations: Conversation[]): ConversationBack
 async function collectWorkspaces(
   conversations: Conversation[],
   outputPath: string,
+  protectedPaths: string[],
   warnings: string[],
 ): Promise<WorkspaceBackup[]> {
   const workspaces = new Map<string, WorkspaceBackup>()
@@ -270,6 +276,7 @@ async function collectWorkspaces(
   }
   const canonicalExistingOutput = await realpath(outputPath).catch(() => undefined)
   if (canonicalExistingOutput) excludedPaths.add(pathComparisonKey(canonicalExistingOutput))
+  const protectedRoots = await normalizeProtectedPaths(protectedPaths)
 
   for (const conversation of conversations) {
     const sourcePath = conversation.workingDirectory?.trim()
@@ -297,6 +304,19 @@ async function collectWorkspaces(
           cause: error,
         },
       )
+    }
+
+    if (protectedRoots.some((protectedRoot) => isSameOrDescendantPath(resolvedPath, protectedRoot))) {
+      throw new Error(
+        t(
+          'A conversation working directory overlaps AgentBox application data and cannot be included in a deep backup.',
+        ),
+      )
+    }
+    for (const protectedRoot of protectedRoots) {
+      if (isSameOrDescendantPath(protectedRoot, resolvedPath)) {
+        excludedPaths.add(pathComparisonKey(protectedRoot))
+      }
     }
 
     const key = pathComparisonKey(resolvedPath)
@@ -338,6 +358,23 @@ async function collectWorkspaces(
     }
   }
   return collected
+}
+
+async function normalizeProtectedPaths(paths: string[]): Promise<string[]> {
+  const roots = await Promise.all(
+    paths
+      .filter((path) => typeof path === 'string' && path.trim())
+      .map(async (path) => realpath(path).catch(() => resolve(path))),
+  )
+  return [...new Set(roots.map(pathComparisonKey))]
+}
+
+function isSameOrDescendantPath(path: string, ancestor: string): boolean {
+  const normalizedPath = pathComparisonKey(path)
+  const normalizedAncestor = pathComparisonKey(ancestor)
+  if (normalizedPath === normalizedAncestor) return true
+  const ancestorPrefix = normalizedAncestor.endsWith(sep) ? normalizedAncestor : `${normalizedAncestor}${sep}`
+  return normalizedPath.startsWith(ancestorPrefix)
 }
 
 async function walkWorkspace(
@@ -611,7 +648,7 @@ function normalizeArchiveDate(value: Date): Date {
 
 function pathComparisonKey(path: string): string {
   const normalized = resolve(path)
-  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+  return process.platform === 'win32' || process.platform === 'darwin' ? normalized.toLowerCase() : normalized
 }
 
 async function replaceFile(temporaryPath: string, outputPath: string): Promise<void> {

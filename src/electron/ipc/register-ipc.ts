@@ -220,6 +220,7 @@ export function registerIpcHandlers(
           version: app.getVersion(),
           platform: process.platform,
         },
+        protectedPaths: [app.getPath('userData')],
       })
     } finally {
       backupExportInProgress = false

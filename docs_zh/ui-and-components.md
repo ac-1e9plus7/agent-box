@@ -2,19 +2,20 @@
 
 > [English version](../docs/ui-and-components.md) · [返回中文文档索引](./README.md)
 
-AgentBox 的渲染层基于 React 19 与 TypeScript，负责界面展示、临时交互状态和经 preload 白名单调用主进程；它不读取 API Key，也不直接请求模型服务。
+AgentBox 的渲染层基于 React 19 与 TypeScript，负责界面展示、临时交互状态和经 preload 白名单调用主进程；它永远不会从主进程接收已持久化的 API Key 值，但会暂时处理用户刚输入、用于测试或保存的密钥；它不直接请求模型服务。
 
 ## 渲染层组织
 
-| 模块                                                                                        | 职责                                                                                    |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx)                                   | 启动数据装载、设置保存、功能协调与主界面组件组合                                        |
-| [`src/renderer/src/hooks/useConversation.ts`](../src/renderer/src/hooks/useConversation.ts) | 会话 state/ref 同步、创建、持久化、活动分支更新与新对话快捷键                           |
-| [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts)     | 活动流注册、标准化事件归并、取消、工具审批、完成处理与错误 checkpoint                   |
-| [`src/renderer/src/components/`](../src/renderer/src/components/)                           | 侧栏、顶部栏、消息区、输入框、新对话和 Settings 外壳等 React 组件                       |
-| [`src/renderer/src/components/settings/`](../src/renderer/src/components/settings/)         | 通用、运行时、Skills、MCP、模型、供应商、安全与关于 section，以及设置共用控件           |
-| [`src/renderer/src/*.ts`](../src/renderer/src/)                                             | 会话上下文投影、标题清洗、附件处理、Markdown 预处理、快捷键和工作目录分组等可测试纯逻辑 |
-| [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts)                     | renderer 与测试共用的消息树遍历、分支切换和节点删除逻辑                                 |
+| 模块                                                                                                              | 职责                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [`src/renderer/src/App.tsx`](../src/renderer/src/App.tsx)                                                         | 启动数据装载、设置保存、功能协调与主界面组件组合                                        |
+| [`src/renderer/src/hooks/useConversation.ts`](../src/renderer/src/hooks/useConversation.ts)                       | 会话 state/ref 同步、创建、持久化、活动分支更新与新对话快捷键                           |
+| [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts)                           | 活动流注册、标准化事件归并、取消、工具审批、完成处理与错误 checkpoint                   |
+| [`src/renderer/src/components/`](../src/renderer/src/components/)                                                 | 侧栏、顶部栏、消息区、输入框、新对话和 Settings 外壳等 React 组件                       |
+| [`src/renderer/src/components/settings/`](../src/renderer/src/components/settings/)                               | 通用、运行时、Skills、MCP、模型、供应商、安全与关于 section，以及设置共用控件           |
+| [`src/renderer/src/components/browser/BrowserPanel.tsx`](../src/renderer/src/components/browser/BrowserPanel.tsx) | 浏览器标签控件、浏览器会话命令、下载指示器和原生 View 边界上报                          |
+| [`src/renderer/src/*.ts`](../src/renderer/src/)                                                                   | 会话上下文投影、标题清洗、附件处理、Markdown 预处理、快捷键和工作目录分组等可测试纯逻辑 |
+| [`src/shared/conversation-tree.ts`](../src/shared/conversation-tree.ts)                                           | renderer 与测试共用的消息树遍历、分支切换和节点删除逻辑                                 |
 
 Settings 外壳统一持有 `preferences`、模型、供应商和 API Key 的暂存改动，并由“保存更改”一次提交；各 section 按需维护自己的选择项、搜索、测试和弹窗等局部状态。Skills 与 MCP server 的变更仍通过各自的即时持久化 API 完成。
 
@@ -24,9 +25,9 @@ Settings 外壳统一持有 `preferences`、模型、供应商和 API Key 的暂
 
 ## 内置浏览器面板
 
-浏览器需要先在「设置 → 通用 → 内置浏览器」全局启用；是否允许 Agent 使用，还需要在每个对话中单独开启。面板包含可横向滚动的标签栏；默认支持新建标签、把页面弹窗转换为标签、切换和关闭，关闭最后一个标签时会自动补一个空白标签。工具栏控制当前活动标签的地址、后退、前进、刷新/停止、隐藏和关闭会话。宽屏布局下，可信聊天区域和浏览器共享 Chat Stage；窄屏下浏览器占满 Stage。React 只渲染标签栏、工具栏、状态和边界占位区，活动的主进程 `WebContentsView` 实际占据该矩形，因此 renderer 会通过类型化 IPC 报告边界；打开设置或新建对话框时会隐藏所有原生标签 View。
+浏览器需要先在「设置 → 通用 → 内置浏览器」全局启用；是否允许 Agent 使用，还需要在每个对话中单独开启。面板包含可横向滚动的标签栏；默认支持新建标签、把页面弹窗转换为标签、切换和关闭，关闭最后一个标签时会自动补一个空白标签。工具栏控制当前活动标签的地址、后退、前进、刷新/停止、隐藏和关闭会话。宽屏布局下，可信聊天区域和浏览器共享 Chat Stage；窄屏下浏览器占满 Stage。React 只渲染标签栏、工具栏、状态和边界占位区，活动的主进程 `WebContentsView` 实际占据该矩形，因此 renderer 会通过类型化 IPC 报告边界；打开设置或新建对话框时会隐藏所有原生标签 View。Session 按需创建：全应用最多保留三个活动 Session，且同时只能显示一个。打开第四个浏览器 Session 会关闭最久未使用的隐藏 Session，因此隐藏面板只会在 Session 仍驻留时保留标签。
 
-手动浏览本身不会向模型暴露工具。Composer 的“浏览器工具”开关控制持久化的 `Conversation.browserToolEnabled`。主进程状态事件包含每个标签的脱敏元数据、活动 `tab_id` 和临时下载进度；页面文本和截图只有通过经过审批的 Agent 结果才会进入 renderer/模型。设置项可独立启用加密 Cookie 持久化、Agent 截图、文件上传、下载和环回 HTTP。隐藏面板会保留标签；关闭会话会丢弃活动站点存储和 DOM 状态，只有启用持久 Cookie 时才会先把 Cookie 快照写入加密 Vault。
+手动浏览本身不会向模型暴露工具。Composer 的“浏览器工具”开关控制持久化的 `Conversation.browserToolEnabled`。`browser:event` 为每个标签发送使用 `activeTabId` 和标签 `id` 的脱敏元数据，以及临时下载名称/进度元数据；它从不发送浏览器绝对路径。页面文本和截图字节只有作为经过策略授权的 Agent 工具结果才会进入 renderer/模型，并成为加密对话数据。设置项可独立启用加密 Cookie 持久化、Agent 截图、文件上传、下载和环回 HTTP。启用上传会恢复用户操作的系统文件选择器，因此手动上传可选择操作系统允许的任意文件；独立的 Agent 上传路径只接受经过批准的工作区相对文件。手动下载进入系统“下载”目录，Agent 下载创建不覆盖已有文件的工作区相对文件；两条路径都受 100 MiB 下载上限约束。关闭会话会丢弃活动站点存储和 DOM 状态；启用 Cookie 持久化时，会先尽力写入加密 Cookie 快照。
 
 ## 本地用户资料
 
@@ -58,7 +59,7 @@ Agent 回复因取消、限流、网络/API 错误、输出上限或工具轮次
 - `remark-breaks`：单次回车渲染为换行，适合聊天文本。
 - `remark-math` 与 `rehype-katex`：解析并渲染 KaTeX，错误公式不会使整条消息崩溃。
 
-[`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts) 会在渲染前把 `\(...\)`、`\[...\]`、`math` / `latex-math` 代码块和独立的 `matrix`、`aligned`、`cases` 等环境归一为 Markdown 数学语法，同时保护行内代码、围栏代码和常见美元金额。代码块提供语言标签与复制按钮；超长代码和公式使用独立横向滚动。消息链接仅在新窗口打开，并带有 `noopener noreferrer`。
+[`markdown-helper.ts`](../src/renderer/src/markdown-helper.ts) 会在渲染前把 `\(...\)`、`\[...\]`、`math` / `latex-math` 代码块和独立的 `matrix`、`aligned`、`cases` 等环境归一为 Markdown 数学语法，同时保护行内代码、围栏代码和常见美元金额。代码块提供语言标签与复制按钮；超长代码和公式使用独立横向滚动。消息链接请求使用带 `noopener noreferrer` 的 `_blank`，但 Electron 会拒绝应用内新窗口，并只把通过校验且不含凭据的 HTTP(S) URL 交给操作系统的外部浏览器。
 
 新建或编辑的用户消息只会把行尾规范为 LF，存储及发送给模型前不会裁剪正文。空消息校验可以检查裁剪后的副本；标题和渲染结果始终属于派生数据，不能回写到 `message.content`。
 

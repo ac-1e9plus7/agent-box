@@ -35,7 +35,7 @@ The graph uses provider-neutral AgentBox messages rather than LangChain message 
 | `toolTurns`      | Number of model responses whose requested tools were accepted for handling            |
 | `modelResult`    | Normalized result of the latest provider stream, including tool calls and replay data |
 | `terminal`       | Whether a terminal callback completed                                                 |
-| `terminalReason` | `complete`, `unexpected_tool_call`, or `tool_turn_limit`                              |
+| `terminalReason` | `complete`, `output_limit`, `unexpected_tool_call`, or `tool_turn_limit`              |
 
 A provider response containing several tool calls consumes one tool turn. Calls are processed in provider order so approval order and side-effect behavior remain stable.
 
@@ -43,6 +43,7 @@ A provider response containing several tool calls consumes one tool turn. Calls 
 
 After each model node, the graph selects one route:
 
+- an output-limit finish reason (`length`, `max_tokens`, `max_output_tokens`, or `incomplete`): terminate with `output_limit` and preserve the checkpoint;
 - no tool calls: run the normal completion handler;
 - tool calls outside Agent mode: terminate with `unexpected_tool_call` without executing them;
 - tool calls after the configured limit: emit an error result for every unexecuted call and terminate with `tool_turn_limit`;
@@ -60,7 +61,7 @@ Each usage event is tagged with the current model turn. The renderer merges part
 
 One request-scoped `AbortSignal` is passed to the graph and all callbacks. It cancels provider fetches, MCP calls, code execution, terminal commands, workspace operations, and approval waits. The 120-second network-stall timer is active only while provider data is expected and is paused during tool handling.
 
-Built-in browser operations receive the same signal for navigation, screenshot, upload, and download cancellation, but the live multi-tab `WebContentsView` session is conversation-scoped rather than graph state. Checkpoints and `agentTrace` preserve sanitized calls plus completed semantic/screenshot results, not tab state, Cookie values, DOM references, downloads in progress, or navigation state. Optional Cookie persistence uses a separate encrypted Vault profile, never graph state. After a restart or session eviction the Agent must list/recreate tabs and inspect again; stale element references are rejected instead of replayed.
+Built-in browser navigation, screenshots, uploads, and downloads receive the same signal. An already-aborted request cannot begin those actions; an in-progress Agent download is cancelled when possible, and the session queue waits for in-flight native browser work to settle before starting a later operation. CDP file-selection work dispatched immediately before cancellation can still leave external page state uncertain, so a resumed Agent must inspect state before retrying any interrupted browser side effect. The live multi-tab `WebContentsView` session is conversation-scoped rather than graph state. Checkpoints and `agentTrace` preserve sanitized calls plus completed semantic/screenshot results, not tab state, Cookie values, DOM references, downloads in progress, or navigation state. Optional Cookie persistence uses a separate encrypted Vault profile, never graph state. After a restart or session eviction the Agent must list/recreate tabs and inspect again; stale element references are rejected instead of replayed.
 
 ## Checkpoint behavior
 
@@ -68,13 +69,15 @@ Agent requests created by the renderer include `responseMessageId`. The Gateway 
 
 Direct graph resume is limited to failures at a provider node:
 
-| Interruption                                    | Resume path                                                                     |
-| ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| Rate limit, network failure, timeout, API error | Resume the existing graph thread when its descriptor and context digest match   |
-| Missing or stale thread                         | Rebuild provider history from validated `agentTrace` and create a new thread    |
-| User cancellation                               | `agentTrace` fallback; the interruption may have occurred inside a side effect  |
-| Output or tool-turn limit                       | `agentTrace` fallback and a new run                                             |
-| Unknown tool or execution failure               | `agentTrace` fallback; never re-enter an operation with unknown external status |
+| Interruption                                            | Resume path                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Rate limit, network failure, timeout, API error         | Resume the existing graph thread when its descriptor and context digest match   |
+| Missing or stale thread                                 | Rebuild provider history from validated `agentTrace` and create a new thread    |
+| User cancellation                                       | `agentTrace` fallback; the interruption may have occurred inside a side effect  |
+| Output or tool-turn limit                               | `agentTrace` fallback and a new run                                             |
+| Uncaught tool-node failure or uncertain external status | `agentTrace` fallback; never re-enter an operation with unknown external status |
+
+Unknown, unauthorized, malformed, and schema-invalid calls, plus handled executor errors, become error tool results and normally continue to the next model turn. Only an exception that escapes the tool node or an operation with uncertain external status takes the fallback row above.
 
 Successful completion deletes the checkpoint thread. Interrupted threads remain available until resumed, deleted with their message/conversation, or evicted as a whole under checkpoint quotas.
 

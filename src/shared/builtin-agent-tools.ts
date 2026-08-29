@@ -95,7 +95,7 @@ export function createBrowserTools(
       name: BROWSER_NAVIGATE_TOOL_NAME,
       modelName: BROWSER_NAVIGATE_MODEL_NAME,
       description: t(
-        'Navigate the isolated built-in browser to an explicitly approved HTTPS URL. Navigation does not return page contents; call the browser snapshot tool after the page loads.',
+        'Navigate the isolated built-in browser to an explicitly approved HTTPS URL or, when enabled, a loopback HTTP URL. Navigation does not return page contents; call the browser snapshot tool after the page loads.',
       ),
       inputSchema: {
         type: 'object',
@@ -185,7 +185,7 @@ export function createBrowserTools(
       name: BROWSER_TYPE_TOOL_NAME,
       modelName: BROWSER_TYPE_MODEL_NAME,
       description: t(
-        'Type non-secret text into an editable element from the latest browser snapshot. Password, payment, one-time-code, hidden, and file inputs are always rejected.',
+        'Type non-secret text into an editable element from the latest browser snapshot. Password, hidden, file, and fields identified through supported password, one-time-code, or cc-* autocomplete metadata are always rejected.',
       ),
       inputSchema: {
         type: 'object',
@@ -235,7 +235,7 @@ export function createBrowserTools(
       name: BROWSER_CLOSE_TOOL_NAME,
       modelName: BROWSER_CLOSE_MODEL_NAME,
       description: t(
-        'Close the current conversation’s ephemeral built-in browser session and discard its cookies and site data.',
+        'Close the current conversation’s ephemeral built-in browser session and discard its live site data. When Cookie persistence is enabled, accepted cookies are saved as an encrypted Vault snapshot before closing.',
       ),
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       annotations: {

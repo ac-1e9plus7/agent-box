@@ -19,7 +19,7 @@
 - **MCP server integration:** connect local `stdio` servers or remote Streamable HTTP servers, with fallback support for legacy HTTP+SSE. BM25 tool retrieval, per-conversation server selection, approval policies, and Tool Explorer keep large tool catalogs manageable.
 - **Resumable Agent execution:** Agent mode can run up to 30 tool-call turns by default, configurable from 1 to 100. Safe provider failures use an encrypted LangGraph checkpoint sidecar; `agentTrace` remains the portable fallback for output limits, cancellation, and uncertain tool-side-effect states.
 - **Integrated terminal and workspace tools:** use an automatically detected cross-platform shell or configure a custom executable and arguments. Native workspace tools read UTF-8 files in chunks and create, overwrite, or append files without shell escaping.
-- **Isolated multi-tab browser:** optionally open multiple remote pages in sandboxed Electron `WebContentsView` tabs. Agent mode tracks stable tab IDs, reads bounded semantic snapshots, and requests approval for reference-based interaction. Separate settings opt into Vault-encrypted persistent cookies, Agent screenshots, workspace-scoped uploads, and controlled downloads; remote pages never receive Node.js or AgentBox IPC.
+- **Isolated multi-tab browser:** optionally open multiple remote pages in sandboxed Electron `WebContentsView` tabs. Agent mode tracks stable tab IDs, reads bounded semantic snapshots, and requests approval for reference-based interaction. Separate settings opt into Vault-encrypted persistent cookies, Agent screenshots, user-selected manual uploads plus workspace-scoped Agent uploads, and controlled downloads; remote pages never receive Node.js or AgentBox IPC.
 - **Conversation-scoped development environments:** every conversation has a working directory. Configure JDK, Go, PHP, and Python runtimes; Python supports project `.venv`/`venv`, system interpreters, virtual environments, Conda environments, and custom interpreters.
 - **Multi-file Agent Skills:** Skills can include Markdown instructions, reference documents, and non-automatic Python or shell reference scripts. Pin Skills to a conversation, invoke `$skill-id`, use automatic retrieval, or let the model load a relevant Skill on demand. ZIP skill archives can be imported and exported.
 - **Rich chat interface:** Markdown, GFM, syntax-highlighted code, KaTeX math, multimodal attachments, image optimization and preview, editable conversation trees, regenerated branches, and version navigation.
@@ -46,8 +46,8 @@ The English documentation is in [`docs/`](./docs/README.md). The corresponding C
 
 ### Requirements
 
-- Node.js 24 or later
-- pnpm 11.24.0 (pinned by `packageManager`)
+- Node.js 24 or later (Node.js 24 is the CI baseline)
+- pnpm 11.24.0 (pinned by `packageManager`). Node.js 25+ no longer bundles Corepack, so install standalone Corepack or make the pinned pnpm version available before using the setup command below.
 - An OS credential backend: Windows credential protection, macOS Keychain, or Linux Secret Service
 
 ### Install and run
@@ -55,6 +55,8 @@ The English documentation is in [`docs/`](./docs/README.md). The corresponding C
 ```powershell
 git clone https://github.com/ac-1e9plus7/agent-box.git
 cd agent-box
+# Node.js 24 ships Corepack. On Node.js 25+, install standalone Corepack first,
+# or ensure pnpm 11.24.0 is already available.
 corepack enable
 pnpm install
 

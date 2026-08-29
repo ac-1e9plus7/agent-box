@@ -122,6 +122,41 @@ const reviewedZh = {
   'Browser download completed: {value0}': '浏览器下载已完成：{value0}',
   'Browser download did not complete: {value0}': '浏览器下载未完成：{value0}',
   'The browser cookie profile no longer belongs to a conversation.': '浏览器 Cookie 配置已不属于任何对话。',
+  'A conversation working directory overlaps AgentBox application data and cannot be included in a deep backup.':
+    '对话工作目录与 AgentBox 应用数据重叠，无法包含在深度备份中。',
+  'A skill archive file exceeds the maximum uncompressed size of {value0} MiB.':
+    'Skill 压缩包中的文件超过了 {value0} MiB 的解压后大小上限。',
+  'A Skill entry file must be an included Markdown document.': 'Skill 入口文件必须是随包提供的 Markdown 文档。',
+  'Skill files must be an array of valid text resources.': 'Skill 文件必须是由有效文本资源组成的数组。',
+  'The skill archive contains a file that is not valid UTF-8 text.': 'Skill 压缩包包含不是有效 UTF-8 文本的文件。',
+  'The skill archive contains an invalid file path.': 'Skill 压缩包包含无效的文件路径。',
+  'The skill archive contains more files than the limit.': 'Skill 压缩包中的文件数量超过上限。',
+  'The skill archive exceeds the maximum compressed size of {value0} MiB.':
+    'Skill 压缩包超过了 {value0} MiB 的压缩大小上限。',
+  'The skill archive exceeds the maximum uncompressed size of {value0} MiB.':
+    'Skill 压缩包超过了 {value0} MiB 的解压后总大小上限。',
+  'The skill archive must contain a Markdown entry document.': 'Skill 压缩包必须包含一个 Markdown 入口文档。',
+  'The skill archive contains too many entries.': 'Skill 压缩包包含过多条目。',
+  'A Skill archive text file cannot exceed {value0} characters.': 'Skill 压缩包中的文本文件不能超过 {value0} 个字符。',
+  'The maximum number of active Skills has been reached.': '已达到活动 Skill 数量上限。',
+  'Manual uploads use the system file picker. Approved Agent uploads are limited to the conversation working directory.':
+    '手动上传使用系统文件选择器；经过批准的 Agent 上传仅限当前对话工作目录。',
+  'Manual downloads go to the system Downloads folder. Approved Agent downloads stay in the conversation working directory; all browser downloads are limited to 100 MiB.':
+    '手动下载保存到系统“下载”目录；经过批准的 Agent 下载保留在对话工作目录中，所有浏览器下载均限制为 100 MiB。',
+  'Forward model, remote MCP, and built-in browser traffic; http is available for local proxies and https for remote proxies.':
+    '转发模型、远程 MCP 和内置浏览器流量；本地代理可使用 HTTP，远程代理必须使用 HTTPS。',
+  'Full Access skips all approval prompts for code, terminal, workspace, MCP, and built-in browser operations.':
+    'Full Access 会跳过代码、终端、工作区、MCP 和内置浏览器操作的全部审批提示。',
+  'The model can run terminal commands and code, use MCP tools with side effects, and operate browser pages including uploads and downloads. Use this only when you trust the model, connected MCP servers, visited websites, and task.':
+    '模型可以运行终端命令和代码、使用有副作用的 MCP 工具，并操作浏览器页面（包括上传和下载）。仅当信任模型、已连接的 MCP server、访问的网站和任务时才使用此选项。',
+  'Navigate the isolated built-in browser to an explicitly approved HTTPS URL or, when enabled, a loopback HTTP URL. Navigation does not return page contents; call the browser snapshot tool after the page loads.':
+    '让隔离式内置浏览器打开经过明确批准的 HTTPS URL，或在启用后打开环回 HTTP URL。导航不会返回页面内容；页面加载后请调用浏览器快照工具。',
+  'Type non-secret text into an editable element from the latest browser snapshot. Password, hidden, file, and fields identified through supported password, one-time-code, or cc-* autocomplete metadata are always rejected.':
+    '向最新浏览器快照中的可编辑元素输入非秘密文本。密码、隐藏、文件字段，以及通过受支持的 password、one-time-code 或 cc-* autocomplete 元数据识别出的字段始终会被拒绝。',
+  'Close the current conversation’s ephemeral built-in browser session and discard its live site data. When Cookie persistence is enabled, accepted cookies are saved as an encrypted Vault snapshot before closing.':
+    '关闭当前对话的临时内置浏览器会话并丢弃活动站点数据。启用 Cookie 持久化时，会在关闭前将已接受的 Cookie 保存为加密 Vault 快照。',
+  'Fixed skills are preloaded each round; automatic mode matches on request, and the model can also load other skills from the catalog on demand. You can pin up to 50 Skills.':
+    '固定 Skill 会在每轮预加载；自动模式按请求匹配，模型也可按需从目录加载其他 Skill。最多可固定 50 个 Skill。',
   'Too many browser cookie profiles.': '浏览器 Cookie 配置数量过多。',
   'Browser cookie storage is full.': '浏览器 Cookie 存储空间已满。',
   'Could not persist browser cookies.': '无法持久化浏览器 Cookie。',

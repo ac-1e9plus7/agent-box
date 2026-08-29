@@ -48,7 +48,6 @@ export interface BrowserDownloadEvent {
   tabId: string
   downloadId: string
   fileName: string
-  filePath?: string
   receivedBytes: number
   totalBytes: number
   status: 'started' | 'progressing' | 'completed' | 'cancelled' | 'interrupted'

@@ -67,7 +67,7 @@ sequenceDiagram
 
 - **OpenRouter**：Chat Completions 和 Responses 使用 `reasoning` 对象；启用时传入 `enabled`、`effort` 与 `exclude: false`，停用时传入 `effort: "none"`。
 - **OpenAI-compatible / CLIProxyAPI**：Chat Completions 按连接类型使用 `reasoning_effort`；Responses 使用 `reasoning`。普通 OpenAI/custom 连接停用推理时通常省略字段，CLIProxyAPI 会显式发送 `none`。
-- **Anthropic**：停用时发送 `{ type: "disabled" }`；默认的 adaptive thinking 使用 `{ type: "adaptive" }` 和 `output_config.effort`；manual extended thinking 使用 `{ type: "enabled", budget_tokens }`。手动预算依据 reasoning effort 和最大输出长度计算，且最大输出必须大于 1,024 tokens。
+- **Anthropic**：停用时发送 `{ type: "disabled" }`；默认的 adaptive thinking 使用 `{ type: "adaptive" }` 和 `output_config.effort`；AgentBox 会把 `minimal` reasoning effort 映射为 Anthropic 的 `low`，其他受支持值原样传递。manual extended thinking 使用 `{ type: "enabled", budget_tokens }`。手动预算依据 reasoning effort 和最大输出长度计算，且最大输出必须大于 1,024 tokens。
 
 响应侧统一生成 `reasoning-delta` 与 `TokenUsage.reasoningTokens`：
 
@@ -92,7 +92,7 @@ sequenceDiagram
 **设置 → 通用 → Agent Token 优化 → 服务方上下文复用**默认关闭，支持 `off`、`auto`、`prefix-cache` 和 `native-continuation` 四种模式。
 
 - 前缀缓存为 OpenAI Chat Completions 或 Responses 请求发送确定性的 SHA-256 缓存键；Anthropic 格式则在稳定的系统指令块上标记临时 `cache_control`。本地会话、服务方和模型 ID 会先散列，不会作为缓存键明文发送。
-- 原生续接用于 Responses 格式。第一次响应通过 `store: true` 选择服务方侧状态；后续模型轮次发送 `previous_response_id`、当前指令/工具，以及该响应之后新增的用户项或函数调用结果。通过校验的不透明响应句柄会保存在加密会话消息中，供下一次用户轮次继续链路。
+- 原生续接用于 Responses 格式。第一次响应通过 `store: true` 选择服务方侧状态；后续模型轮次发送 `previous_response_id`、当前指令/工具，以及该响应之后新增的用户项或函数调用结果。所有非无状态的 Responses 请求（包括原生续接）也会携带确定性的 `prompt_cache_key`；回退改变的是续接状态，而不是该缓存路由键是否存在。通过校验的不透明响应句柄会保存在加密会话消息中，供下一次用户轮次继续链路。
 - `auto` 只对直连 OpenAI Responses 优先使用原生续接；已知 OpenAI、Anthropic、OpenRouter 路径使用前缀缓存；未知 custom/CLIProxyAPI 能力保持无状态。显式模式可在自定义端点上乐观尝试相应线上结构。
 - 当服务方以策略相关的 HTTP 兼容性错误（`400`、`404`、`409`、`422`）拒绝时，本次 Agent 请求会停用该策略，并在执行任何本地工具之前重试。固定降级顺序为：原生续接 → 前缀缓存 → 现有无状态完整重放。限流、认证失败、服务端错误和无关校验错误不会被降级逻辑掩盖。
 
@@ -130,13 +130,13 @@ Web Search 只对 OpenRouter 连接开放，并可用于三种 API 格式。请�
 - 启用的 MCP server 所提供的外部工具。`auto` 检索模式使用 BM25 从本轮请求中选择最多 8 个相关工具；`all` 模式传入全部已发现工具。
 - AgentBox 内置工具：Skill loader、集成终端、有工作目录时可用的工作区文件读写工具、至少一个已启用 Skill 含 Python 文件时才加入的 JavaScript/Python code runner，以及两个浏览器开关都启用时才加入的可选隔离式浏览器工具族。
 
-模型返回的参数必须是 JSON 对象，并通过工具的 JSON Schema（AJV）校验。除本地只读 Skill loader 外，审批策略由工具 annotations 和内置工具风险定义共同决定：`always` 对每个适用调用询问，`sensitive` 只自动放行明确声明为只读、非破坏且不访问开放环境的工具，`full-access` 不弹出审批。审批等待时间可选择 5 分钟或直到用户决定/取消。
+模型返回的参数必须是 JSON 对象，并通过工具的 JSON Schema（AJV）校验。本地只读的 `agentbox_load_skill`、`agentbox_search_tools`、`agentbox_read_tool_result` 和 `agentbox_read_skill_resource` 会在审批评估前执行；它们都不会执行被搜索的工具或 Skill 脚本。其他调用由工具 annotations 和内置工具风险定义共同决定审批策略：`always` 对每个适用调用询问，`sensitive` 只自动放行明确声明为只读、非破坏且不访问开放环境的工具，`full-access` 不弹出审批。审批等待时间可选择 5 分钟或直到用户决定/取消。
 
 浏览器工具增加参数级审批和稳定标签定位。标签管理结果会列出每个 `tab_id`；后续调用默认操作当前活动标签，也可以指定其他标签。用户可以在当前内存浏览器会话内为某个来源授予页面读取/截图权限，但该权限绝不会同时授权点击、输入、上传或下载。导航参数只有在敏感 URL 查询键被脱敏后才会持久化。语义快照是带“不可信”标记的有界文本，截图是经过大小限制的 JPEG 工具内容；任何交互都会使该标签页的引用失效。Responses 与 Anthropic 在工具结果内携带截图；Chat Completions 会先收到协议要求的纯文本工具消息，再收到带“不可信工具图像”标签的 user image 消息。
 
 每次工具结果会转换回当前供应商协议并进入下一模型轮，同时记录 `toolExecutions` 和 `agentTrace`。工具轮次默认上限为 30，可配置范围为 1–100；超过上限后不会执行新增调用。上下文预算会先扣除工具定义的估算 token，再按手动或自动模式处理完整会话轮次；自动模式绝不删除 system message 和最新用户轮次。
 
-Agent 提供四项可独立开启的 token 优化，为了兼容性均默认关闭。工具结果压缩会在 renderer 事件和本地会话中保留完整结果，但将模型回放内容替换为确定性的首尾预览（默认 16,000 字符，可配置为 2,000–100,000），标记中保留 `call_id`；只读工具 `agentbox_read_tool_result` 可分段取回完整文本。动态工具挂载会在已授权的内置/MCP 联合目录上排序，初始默认最多挂载 4 个工具（可配置为 1–16），并始终保留 `agentbox_search_tools`，以便在下一模型轮次挂载匹配的已授权工具。Skill 资源懒加载与单次运行内上下文压缩详见对应模块文档。
+Agent 提供四项可独立开启的 token 优化，为了兼容性均默认关闭。工具结果压缩会在 renderer 事件和本地会话中保留完整结果，但把过大的模型可见文本/结构化回放替换为确定性的首尾预览（默认 16,000 字符，可配置为 2,000–100,000），标记中保留 `call_id`；浏览器截图等有界图像媒体仍作为类型化工具内容保留给下一次服务方调用，并使用 2 MiB 图像总保留预算以使 checkpoint artifact 保持在记录上限内。只读工具 `agentbox_read_tool_result` 可分段取回完整序列化结果。动态工具挂载会在已授权的内置/MCP 联合目录上排序，初始默认最多挂载 4 个排名工具（可配置为 1–16）。始终挂载的只读 `agentbox_search_tools` 以及启用后的结果/资源读取器不计入该排名上限，因此初始定义总数可能更高；匹配的已授权工具可在下一模型轮次挂载。Skill 资源懒加载与单次运行内上下文压缩详见对应模块文档。
 
 单次运行内上下文压缩会在可配置的软阈值触发（默认 70%，范围 50–95%）。它只移除当前用户消息之后产生的、完整且较早的工具轮次消息，将其替换为确定性摘要，并默认保留最近 3 个工具轮次（可配置为 1–10）。未完成调用和近期协议 call/result 对绝不会被拆分。
 
@@ -151,13 +151,14 @@ Agent 提供四项可独立开启的 token 优化，为了兼容性均默认关�
 - 供应商和远程 MCP Base URL 只允许 `http:` / `https:`。非回环主机必须使用 HTTPS；HTTP 仅允许 `localhost`、`::1` 和 `127.0.0.0/8`。保存时会移除 URL 中的用户名、密码、query 和 fragment。
 - Anthropic Messages API 对直接 Anthropic 类连接使用 `x-api-key`；经 OpenRouter 转发时使用 Bearer token。其他 API 格式使用 Bearer token。回环地址上的 CLIProxyAPI 连接可以不配置 API Key。
 - Gateway 的供应商请求和模型发现请求使用 `redirect: "error"`，不会自动跟随重定向到另一个地址。
+- 服务商自定义请求头最多 32 项。请求头名称和值拒绝 CR/LF，值最长 4,096 个字符，并阻止覆盖认证、代理认证、Cookie、Host 和 Content-Length。
 
 ### 全局代理
 
-「设置 → 通用 → 网络代理」中的 `off` 模式直接连接，`custom` 模式为 Gateway 和远程 MCP 各自缓存一个 `undici.ProxyAgent`。配置变化会在下一次请求时关闭旧 dispatcher 并创建新实例。
+「设置 → 通用 → 网络代理」中的 `off` 模式直接连接，`custom` 模式为 Gateway 和远程 MCP 各自缓存一个 `undici.ProxyAgent`。配置变化会在下一次请求时关闭旧 dispatcher 并创建新实例。内置浏览器 Session 在创建时和导航前通过 Electron `Session.setProxy` 使用同一设置；该 Chromium 路径与 `undici` 调度相互独立。
 
 - 回环代理可以使用 HTTP；远程代理必须使用 HTTPS。
-- 代理 URL 可以在 userinfo 中携带用户名和密码。设置 IPC 返回前会将其替换为 `***`，再次保存掩码值时会保留原凭据。
+- 代理 URL 可以在 userinfo 中携带用户名和密码。设置 IPC 返回前会将其替换为 `***`，再次保存掩码值时会保留原凭据。浏览器代理凭据只会在匹配的 Chromium 代理认证挑战中提供，并始终留在主进程。
 - Gateway 向 UI 返回错误前会替换供应商 API Key、代理用户名和代理密码。不得依赖普通错误文本来诊断或回显秘密值。
 
 ### 限制与超时

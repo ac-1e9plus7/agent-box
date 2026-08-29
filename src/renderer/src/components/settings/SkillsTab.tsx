@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { JSX } from 'react'
 import type { Skill, SkillFile, SkillInput } from '../../../../shared/types'
-import { exportSkillToZip, parseSkillFromZip } from '../../../../shared/skill-zip'
+import { MAX_SKILL_ZIP_COMPRESSED_BYTES, exportSkillToZip, parseSkillFromZip } from '../../../../shared/skill-zip'
 import { t } from '../../../../shared/i18n'
 import { Icon } from '../Icon'
 import { SettingsToggle } from './SettingsControls'
@@ -123,6 +123,14 @@ export function SkillsTab({
 
   const handleImportZipFile = async (file: File): Promise<void> => {
     setSkillImportError('')
+    if (file.size > MAX_SKILL_ZIP_COMPRESSED_BYTES) {
+      setSkillImportError(
+        t('The skill archive exceeds the maximum compressed size of {value0} MiB.', {
+          value0: MAX_SKILL_ZIP_COMPRESSED_BYTES / 1024 / 1024,
+        }),
+      )
+      return
+    }
     try {
       const buffer = await file.arrayBuffer()
       const candidate = await parseSkillFromZip(buffer)
@@ -173,13 +181,17 @@ export function SkillsTab({
         if (typeof item.systemPrompt !== 'string' || !item.systemPrompt.trim())
           throw new Error(t('Skill is missing a valid system prompt (systemPrompt)'))
 
+        const parsedFiles = parseSkillFiles(item.files)
+        if (item.files !== undefined && !parsedFiles) {
+          throw new Error(t('Skill files must be an array of valid text resources.'))
+        }
         const candidate: SkillInput = {
           id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : undefined,
           name: item.name.trim(),
           description: typeof item.description === 'string' ? item.description.trim() : '',
           icon: typeof item.icon === 'string' ? item.icon.trim() : undefined,
           entryFile: typeof item.entryFile === 'string' ? item.entryFile.trim() : 'SKILL.md',
-          files: parseSkillFiles(item.files),
+          files: parsedFiles,
           systemPrompt: item.systemPrompt.trim(),
           author: typeof item.author === 'string' ? item.author.trim() : undefined,
           version: typeof item.version === 'string' ? item.version.trim() : '1.0.0',

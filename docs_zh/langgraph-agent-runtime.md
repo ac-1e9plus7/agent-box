@@ -28,14 +28,14 @@ START -> model -> tools -> model -> ... -> terminal -> END
 
 图使用 provider-neutral 的 AgentBox 消息，而不是 LangChain message class。
 
-| 状态字段         | 含义                                                         |
-| ---------------- | ------------------------------------------------------------ |
-| `messages`       | 为下一 provider 请求准备的上下文                             |
-| `turn`           | 当前运行已进入 model node 的次数                             |
-| `toolTurns`      | 请求工具并已进入处理的模型响应数                             |
-| `modelResult`    | 最新 provider stream 的归一化结果，包含 tool call 与回放数据 |
-| `terminal`       | 终态回调是否完成                                             |
-| `terminalReason` | `complete`、`unexpected_tool_call` 或 `tool_turn_limit`      |
+| 状态字段         | 含义                                                                    |
+| ---------------- | ----------------------------------------------------------------------- |
+| `messages`       | 为下一 provider 请求准备的上下文                                        |
+| `turn`           | 当前运行已进入 model node 的次数                                        |
+| `toolTurns`      | 请求工具并已进入处理的模型响应数                                        |
+| `modelResult`    | 最新 provider stream 的归一化结果，包含 tool call 与回放数据            |
+| `terminal`       | 终态回调是否完成                                                        |
+| `terminalReason` | `complete`、`output_limit`、`unexpected_tool_call` 或 `tool_turn_limit` |
 
 一个 provider 响应即使包含多个 tool call，也只消耗一个 tool turn。调用继续按 provider 顺序处理，保持审批顺序和副作用行为。
 
@@ -43,6 +43,7 @@ START -> model -> tools -> model -> ... -> terminal -> END
 
 每个 model node 完成后，图选择一条路径：
 
+- 输出上限结束原因（`length`、`max_tokens`、`max_output_tokens` 或 `incomplete`）：以 `output_limit` 终止并保留 checkpoint；
 - 无 tool call：执行正常完成处理器；
 - 非 Agent 模式下的 tool call：不执行并以 `unexpected_tool_call` 终止；
 - 已达工具上限：为每个未执行调用发送错误结果，并以 `tool_turn_limit` 终止；
@@ -60,7 +61,7 @@ Provider streaming 仍位于 `ChatGateway`。在 model node 运行期间，文�
 
 同一请求级 `AbortSignal` 传给图和所有回调，用于取消 provider fetch、MCP、代码、终端、工作区和审批等待。120 秒网络停滞定时器只在等待 provider 数据时运行，工具处理期间暂停。
 
-内置浏览器操作使用同一个 signal 处理导航、截图、上传和下载取消，但活动多标签 `WebContentsView` 会话属于对话，而不是 graph state。Checkpoint 和 `agentTrace` 只保存脱敏调用以及已完成的语义/截图结果，不保存标签状态、Cookie 值、DOM 引用、进行中的下载或导航状态。可选 Cookie 持久化使用独立加密 Vault profile，绝不进入 graph state。应用重启或浏览器会话被回收后，Agent 必须重新列出/创建标签并检查页面；过期元素引用会被拒绝，不会重放。
+内置浏览器导航、截图、上传和下载都使用同一个 signal。已取消的请求不能开始这些操作；进行中的 Agent 下载会在可行时取消，且会话队列会等待进行中的原生浏览器工作结束后才启动后续操作。在取消前瞬间已派发的 CDP 文件选择仍可能留下不确定的外部页面状态，因此恢复后的 Agent 在重试任何中断的浏览器副作用前必须先检查状态。活动多标签 `WebContentsView` 会话属于对话，而不是 graph state。Checkpoint 和 `agentTrace` 只保存脱敏调用以及已完成的语义/截图结果，不保存标签状态、Cookie 值、DOM 引用、进行中的下载或导航状态。可选 Cookie 持久化使用独立加密 Vault profile，绝不进入 graph state。应用重启或浏览器会话被回收后，Agent 必须重新列出/创建标签并检查页面；过期元素引用会被拒绝，不会重放。
 
 ## Checkpoint 行为
 
@@ -68,13 +69,15 @@ Renderer 创建的 Agent 请求带 `responseMessageId`。Gateway 从 conversatio
 
 直接 graph resume 只用于 provider node 失败：
 
-| 中断                       | 恢复路径                                                  |
-| -------------------------- | --------------------------------------------------------- |
-| 限流、网络、超时、API 错误 | Descriptor 和上下文 digest 匹配时恢复原 graph thread      |
-| Thread 缺失或过期          | 从已校验 `agentTrace` 重建 provider 历史，并创建新 thread |
-| 用户取消                   | `agentTrace` 回退；中断可能发生在副作用内                 |
-| 输出或工具轮次上限         | `agentTrace` 回退并启动新运行                             |
-| 未知工具/执行失败          | `agentTrace` 回退；不重新进入外部状态未知的操作           |
+| 中断                                    | 恢复路径                                                  |
+| --------------------------------------- | --------------------------------------------------------- |
+| 限流、网络、超时、API 错误              | Descriptor 和上下文 digest 匹配时恢复原 graph thread      |
+| Thread 缺失或过期                       | 从已校验 `agentTrace` 重建 provider 历史，并创建新 thread |
+| 用户取消                                | `agentTrace` 回退；中断可能发生在副作用内                 |
+| 输出或工具轮次上限                      | `agentTrace` 回退并启动新运行                             |
+| 未捕获的 tool-node 失败或外部状态不确定 | `agentTrace` 回退；不重新进入外部状态未知的操作           |
+
+未知、无权、格式错误或 Schema 不合法的调用，以及已处理的执行器错误，会变成 error tool result 并通常继续到下一模型轮次。只有逃出 tool node 的异常或外部状态不确定的操作才会进入上表的回退路径。
 
 正常完成会删除 checkpoint thread。中断 thread 保留到恢复、随消息/会话删除，或在 checkpoint 配额下整体回收。
 

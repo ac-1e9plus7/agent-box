@@ -343,7 +343,9 @@ export function McpTab({
           <div>
             <strong>{t('Tool approval policy')}</strong>
             <small>
-              {t('Full Access skips all approval prompts for code execution, terminal commands, and MCP tools')}
+              {t(
+                'Full Access skips all approval prompts for code, terminal, workspace, MCP, and built-in browser operations.',
+              )}
             </small>
           </div>
           <div className="segmented-control">
@@ -374,7 +376,7 @@ export function McpTab({
               <strong>{t('Full Access is enabled')}</strong>
               <small>
                 {t(
-                  'The model can run terminal commands and code, and call MCP tools with side effects. Use this only when you trust the model, connected MCP servers, and task.',
+                  'The model can run terminal commands and code, use MCP tools with side effects, and operate browser pages including uploads and downloads. Use this only when you trust the model, connected MCP servers, visited websites, and task.',
                 )}
               </small>
             </span>

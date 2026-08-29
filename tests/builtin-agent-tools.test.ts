@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { BUILTIN_AGENT_TOOL_SERVER_IDS, createBuiltinAgentToolCatalog } from '../src/shared/builtin-agent-tools'
+import { setLanguage } from '../src/shared/i18n'
 import type { Skill } from '../src/shared/types'
 
 function makeSkill(overrides: Partial<Skill> = {}): Skill {
@@ -57,6 +58,25 @@ describe('built-in Agent tool catalog', () => {
       'agentbox_browser_scroll',
       'agentbox_browser_close',
     ])
+  })
+
+  it('describes loopback navigation, recognized sensitive fields, and Cookie snapshots accurately', () => {
+    setLanguage('en-US')
+    try {
+      const tools = createBuiltinAgentToolCatalog([makeSkill()], { browserEnabled: true })
+
+      expect(tools.find((tool) => tool.modelName === 'agentbox_browser_navigate')?.description).toContain(
+        'loopback HTTP',
+      )
+      expect(tools.find((tool) => tool.modelName === 'agentbox_browser_type')?.description).toContain(
+        'cc-* autocomplete',
+      )
+      expect(tools.find((tool) => tool.modelName === 'agentbox_browser_close')?.description).toContain(
+        'encrypted Vault snapshot',
+      )
+    } finally {
+      setLanguage('zh-CN')
+    }
   })
 
   it('adds screenshot, upload, and download tools only for their explicit settings', () => {

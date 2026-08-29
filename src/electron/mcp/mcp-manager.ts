@@ -141,19 +141,19 @@ export class McpManager {
   }
 
   private async fetchWithProxy(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    const options = { ...(init || {}), redirect: 'error' as const } as RequestInit & { dispatcher?: ProxyAgent }
     const { proxy } = this.repository.getSettings()
     if (proxy.mode !== 'custom' || !proxy.url) {
       if (this.proxyAgent) void this.proxyAgent.close().catch(() => undefined)
       this.proxyAgent = undefined
       this.proxyUrl = undefined
-      return fetch(input, init)
+      return fetch(input, options)
     }
     if (!this.proxyAgent || this.proxyUrl !== proxy.url) {
       if (this.proxyAgent) void this.proxyAgent.close().catch(() => undefined)
       this.proxyAgent = new ProxyAgent(proxy.url)
       this.proxyUrl = proxy.url
     }
-    const options = { ...(init || {}) } as RequestInit & { dispatcher?: ProxyAgent }
     options.dispatcher = this.proxyAgent
     return fetch(input, options)
   }

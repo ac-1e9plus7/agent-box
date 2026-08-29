@@ -82,7 +82,7 @@ export function interruptionFromStreamEvent(
       finishReason,
     }
   }
-  if (finishReason && ['length', 'max_tokens', 'incomplete'].includes(finishReason)) {
+  if (finishReason && ['length', 'max_tokens', 'max_output_tokens', 'incomplete'].includes(finishReason)) {
     return {
       reason: 'output_limit',
       message: t('The model reached its output limit. The current Agent checkpoint was preserved.'),

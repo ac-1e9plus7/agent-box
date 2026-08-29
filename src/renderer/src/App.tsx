@@ -35,7 +35,7 @@ import { getActiveMessageChain, getAncestorsForRegeneration } from '../../shared
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
 import { runStreamWithReplay } from './stream-helper'
-import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import { DEFAULT_AGENT_TOOL_TURN_LIMIT, MAX_AGENT_SKILL_ACTIVATIONS } from '../../shared/agent-limits'
 import {
   DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
   DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
@@ -611,9 +611,10 @@ export default function App(): JSX.Element {
   const handleSkillSelectionChange = useCallback(
     (skillIds: string[]): void => {
       if (!activeConversation) return
+      const selectedSkillIds = [...new Set(skillIds)].slice(0, MAX_AGENT_SKILL_ACTIVATIONS)
       const nextConversation: Conversation = {
         ...activeConversation,
-        skillIds: skillIds.length > 0 ? skillIds : undefined,
+        skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : undefined,
         updatedAt: new Date().toISOString(),
       }
       replaceConversations((current) =>

@@ -83,8 +83,8 @@ export async function buildDeveloperEnvironment(
   for (const runtime of [jdk, go, php, python]) {
     if (runtime && isAbsolute(runtime.executable)) pathEntries.push(dirname(runtime.executable))
   }
-  if (jdk?.home) env.JAVA_HOME = jdk.home
-  if (go?.home) env.GOROOT = go.home
+  setRuntimeRootEnvironment(env, 'JAVA_HOME', jdk?.home)
+  setRuntimeRootEnvironment(env, 'GOROOT', go?.home)
   if (python?.environmentPath) {
     if (python.environmentType === 'conda') {
       env.CONDA_PREFIX = python.environmentPath
@@ -96,6 +96,17 @@ export async function buildDeveloperEnvironment(
     .filter(Boolean)
     .join(process.platform === 'win32' ? ';' : ':')
   return env
+}
+
+function setRuntimeRootEnvironment(
+  environment: NodeJS.ProcessEnv,
+  key: 'JAVA_HOME' | 'GOROOT',
+  value: string | undefined,
+): void {
+  for (const existingKey of Object.keys(environment)) {
+    if (existingKey.toLowerCase() === key.toLowerCase()) delete environment[existingKey]
+  }
+  if (value) environment[key] = value
 }
 
 export function pythonExecutableInEnvironment(environmentPath: string, platform: NodeJS.Platform): string {
@@ -183,32 +194,35 @@ async function resolveRuntimeUncached(
 ): Promise<ResolvedRuntime | undefined> {
   if (kind === 'jdk') {
     const config = settings.jdk
-    const candidates =
-      config.mode === 'custom'
-        ? [join(config.home, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')]
-        : [
-            process.env.JAVA_HOME
-              ? join(process.env.JAVA_HOME, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')
-              : '',
-            process.platform === 'win32' ? 'java.exe' : 'java',
-          ]
-    return probeCandidates(
-      'jdk',
-      candidates,
-      ['-version'],
-      config.mode === 'custom' ? config.home : process.env.JAVA_HOME,
-    )
+    const javaExecutable = process.platform === 'win32' ? 'java.exe' : 'java'
+    if (config.mode === 'custom') {
+      return probeCandidates('jdk', [join(config.home, 'bin', javaExecutable)], ['-version'], config.home)
+    }
+    const fromJavaHome = process.env.JAVA_HOME
+      ? await probeCandidates(
+          'jdk',
+          [join(process.env.JAVA_HOME, 'bin', javaExecutable)],
+          ['-version'],
+          process.env.JAVA_HOME,
+        )
+      : undefined
+    return fromJavaHome ?? probeCandidates('jdk', [javaExecutable], ['-version'])
   }
   if (kind === 'go') {
     const config = settings.go
-    const candidates =
-      config.mode === 'custom'
-        ? [config.executable || join(config.root, 'bin', process.platform === 'win32' ? 'go.exe' : 'go')]
-        : [
-            process.env.GOROOT ? join(process.env.GOROOT, 'bin', process.platform === 'win32' ? 'go.exe' : 'go') : '',
-            process.platform === 'win32' ? 'go.exe' : 'go',
-          ]
-    return probeCandidates('go', candidates, ['version'], config.root || process.env.GOROOT)
+    const goExecutable = process.platform === 'win32' ? 'go.exe' : 'go'
+    if (config.mode === 'custom') {
+      return probeCandidates(
+        'go',
+        [config.executable || join(config.root, 'bin', goExecutable)],
+        ['version'],
+        config.root,
+      )
+    }
+    const fromGoRoot = process.env.GOROOT
+      ? await probeCandidates('go', [join(process.env.GOROOT, 'bin', goExecutable)], ['version'], process.env.GOROOT)
+      : undefined
+    return fromGoRoot ?? probeCandidates('go', [goExecutable], ['version'])
   }
   if (kind === 'php') {
     const config = settings.php

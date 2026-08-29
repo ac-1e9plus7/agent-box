@@ -156,6 +156,49 @@ describe('conversation backup export', () => {
     }
   })
 
+  it('excludes protected application data nested beneath a deep-backup workspace', async () => {
+    const workspace = join(temporaryDirectory, 'workspace')
+    const applicationData = join(workspace, 'agentbox-user-data')
+    const outputPath = join(temporaryDirectory, 'protected-data.zip')
+    await mkdir(join(applicationData, 'vault'), { recursive: true })
+    await writeFile(join(workspace, 'README.md'), '# Workspace\n', 'utf8')
+    await writeFile(join(applicationData, 'vault', 'master-key.bin'), 'sensitive', 'utf8')
+
+    await createBackupArchive({
+      outputPath,
+      input: { mode: 'deep' },
+      conversations: [{ ...sampleConversation('protected'), workingDirectory: workspace }],
+      appInfo: { name: 'AgentBox', version: 'test', platform: process.platform },
+      protectedPaths: [applicationData],
+    })
+
+    const { entries, close } = await openArchive(outputPath)
+    try {
+      const filenames = entries.map((entry) => entry.filename)
+      expect(filenames).toContain('workspaces/workspace-0001/README.md')
+      expect(filenames.some((filename) => filename.includes('agentbox-user-data'))).toBe(false)
+    } finally {
+      await close()
+    }
+  })
+
+  it('rejects an application-data directory as a deep-backup workspace', async () => {
+    const applicationData = join(temporaryDirectory, 'agentbox-user-data')
+    const outputPath = join(temporaryDirectory, 'application-data.zip')
+    await mkdir(applicationData)
+
+    await expect(
+      createBackupArchive({
+        outputPath,
+        input: { mode: 'deep' },
+        conversations: [{ ...sampleConversation('protected-root'), workingDirectory: applicationData }],
+        appInfo: { name: 'AgentBox', version: 'test', platform: process.platform },
+        protectedPaths: [applicationData],
+      }),
+    ).rejects.toThrow()
+    expect(await readdir(temporaryDirectory)).not.toContain('application-data.zip')
+  })
+
   it('fails before writing an archive when a deep-backup workspace is unavailable', async () => {
     const outputPath = join(temporaryDirectory, 'missing.zip')
     const conversation = {

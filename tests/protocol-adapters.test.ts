@@ -639,6 +639,59 @@ describe('request body adapters', () => {
     ])
   })
 
+  it('replays a compacted text preview alongside retained tool images', () => {
+    const mediaMessages: Message[] = [
+      { id: 'user-media', role: 'user', content: 'Inspect the image', createdAt: timestamp },
+      {
+        id: 'assistant-media',
+        role: 'assistant',
+        content: '',
+        createdAt: timestamp,
+        agentTrace: [
+          {
+            type: 'tool_call',
+            turn: 1,
+            callId: 'call-media',
+            toolName: 'browser_screenshot',
+            modelToolName: 'agentbox_browser_screenshot',
+            args: {},
+          },
+          {
+            type: 'tool_result',
+            turn: 1,
+            callId: 'call-media',
+            toolName: 'browser_screenshot',
+            result: '[compacted call_id="call-media"]',
+            resultContent: [{ type: 'image', mimeType: 'image/jpeg', data: 'abc==' }],
+          },
+        ],
+      },
+    ]
+    const mediaRequest = { ...request, messages: mediaMessages }
+
+    const responses = buildRequestBody(
+      'openai-responses',
+      { kind: 'openai' },
+      model,
+      mediaMessages,
+      mediaRequest,
+      4_096,
+    )
+    const anthropic = buildRequestBody(
+      'anthropic-messages',
+      { kind: 'anthropic' },
+      model,
+      mediaMessages,
+      mediaRequest,
+      4_096,
+    )
+
+    expect(JSON.stringify(responses.input)).toContain('compacted call_id')
+    expect(JSON.stringify(responses.input)).toContain('data:image/jpeg;base64,abc==')
+    expect(JSON.stringify(anthropic.messages)).toContain('compacted call_id')
+    expect(JSON.stringify(anthropic.messages)).toContain('abc==')
+  })
+
   it('uses adaptive Anthropic thinking and maps unsupported minimal effort to low', () => {
     const body = buildRequestBody(
       'anthropic-messages',

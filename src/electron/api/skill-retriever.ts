@@ -2,27 +2,29 @@ import type { Message, Skill } from '../../shared/types'
 import { tokenize } from '../mcp/tool-retriever'
 import { t } from '../../shared/i18n'
 
-const GENERIC_TERMS = new Set([
-  t('one'),
-  t('one time'),
-  t('this'),
-  t('that'),
-  t('What'),
-  t('skillRetrieval.howVariant'),
-  t('how'),
-  t('Why'),
-  t('whether'),
-  t('Can'),
-  t('help me'),
-  t('please help'),
-  t('need'),
-  t('use'),
-  t('conduct'),
-  t('content'),
-  t('Task'),
-  t('question'),
-  t('analyze'),
-])
+function genericTerms(): Set<string> {
+  return new Set([
+    t('one'),
+    t('one time'),
+    t('this'),
+    t('that'),
+    t('What'),
+    t('skillRetrieval.howVariant'),
+    t('how'),
+    t('Why'),
+    t('whether'),
+    t('Can'),
+    t('help me'),
+    t('please help'),
+    t('need'),
+    t('use'),
+    t('conduct'),
+    t('content'),
+    t('Task'),
+    t('question'),
+    t('analyze'),
+  ])
+}
 
 /**
  * Builds a bounded routing query from recent user context and attachment metadata.
@@ -62,7 +64,8 @@ export function retrieveExplicitlyMentionedSkills(query: string, skills: Skill[]
 export function retrieveRelevantSkills(query: string, skills: Skill[], maxSkills = 2): Skill[] {
   const normalizedQuery = query.toLowerCase()
   const explicitIds = new Set(retrieveExplicitlyMentionedSkills(query, skills).map((skill) => skill.id))
-  const queryTerms = Array.from(new Set(tokenize(query))).filter((term) => !GENERIC_TERMS.has(term))
+  const excludedTerms = genericTerms()
+  const queryTerms = Array.from(new Set(tokenize(query))).filter((term) => !excludedTerms.has(term))
   if (queryTerms.length === 0 && explicitIds.size === 0) return []
 
   return skills
@@ -92,6 +95,7 @@ export function retrieveRelevantSkills(query: string, skills: Skill[], maxSkills
 
 function skillSearchDocument(skill: Skill): string {
   const fileText = skill.files
+    .filter((file) => file.kind !== 'other')
     .slice(0, 20)
     .map((file) => `${file.path} ${file.content.slice(0, 4_000)}`)
     .join(' ')

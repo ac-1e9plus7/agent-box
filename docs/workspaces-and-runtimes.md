@@ -10,7 +10,7 @@ A working directory gives each conversation project context. It determines the e
 
 - Every new conversation must store an absolute local directory. Legacy conversations without one remain readable, but a directory must be selected before sending another message.
 - The Vault stores only a normalized directory-path reference. Creating a conversation does not copy, package, or encrypt project files.
-- The global **New conversation** dialog can reuse the current directory, the default from Settings, or a recently used directory (up to 6 displayed), and can open the system directory picker. Candidates are deduplicated by normalized full path.
+- The global **New conversation** dialog can reuse the current directory, the default from Settings, or up to 6 recently used directories still referenced by existing conversations, and can open the system directory picker. This is reconstructed from retained conversation paths rather than a separate persistent directory-history list. Candidates are deduplicated by normalized full path.
 - The sidebar groups conversations by full path while displaying the last path component as the label. Different paths with the same final directory name remain separate. Each group has a shortcut for starting a conversation in that directory.
 - The directory control in the top bar can change the current conversation's directory or assign one to a legacy conversation. Changing it updates only the reference and does not move project files.
 - Agent System Instructions receive the current directory and direct the model to keep relative paths and project operations within that boundary.
@@ -19,9 +19,10 @@ A working directory gives each conversation project context. It determines the e
 
 Only when the user explicitly selects a deep backup does [`src/electron/backup/backup-export.ts`](../src/electron/backup/backup-export.ts) walk every working directory referenced by a conversation in read-only mode:
 
-- Real paths are deduplicated, so the same directory is archived once while retaining the conversations that reference it.
-- Empty directories are preserved. A symbolic link is stored as a link entry, and its target is not followed.
-- The backup output and temporary output paths are excluded from traversal to avoid archiving the file being generated.
+- Real paths are deduplicated, so the same directory is archived once while retaining the conversations that reference it. A workspace root that resolves within the current AgentBox user-data root is rejected.
+- Empty directories are preserved. A symbolic link found beneath the resolved workspace root is stored as a link entry, and its target is not followed; a symbolic-link workspace root is resolved to its target for validation and deduplication.
+- The backup output, temporary output paths, and current AgentBox user-data root are excluded from traversal to avoid archiving the file being generated or active application data.
+- If any referenced workspace root is missing, unreadable, or not a directory, the whole deep export fails before an archive is written; use a shallow backup or correct the stale path.
 - This does not change the normal Vault model, which continues to store path references only.
 
 ---
@@ -60,7 +61,7 @@ The Shell is selected under **Settings → General → Integrated terminal shell
 - **macOS**: the `SHELL` environment variable → `/bin/zsh` → `/bin/bash` → `/bin/sh`.
 - **Linux/other POSIX platforms**: the `SHELL` environment variable → `/bin/bash` → `/usr/bin/bash` → `/bin/zsh` → `/usr/bin/fish` → `/bin/sh`.
 
-Each candidate is tested with a no-op command and a 2-second timeout, and the first working result is cached. Custom mode accepts an executable name or path plus one launch argument per line. PowerShell, cmd, Fish, and common POSIX shells receive the appropriate command flag automatically. Other custom shells can use a `{command}` placeholder in a launch argument.
+Each candidate is tested with a no-op command and a 2-second timeout, and the first working result is cached. Custom mode accepts an executable name or path up to 2,000 characters plus at most 64 launch arguments of up to 4,096 characters each. PowerShell, cmd, Fish, and common POSIX shells receive the appropriate command flag automatically. Other custom shells can use a `{command}` placeholder in a launch argument. Runtime path inputs are limited to 4,096 characters and reject NUL/newline input.
 
 Execution limits:
 
@@ -73,7 +74,7 @@ Execution limits:
 
 ## Developer Runtime Resolution
 
-JDK, Go, PHP, and Python are configured and tested individually under **Settings → Developer Runtimes**. Resolution is implemented in [`src/electron/api/runtime-environments.ts`](../src/electron/api/runtime-environments.ts).
+JDK, Go, PHP, and Python are configured and tested individually under **Settings → Developer Runtimes**. Resolution is implemented in [`src/electron/api/runtime-environments.ts`](../src/electron/api/runtime-environments.ts) and cached by runtime kind, settings, Python working directory, and platform. Creating/deleting a project environment, changing relevant process environment variables, or installing a runtime may require a configuration-key change, cache eviction, or application restart before a new probe is observed.
 
 | Runtime | Automatic mode                                   | Custom mode                                                             |
 | ------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
@@ -99,7 +100,7 @@ System candidate order is `python.exe` → `python3.exe` → `py.exe -3` on Wind
 
 - The Conda executable defaults to `conda`, or it can be the full path to `conda`/`conda.exe`.
 - In Conda mode, the UI runs `conda env list --json` with a 5-second timeout and parses `root_prefix`, `active_prefix`, and deduplicated `envs` entries.
-- After successful discovery, the list first matches the existing configuration, otherwise selects the active environment or the first environment, and stores its actual prefix path. If discovery fails, a name or absolute prefix can still be entered manually.
+- After successful discovery, the list first matches the existing configuration and stores that environment's actual prefix path. A non-empty configuration that does not match remains unchanged for manual correction; only an empty configuration falls back to the active environment or the first environment. If discovery fails, a name or absolute prefix can still be entered manually.
 - Python is started directly from the resolved prefix; AgentBox does not invoke `conda activate` or `conda run`.
 
 On Windows, paths copied from File Explorer can be pasted with their surrounding double quotes. [`src/electron/runtime-path.ts`](../src/electron/runtime-path.ts) removes those quotes and normalizes the path for the host platform. The Windows Conda interpreter at the prefix root must remain distinct from the venv `Scripts` layout.
@@ -108,7 +109,7 @@ On Windows, paths copied from File Explorer can be pasted with their surrounding
 
 ## How Runtimes Affect the Terminal and Code Runner
 
-Before each terminal command, AgentBox resolves all four runtime categories and builds an environment:
+Before each terminal command, AgentBox retrieves the cached resolution for all four runtime categories and builds an environment:
 
 - Deduplicated directories containing the resolved executables are prepended to `PATH`.
 - `JAVA_HOME` and `GOROOT` are set when a usable runtime root is available.

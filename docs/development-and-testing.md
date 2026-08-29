@@ -6,24 +6,24 @@ This document reflects the current `package.json`, Vitest, electron-vite, electr
 
 ## Development commands
 
-CI currently uses Node.js 24 and pnpm 11.24.0 as its baseline. The repository requires Node.js 24 or later through `engines` and pins pnpm through `packageManager`; matching those versions is the first step when investigating environment-specific behavior.
+CI currently uses Node.js 24 and pnpm 11.24.0 as its baseline. The repository requires Node.js 24 or later through `engines` and pins pnpm through `packageManager`; matching those versions is the first step when investigating environment-specific behavior. Node.js 25+ no longer distributes Corepack, so a Node 25+ developer must install standalone Corepack or otherwise make pnpm 11.24.0 available rather than assuming `corepack enable` exists.
 
-| Command             | Current behavior                                                                                                      |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `pnpm install`      | Install dependencies; CI uses `pnpm install --frozen-lockfile`                                                        |
-| `pnpm dev`          | Start Electron and the renderer development server through `electron-vite dev`                                        |
-| `pnpm preview`      | Preview an existing electron-vite build                                                                               |
-| `pnpm typecheck`    | Check main/preload/shared with `tsconfig.node.json` and the renderer with `tsconfig.web.json`, without emitting files |
-| `pnpm lint`         | Run ESLint with TypeScript type information and fail on warnings                                                      |
-| `pnpm lint:fix`     | Apply ESLint's safe automatic fixes                                                                                   |
-| `pnpm format`       | Format supported source, configuration, stylesheet, and documentation files with Prettier                             |
-| `pnpm format:check` | Verify Prettier formatting without modifying files                                                                    |
-| `pnpm test`         | Run the complete test suite once through `vitest run`                                                                 |
-| `pnpm test:watch`   | Run Vitest in watch mode                                                                                              |
-| `pnpm check`        | Run type checking, linting, formatting, localization checks, and the complete test suite                              |
-| `pnpm build`        | Run `pnpm typecheck`, then `electron-vite build`                                                                      |
-| `pnpm package`      | Build, then produce an unpacked application with `electron-builder --dir`                                             |
-| `pnpm dist`         | Build, then produce electron-builder distributables for the current platform                                          |
+| Command             | Current behavior                                                                                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`      | Install dependencies; CI uses `pnpm install --frozen-lockfile`                                                                                                                                                            |
+| `pnpm dev`          | Start Electron and the renderer development server through `electron-vite dev`                                                                                                                                            |
+| `pnpm preview`      | Preview an existing electron-vite build                                                                                                                                                                                   |
+| `pnpm typecheck`    | Check main/preload/shared with `tsconfig.node.json` and the renderer with `tsconfig.web.json`, without emitting JavaScript or declaration files; composite TypeScript projects may refresh ignored `*.tsbuildinfo` caches |
+| `pnpm lint`         | Run ESLint with TypeScript type information and fail on warnings                                                                                                                                                          |
+| `pnpm lint:fix`     | Apply ESLint's safe automatic fixes                                                                                                                                                                                       |
+| `pnpm format`       | Format supported source, configuration, stylesheet, and documentation files with Prettier                                                                                                                                 |
+| `pnpm format:check` | Verify Prettier formatting without modifying files                                                                                                                                                                        |
+| `pnpm test`         | Run the complete test suite once through `vitest run`                                                                                                                                                                     |
+| `pnpm test:watch`   | Run Vitest in watch mode                                                                                                                                                                                                  |
+| `pnpm check`        | Run type checking, linting, formatting, localization checks, and the complete test suite                                                                                                                                  |
+| `pnpm build`        | Run `pnpm typecheck`, then `electron-vite build`                                                                                                                                                                          |
+| `pnpm package`      | Build, then produce an unpacked application with `electron-builder --dir`                                                                                                                                                 |
+| `pnpm dist`         | Build, then produce electron-builder distributables for the current platform                                                                                                                                              |
 
 ## Build output and packaged smoke tests
 
@@ -39,7 +39,7 @@ Then launch the unpacked application for the current platform. On Windows, verif
 
 ## Vitest test system
 
-[`vitest.config.ts`](../vitest.config.ts) uses the Node environment by default and matches both `tests/**/*.test.ts` and `tests/**/*.test.tsx`. Pure renderer behavior remains isolated in testable functions where practical. Renderer integration tests opt into jsdom at the file level, render the real React components with Testing Library, and replace `window.agentbox` with an in-memory preload-bridge mock; they are not full Electron UI automation. `tsconfig.node.json` includes the complete renderer source tree because these tests import real component graphs, and both `.ts` and `.tsx` tests participate in TypeScript checking.
+[`vitest.config.ts`](../vitest.config.ts) uses the Node environment by default and matches both `tests/**/*.test.ts` and `tests/**/*.test.tsx`. Pure renderer behavior remains isolated in testable functions where practical. Renderer integration tests opt into jsdom at the file level and render real React components with Testing Library; `app.integration` and `browser-panel.integration` install a typed in-memory `window.agentbox` preload-bridge mock, while `settings-dialog.integration` and `chat-content-usage` exercise component props/callbacks without crossing that bridge. They are not full Electron UI automation. `tsconfig.node.json` includes the complete renderer source tree because these tests import real component graphs, and both `.ts` and `.tsx` tests participate in TypeScript checking.
 
 | Area                                                    | Representative tests                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -64,7 +64,7 @@ pnpm check
 pnpm build
 ```
 
-`pnpm check` is the non-mutating quality gate. Use `pnpm lint:fix` and `pnpm format` to apply automatic fixes before rerunning it. Generated locale bundles and package-manager lock data remain excluded from Prettier so their generators stay authoritative. `pnpm build` includes type checking but does not include the other checks. Changes to packaging entry points, dependency externalization, preload, or the Electron startup lifecycle also require `pnpm package` and an unpacked-application smoke test.
+`pnpm check` is the source-non-mutating quality gate: it does not rewrite application source, but its composite TypeScript checks may refresh ignored `*.tsbuildinfo` caches. Use `pnpm lint:fix` and `pnpm format` to apply automatic fixes before rerunning it. Generated locale bundles and package-manager lock data remain excluded from Prettier so their generators stay authoritative. `pnpm build` includes type checking but does not include the other checks. Changes to packaging entry points, dependency externalization, preload, or the Electron startup lifecycle also require `pnpm package` and an unpacked-application smoke test.
 
 ## GitHub Actions
 

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { McpToolResultContent } from '../src/shared/types'
 
 vi.mock('electron', () => ({
   safeStorage: {
@@ -12,7 +13,7 @@ vi.mock('electron', () => ({
 }))
 
 const { AppRepository } = await import('../src/electron/storage/app-repository')
-const { McpClient } = await import('../src/electron/mcp/mcp-client')
+const { McpClient, normalizeToolResult } = await import('../src/electron/mcp/mcp-client')
 const { McpManager } = await import('../src/electron/mcp/mcp-manager')
 
 const mockServerScript = `
@@ -106,6 +107,37 @@ describe('MCP Client & McpManager (Stdio Transport)', () => {
     rmSync(tempDirectory, { recursive: true, force: true })
   })
 
+  it('enforces aggregate text and binary budgets for rich MCP results', () => {
+    const normalized = normalizeToolResult({
+      content: [
+        { type: 'text', text: 'a'.repeat(80_000) },
+        { type: 'text', text: 'b'.repeat(80_000) },
+        { type: 'image', mimeType: `image/${'x'.repeat(1_000)}`, data: 'c'.repeat(1_500_000) },
+        { type: 'image', mimeType: 'image/jpeg', data: 'd'.repeat(1_500_000) },
+      ],
+      structuredContent: { details: 'e'.repeat(80_000) },
+    })
+
+    const retainedText = (normalized.content ?? [])
+      .filter((item): item is Extract<McpToolResultContent, { type: 'text' }> => item.type === 'text')
+      .reduce((total, item) => total + item.text.length, 0)
+    const retainedBinary = (normalized.content ?? [])
+      .filter(
+        (item): item is Extract<McpToolResultContent, { type: 'image' | 'audio' }> =>
+          item.type === 'image' || item.type === 'audio',
+      )
+      .reduce((total, item) => total + (item.data?.length ?? 0), 0)
+
+    expect(retainedText).toBeLessThanOrEqual(100_000)
+    expect(retainedBinary).toBeLessThanOrEqual(2 * 1024 * 1024)
+    const retainedImage = normalized.content?.find(
+      (item): item is McpToolResultContent & { type: 'image'; mimeType: string } => item.type === 'image',
+    )
+    expect(retainedImage?.mimeType.length).toBeLessThanOrEqual(255)
+    expect(normalized.result.length).toBeLessThanOrEqual(100_000 + '\n[Results truncated]'.length)
+    expect(normalized.truncated).toBe(true)
+  })
+
   it('connects to stdio server, performs initialize, lists tools and calls a tool', async () => {
     const client = new McpClient({
       id: 'test-stdio-1',
@@ -167,6 +199,21 @@ describe('MCP Client & McpManager (Stdio Transport)', () => {
       expect(new Set(tools.map((tool) => tool.modelName)).size).toBe(2)
     } finally {
       await client.close()
+    }
+  })
+
+  it('rejects redirects for every remote MCP request', async () => {
+    const fetchMock = vi.fn(async () => new Response('ok'))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      await (
+        manager as unknown as {
+          fetchWithProxy: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+        }
+      ).fetchWithProxy('https://example.test/mcp', { redirect: 'follow' })
+      expect(fetchMock).toHaveBeenCalledWith('https://example.test/mcp', expect.objectContaining({ redirect: 'error' }))
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 

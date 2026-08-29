@@ -66,6 +66,81 @@ describe('Agent token optimization helpers', () => {
     expect(compactToolResultsForModel(messages, 1_000)).toEqual(compacted)
   })
 
+  it('preserves image payloads while compacting oversized textual tool results', () => {
+    const messages: Message[] = [
+      {
+        id: 'assistant-media',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date(0).toISOString(),
+        toolExecutions: [
+          {
+            id: 'call-image',
+            toolName: 'browser_screenshot',
+            args: {},
+            result: 'metadata '.repeat(500),
+            resultContent: [{ type: 'image', mimeType: 'image/jpeg', data: 'a'.repeat(32_000) }],
+            structuredResult: { page: 'example', details: 'x'.repeat(2_000) },
+            status: 'complete',
+          },
+        ],
+        agentTrace: [
+          {
+            type: 'tool_result',
+            turn: 1,
+            callId: 'call-image',
+            toolName: 'browser_screenshot',
+            result: 'metadata '.repeat(500),
+            resultContent: [{ type: 'image', mimeType: 'image/jpeg', data: 'a'.repeat(32_000) }],
+            structuredResult: { page: 'example', details: 'x'.repeat(2_000) },
+          },
+        ],
+      },
+    ]
+
+    const compacted = compactToolResultsForModel(messages, 1_000)
+    const result = compacted[0]?.agentTrace?.find((item) => item.type === 'tool_result')
+
+    if (result?.type !== 'tool_result') throw new Error('Expected a compacted image result')
+    expect(result.result).toContain('call_id="call-image"')
+    expect(result.resultContent).toEqual([{ type: 'image', mimeType: 'image/jpeg', data: 'a'.repeat(32_000) }])
+    expect(result.structuredResult).toBeUndefined()
+    expect(result.resultTruncated).toBe(true)
+    expect(compacted[0]?.toolExecutions?.[0]?.resultContent).toBeUndefined()
+    expect(compactToolResultsForModel(compacted, 1_000)).toEqual(compacted)
+  })
+
+  it('caps retained replay images below the checkpoint artifact budget', () => {
+    const messages: Message[] = [
+      {
+        id: 'assistant-many-images',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date(0).toISOString(),
+        agentTrace: [
+          {
+            type: 'tool_result',
+            turn: 1,
+            callId: 'call-many-images',
+            toolName: 'browser_screenshot',
+            result: 'metadata '.repeat(500),
+            resultContent: [
+              { type: 'image', mimeType: 'image/jpeg', data: 'a'.repeat(1_500_000) },
+              { type: 'image', mimeType: 'image/jpeg', data: 'b'.repeat(1_500_000) },
+            ],
+          },
+        ],
+      },
+    ]
+
+    const compacted = compactToolResultsForModel(messages, 1_000)
+    const result = compacted[0]?.agentTrace?.find((item) => item.type === 'tool_result')
+
+    if (result?.type !== 'tool_result') throw new Error('Expected a compacted image result')
+    expect(result.resultContent).toHaveLength(1)
+    expect(result.resultContent?.[0]).toMatchObject({ data: 'a'.repeat(1_500_000) })
+  })
+
   it('includes structured and content payloads in the complete chunk source', () => {
     const messages = [completeTurn(1, 'call-structured')]
     messages[0]!.agentTrace![1] = {

@@ -169,7 +169,11 @@ export function GeneralTab({
             <div className="settings-row">
               <div>
                 <strong>{t('Allow browser file uploads')}</strong>
-                <small>{t('Allow approved Agent uploads from the conversation working directory only.')}</small>
+                <small>
+                  {t(
+                    'Manual uploads use the system file picker. Approved Agent uploads are limited to the conversation working directory.',
+                  )}
+                </small>
               </div>
               <SettingsToggle
                 checked={preferenceDraft.browserFileUploadsEnabled}
@@ -184,7 +188,7 @@ export function GeneralTab({
                 <strong>{t('Allow browser downloads')}</strong>
                 <small>
                   {t(
-                    'Allow approved Agent downloads into the conversation working directory and manual downloads into the system Downloads folder.',
+                    'Manual downloads go to the system Downloads folder. Approved Agent downloads stay in the conversation working directory; all browser downloads are limited to 100 MiB.',
                   )}
                 </small>
               </div>
@@ -801,7 +805,9 @@ export function GeneralTab({
             <span>
               <strong>{t('Custom proxy')}</strong>
               <small>
-                {t('Forward all model requests; http is available for local proxies and https for remote proxies.')}
+                {t(
+                  'Forward model, remote MCP, and built-in browser traffic; http is available for local proxies and https for remote proxies.',
+                )}
               </small>
             </span>
           </button>

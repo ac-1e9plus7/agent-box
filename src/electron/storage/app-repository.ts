@@ -28,7 +28,7 @@ import { EncryptedStore } from './encrypted-store'
 import { CheckpointRepositoryError, EncryptedCheckpointRepository } from './checkpoint-repository'
 import { AgentBoxCheckpointSaver } from './agentbox-checkpoint-saver'
 import { agentCheckpointThreadId } from './checkpoint-identity'
-import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import { DEFAULT_AGENT_TOOL_TURN_LIMIT, MAX_AGENT_SKILL_ACTIVATIONS } from '../../shared/agent-limits'
 import {
   DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
   DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
@@ -418,7 +418,7 @@ export class AppRepository {
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
       }
-      const validated = validateSkill(candidate)
+      const validated = validateSkill(candidate, { strictEntry: true, strictPaths: true })
       if (existing) {
         draft.skills = skills.map((item) => (item.id === validated.id ? validated : item))
       } else {
@@ -741,7 +741,7 @@ function validateVault(value: unknown, fallbackLanguage: AppLanguage): VaultStat
   const conversations = requireArray(value.conversations, 'conversations', MAX_CONVERSATIONS).map(validateConversation)
   const skills =
     value.skills !== undefined
-      ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
+      ? requireArray(value.skills, 'skills', MAX_SKILLS).map((skill) => validateSkill(skill))
       : localizedDefaultSkills()
   const mcpServers = value.mcpServers !== undefined ? parseStoredMcpServers(value.mcpServers) : []
   const browserProfiles = (
@@ -847,27 +847,42 @@ function parseModel(value: unknown): ModelConfig {
 const MAX_SKILL_FILES = 50
 const MAX_SKILL_FILE_CHARACTERS = 500_000
 
-function validateSkillFile(value: unknown): SkillFile {
+function normalizeSkillFilePath(value: unknown, label: string): string {
+  requireNonEmptyString(value, label, 255)
+  const normalized = String(value).trim().replaceAll('\\', '/')
+  if (
+    normalized.startsWith('/') ||
+    /^[a-zA-Z]:/.test(normalized) ||
+    normalized.split('/').some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    throw new Error('Invalid skill file path: directory traversal not allowed')
+  }
+  return normalized
+}
+
+function validateSkillFile(value: unknown, strictPaths: boolean): SkillFile {
   if (!isRecord(value)) throw new Error('Invalid skill file')
   requireNonEmptyString(value.path, 'skill file path', 255)
-  const path = String(value.path).trim()
-  if (path.includes('..') || path.startsWith('/') || path.startsWith('\\')) {
-    throw new Error('Invalid skill file path: directory traversal not allowed')
+  let path: string
+  try {
+    path = normalizeSkillFilePath(value.path, 'skill file path')
+  } catch (error) {
+    if (strictPaths) throw error
+    path = String(value.path).trim()
   }
   if (typeof value.content !== 'string' || value.content.length > MAX_SKILL_FILE_CHARACTERS) {
     throw new Error(`Invalid skill file content: ${path}`)
   }
-  const kind = ['markdown', 'python', 'shell', 'other'].includes(String(value.kind))
-    ? (value.kind as SkillFileKind)
-    : 'other'
+  const knownKind = ['markdown', 'python', 'shell', 'other'].includes(String(value.kind))
+  if (!knownKind && strictPaths) throw new Error(`Invalid skill file kind: ${path}`)
   return {
     path,
     content: value.content,
-    kind,
+    kind: knownKind ? (value.kind as SkillFileKind) : 'other',
   }
 }
 
-function validateSkill(value: unknown): Skill {
+function validateSkill(value: unknown, options: { strictEntry?: boolean; strictPaths?: boolean } = {}): Skill {
   if (!isRecord(value)) throw new Error('Invalid skill')
   requireNonEmptyString(value.id, 'skill id', 100)
   requireNonEmptyString(value.name, 'skill name', 200)
@@ -877,13 +892,26 @@ function validateSkill(value: unknown): Skill {
   if (value.icon !== undefined && (typeof value.icon !== 'string' || value.icon.length > 50)) {
     throw new Error('Invalid skill icon')
   }
-  const entryFile = typeof value.entryFile === 'string' && value.entryFile.trim() ? value.entryFile.trim() : 'SKILL.md'
+  const rawEntryFile = typeof value.entryFile === 'string' && value.entryFile.trim() ? value.entryFile : 'SKILL.md'
+  let entryFile: string
+  try {
+    entryFile = normalizeSkillFilePath(rawEntryFile, 'skill entry file')
+  } catch (error) {
+    if (options.strictPaths) throw error
+    entryFile = String(rawEntryFile).trim()
+  }
 
   let files: SkillFile[] = []
   if (Array.isArray(value.files) && value.files.length > 0) {
     if (value.files.length > MAX_SKILL_FILES) throw new Error(t('Skill contains more files than the limit'))
-    files = value.files.map(validateSkillFile)
+    files = value.files.map((file) => validateSkillFile(file, options.strictPaths === true))
+    if (options.strictPaths && new Set(files.map((file) => file.path)).size !== files.length) {
+      throw new Error('Skill file paths must be unique')
+    }
   } else if (typeof value.systemPrompt === 'string' && value.systemPrompt.trim()) {
+    if (value.systemPrompt.length > MAX_SKILL_FILE_CHARACTERS) {
+      throw new Error('Invalid skill system prompt')
+    }
     files = [
       {
         path: entryFile,
@@ -893,10 +921,21 @@ function validateSkill(value: unknown): Skill {
     ]
   }
 
+  const entryDocument = files.find((file) => file.path === entryFile && file.kind === 'markdown')
+  if (options.strictEntry && !entryDocument) {
+    throw new Error(t('A Skill entry file must be an included Markdown document.'))
+  }
+  if (!entryDocument && !options.strictEntry) {
+    const legacyEntryDocument = files.find((file) => file.kind === 'markdown')
+    if (legacyEntryDocument) entryFile = legacyEntryDocument.path
+  }
+
+  const suppliedSystemPrompt = typeof value.systemPrompt === 'string' ? value.systemPrompt.trim() : ''
+  if (suppliedSystemPrompt.length > MAX_SKILL_FILE_CHARACTERS) {
+    throw new Error('Invalid skill system prompt')
+  }
   const systemPrompt =
-    typeof value.systemPrompt === 'string' && value.systemPrompt.trim()
-      ? value.systemPrompt.trim()
-      : (files.find((f) => f.path === entryFile)?.content ?? files[0]?.content ?? '')
+    suppliedSystemPrompt || files.find((file) => file.path === entryFile && file.kind === 'markdown')?.content || ''
 
   if (value.isBuiltIn !== undefined && typeof value.isBuiltIn !== 'boolean') {
     throw new Error('Invalid skill built-in flag')
@@ -1169,7 +1208,7 @@ function isBundledMessageValue(value: string, messageKey: string): boolean {
 
 function parseStoredSkillActivations(value: unknown): SkillActivation[] | undefined {
   if (value === undefined || value === null) return undefined
-  if (!Array.isArray(value) || value.length > 50) throw new Error('Invalid skill activations')
+  if (!Array.isArray(value) || value.length > MAX_AGENT_SKILL_ACTIVATIONS) throw new Error('Invalid skill activations')
   const parsed = value.map((item): SkillActivation => {
     if (!isRecord(item)) throw new Error('Invalid skill activation item')
     requireNonEmptyString(item.id, 'skill activation id', 100)
@@ -1380,7 +1419,11 @@ function validateConversation(value: unknown): Conversation {
     throw new Error('Invalid conversation browser tool flag')
   }
   const skillIds = Array.isArray(value.skillIds)
-    ? value.skillIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)
+    ? [
+        ...new Set(
+          value.skillIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100),
+        ),
+      ].slice(0, MAX_AGENT_SKILL_ACTIVATIONS)
     : undefined
   const mcpServerIds = Array.isArray(value.mcpServerIds)
     ? value.mcpServerIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)

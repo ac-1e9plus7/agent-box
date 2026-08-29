@@ -1,6 +1,17 @@
-import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate'
+import { strToU8, zipSync } from 'fflate'
+import { Uint8ArrayReader, ZipReader, type FileEntry } from '@zip.js/zip.js'
 import type { Skill, SkillFile, SkillFileKind, SkillInput } from './types'
 import { t } from './i18n'
+
+export const MAX_SKILL_ZIP_COMPRESSED_BYTES = 64 * 1024 * 1024
+const MAX_SKILL_ZIP_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+const MAX_SKILL_ZIP_FILE_BYTES = 2 * 1024 * 1024
+const MAX_SKILL_FILE_CHARACTERS = 500_000
+const MAX_SKILL_ZIP_SCANNED_ENTRIES = 128
+const MAX_SKILL_ZIP_FILES = 51
+const MAX_SKILL_FILES = 50
+const STANDARD_SKILL_MANIFEST_FILENAMES = new Set(['skill.json', 'manifest.json'])
+const GENERATED_SKILL_MANIFEST_FORMAT = 'agentbox-skill-manifest-v1'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -79,11 +90,12 @@ export async function exportSkillToZip(skill: Skill): Promise<Uint8Array> {
           },
         ]
 
-  const hasEntryFile = files.some((f) => f.path === (skill.entryFile || 'SKILL.md'))
+  const entryFile = skill.entryFile || 'SKILL.md'
+  const hasEntryFile = files.some((file) => file.path === entryFile)
 
   for (const file of files) {
     let content = file.content
-    if (file.path === (skill.entryFile || 'SKILL.md') && !content.startsWith('---')) {
+    if (file.path === entryFile && !content.startsWith('---')) {
       content = serializeSkillFrontmatter(skill, content)
     }
     entries[file.path] = strToU8(content)
@@ -97,134 +109,271 @@ export async function exportSkillToZip(skill: Skill): Promise<Uint8Array> {
     entries['SKILL.md'] = strToU8(entryContent)
   }
 
+  const manifestPath = nextGeneratedManifestPath(entries)
+  entries[manifestPath] = strToU8(
+    JSON.stringify({
+      format: GENERATED_SKILL_MANIFEST_FORMAT,
+      name: skill.name,
+      description: skill.description,
+      icon: skill.icon,
+      author: skill.author,
+      version: skill.version,
+      entryFile,
+    }),
+  )
+
   return zipSync(entries, { level: 6 })
 }
 
 export async function parseSkillFromZip(zipData: Uint8Array | ArrayBuffer): Promise<SkillInput> {
-  const u8Array = zipData instanceof Uint8Array ? zipData : new Uint8Array(zipData)
-  const unzipped = unzipSync(u8Array)
-
-  const files: SkillFile[] = []
-  let entryFile = 'SKILL.md'
-  let parsedName = ''
-  let parsedDesc = ''
-  let parsedAuthor = ''
-  let parsedVersion = '1.0.0'
-  let parsedIcon = ''
-  let manifestFound = false
-
-  const pathList = Object.keys(unzipped).filter((path) => {
-    return !path.endsWith('/') && !path.startsWith('__MACOSX/') && !path.includes('/.DS_Store')
-  })
-
-  if (pathList.length === 0) {
-    throw new Error(t('The archive is empty or contains no valid files.'))
+  const bytes = zipData instanceof Uint8Array ? zipData : new Uint8Array(zipData)
+  if (bytes.byteLength > MAX_SKILL_ZIP_COMPRESSED_BYTES) {
+    throw new Error(
+      t('The skill archive exceeds the maximum compressed size of {value0} MiB.', {
+        value0: MAX_SKILL_ZIP_COMPRESSED_BYTES / 1024 / 1024,
+      }),
+    )
   }
 
-  // Check if all paths share a common root directory (e.g. "my-skill/SKILL.md")
-  const pathParts = pathList.map((p) => p.split('/'))
-  let rootDir = ''
-  if (pathParts.every((parts) => parts.length > 1 && parts[0] === pathParts[0]?.[0])) {
-    rootDir = `${pathParts[0]?.[0]}/`
-  }
+  const reader = new ZipReader(new Uint8ArrayReader(bytes), { useWebWorkers: false })
+  try {
+    const filesToRead: FileEntry[] = []
+    let scannedEntries = 0
+    for await (const entry of reader.getEntriesGenerator()) {
+      scannedEntries += 1
+      if (scannedEntries > MAX_SKILL_ZIP_SCANNED_ENTRIES) {
+        throw new Error(t('The skill archive contains too many entries.'))
+      }
+      if (entry.directory || shouldIgnoreArchivePath(entry.filename)) continue
+      filesToRead.push(entry)
+      if (filesToRead.length > MAX_SKILL_ZIP_FILES) {
+        throw new Error(t('The skill archive contains more files than the limit.'))
+      }
+    }
+    if (filesToRead.length === 0) {
+      throw new Error(t('The archive is empty or contains no valid files.'))
+    }
 
-  for (const rawPath of pathList) {
-    const relativePath = rootDir && rawPath.startsWith(rootDir) ? rawPath.slice(rootDir.length) : rawPath
-    if (!relativePath) continue
+    const archivePaths = filesToRead.map((entry) => normalizeArchivePath(entry.filename))
+    const rootDir = resolveArchiveRoot(archivePaths)
+    const files: SkillFile[] = []
+    let entryFile = 'SKILL.md'
+    let parsedName = ''
+    let parsedDesc = ''
+    let parsedAuthor = ''
+    let parsedVersion = '1.0.0'
+    let parsedIcon = ''
+    let manifestFound = false
+    const total = { bytes: 0 }
 
-    const contentBytes = unzipped[rawPath]
-    if (!contentBytes) continue
+    for (const [index, archiveEntry] of filesToRead.entries()) {
+      const archivePath = archivePaths[index]
+      if (!archivePath) continue
+      const relativePath = rootDir && archivePath.startsWith(rootDir) ? archivePath.slice(rootDir.length) : archivePath
+      if (!relativePath) continue
+      const textContent = await readZipText(archiveEntry, total)
+      if (textContent.length > MAX_SKILL_FILE_CHARACTERS) {
+        throw new Error(
+          t('A Skill archive text file cannot exceed {value0} characters.', { value0: MAX_SKILL_FILE_CHARACTERS }),
+        )
+      }
 
-    const textContent = strFromU8(contentBytes)
-    const kind = inferFileKind(relativePath)
-
-    // Check for JSON/YAML manifest
-    if (relativePath.toLowerCase() === 'skill.json' || relativePath.toLowerCase() === 'manifest.json') {
-      try {
-        const json: unknown = JSON.parse(textContent)
-        if (isRecord(json)) {
-          if (json.name) parsedName = String(json.name)
-          if (json.description) parsedDesc = String(json.description)
-          if (json.author) parsedAuthor = String(json.author)
-          if (json.version) parsedVersion = String(json.version)
-          if (json.icon) parsedIcon = String(json.icon)
-          if (json.entryFile) entryFile = String(json.entryFile)
+      const manifest = parseSkillManifest(textContent)
+      const isStandardManifest =
+        STANDARD_SKILL_MANIFEST_FILENAMES.has(relativePath.toLowerCase()) && manifest?.hasMetadata === true
+      const isGeneratedManifest = manifest?.format === GENERATED_SKILL_MANIFEST_FORMAT
+      if (isStandardManifest || isGeneratedManifest) {
+        if (manifest) {
+          parsedName = manifest.name || parsedName
+          parsedDesc = manifest.description || parsedDesc
+          parsedAuthor = manifest.author || parsedAuthor
+          parsedVersion = manifest.version || parsedVersion
+          parsedIcon = manifest.icon || parsedIcon
+          entryFile = manifest.entryFile || entryFile
           manifestFound = true
         }
-      } catch {
-        // ignore parse error and proceed
+        continue
+      }
+
+      files.push({
+        path: relativePath,
+        content: textContent,
+        kind: inferFileKind(relativePath),
+      })
+      if (files.length > MAX_SKILL_FILES) {
+        throw new Error(t('The skill archive contains more files than the limit.'))
       }
     }
 
-    files.push({
-      path: relativePath,
-      content: textContent,
-      kind,
-    })
-  }
+    const entryFileObj =
+      files.find((file) => file.path === entryFile) ??
+      files.find((file) => file.path.toLowerCase() === 'skill.md') ??
+      files.find((file) => file.path.toLowerCase() === 'readme.md') ??
+      files.find((file) => file.kind === 'markdown')
 
-  // Find entry markdown file
-  const entryFileObj =
-    files.find((f) => f.path === entryFile) ??
-    files.find((f) => f.path.toLowerCase() === 'skill.md') ??
-    files.find((f) => f.path.toLowerCase() === 'readme.md') ??
-    files.find((f) => f.kind === 'markdown') ??
-    files[0]
+    if (!entryFileObj || entryFileObj.kind !== 'markdown') {
+      throw new Error(t('The skill archive must contain a Markdown entry document.'))
+    }
 
-  if (entryFileObj) {
     entryFile = entryFileObj.path
-    if (entryFileObj.kind === 'markdown') {
-      const { metadata, body } = parseSkillFrontmatter(entryFileObj.content)
-      if (!manifestFound) {
-        if (metadata.name) parsedName = metadata.name
-        if (metadata.description) parsedDesc = metadata.description
-        if (metadata.author) parsedAuthor = metadata.author
-        if (metadata.version) parsedVersion = metadata.version
-        if (metadata.icon) parsedIcon = metadata.icon
-      }
-
-      // If no name extracted yet, inspect markdown H1 header
-      if (!parsedName) {
-        const h1Match = body.match(/^#\s+(.+)$/m)
-        if (h1Match && h1Match[1]) {
-          parsedName = h1Match[1].trim()
-        }
-      }
-
-      // If no description yet, inspect first paragraph
-      if (!parsedDesc) {
-        const cleanLines = body
-          .split('\n')
-          .map((l) => l.trim())
-          .filter((l) => l && !l.startsWith('#') && !l.startsWith('---'))
-        if (cleanLines.length > 0 && cleanLines[0]) {
-          parsedDesc = cleanLines[0].slice(0, 300)
-        }
-      }
+    const { metadata, body } = parseSkillFrontmatter(entryFileObj.content)
+    if (!manifestFound) {
+      if (metadata.name) parsedName = metadata.name
+      if (metadata.description) parsedDesc = metadata.description
+      if (metadata.author) parsedAuthor = metadata.author
+      if (metadata.version) parsedVersion = metadata.version
+      if (metadata.icon) parsedIcon = metadata.icon
     }
+
+    if (!parsedName) {
+      const h1Match = body.match(/^#\s+(.+)$/m)
+      if (h1Match?.[1]) parsedName = h1Match[1].trim()
+    }
+    if (!parsedDesc) {
+      const firstParagraph = body
+        .split('\n')
+        .map((line) => line.trim())
+        .find((line) => line && !line.startsWith('#') && !line.startsWith('---'))
+      if (firstParagraph) parsedDesc = firstParagraph.slice(0, 300)
+    }
+
+    if (!parsedName) parsedName = rootDir ? rootDir.replace(/\/$/, '') : t('Custom skills')
+    if (!parsedDesc) parsedDesc = t('A skill imported from an external ZIP archive.')
+    if (!parsedIcon) parsedIcon = files.some((file) => file.kind === 'python') ? 'code' : 'tool'
+
+    return {
+      name: parsedName,
+      description: parsedDesc,
+      icon: parsedIcon,
+      entryFile,
+      files,
+      author: parsedAuthor || undefined,
+      version: parsedVersion || '1.0.0',
+      enabled: true,
+    }
+  } finally {
+    await reader.close()
+  }
+}
+
+function shouldIgnoreArchivePath(path: string): boolean {
+  return path
+    .replaceAll('\\', '/')
+    .split('/')
+    .some((segment) => segment === '__MACOSX' || segment === '.DS_Store')
+}
+
+function normalizeArchivePath(path: string): string {
+  const normalized = path.replaceAll('\\', '/')
+  if (!normalized || normalized.startsWith('/') || /^[a-zA-Z]:($|\/)/.test(normalized)) {
+    throw new Error(t('The skill archive contains an invalid file path.'))
+  }
+  const segments = normalized.split('/')
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+    throw new Error(t('The skill archive contains an invalid file path.'))
+  }
+  return segments.join('/')
+}
+
+function resolveArchiveRoot(paths: string[]): string {
+  const pathParts = paths.map((path) => path.split('/'))
+  if (pathParts.every((parts) => parts.length > 1 && parts[0] === pathParts[0]?.[0])) {
+    return `${pathParts[0]?.[0]}/`
+  }
+  return ''
+}
+
+function nextGeneratedManifestPath(entries: Record<string, Uint8Array>): string {
+  const baseName = 'agentbox-skill-manifest'
+  let suffix = 0
+  while (true) {
+    const path = `${baseName}${suffix === 0 ? '' : `-${suffix}`}.json`
+    if (!entries[path]) return path
+    suffix += 1
+  }
+}
+
+function parseSkillManifest(content: string): {
+  format: string
+  hasMetadata: boolean
+  name: string
+  description: string
+  author: string
+  version: string
+  icon: string
+  entryFile: string
+} | null {
+  try {
+    const value: unknown = JSON.parse(content)
+    if (!isRecord(value)) return null
+    const metadataKeys = ['name', 'description', 'author', 'version', 'icon', 'entryFile'] as const
+    return {
+      format: typeof value.format === 'string' ? value.format : '',
+      hasMetadata: metadataKeys.some((key) => value[key] !== undefined),
+      name: typeof value.name === 'string' ? value.name : '',
+      description: typeof value.description === 'string' ? value.description : '',
+      author: typeof value.author === 'string' ? value.author : '',
+      version: typeof value.version === 'string' ? value.version : '',
+      icon: typeof value.icon === 'string' ? value.icon : '',
+      entryFile: typeof value.entryFile === 'string' ? value.entryFile : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+async function readZipText(entry: FileEntry, total: { bytes: number }): Promise<string> {
+  if (entry.uncompressedSize !== undefined && entry.uncompressedSize > MAX_SKILL_ZIP_FILE_BYTES) {
+    throw new Error(
+      t('A skill archive file exceeds the maximum uncompressed size of {value0} MiB.', {
+        value0: MAX_SKILL_ZIP_FILE_BYTES / 1024 / 1024,
+      }),
+    )
+  }
+  if (entry.uncompressedSize !== undefined && total.bytes + entry.uncompressedSize > MAX_SKILL_ZIP_UNCOMPRESSED_BYTES) {
+    throw new Error(
+      t('The skill archive exceeds the maximum uncompressed size of {value0} MiB.', {
+        value0: MAX_SKILL_ZIP_UNCOMPRESSED_BYTES / 1024 / 1024,
+      }),
+    )
   }
 
-  if (!parsedName) {
-    parsedName = rootDir ? rootDir.replace(/\/$/, '') : t('Custom skills')
-  }
-  if (!parsedDesc) {
-    parsedDesc = t('A skill imported from an external ZIP archive.')
-  }
+  const chunks: Uint8Array[] = []
+  let entryBytes = 0
+  const writable = new WritableStream<Uint8Array>({
+    write(chunk) {
+      const nextEntryBytes = entryBytes + chunk.byteLength
+      const nextTotalBytes = total.bytes + chunk.byteLength
+      if (nextEntryBytes > MAX_SKILL_ZIP_FILE_BYTES) {
+        throw new Error(
+          t('A skill archive file exceeds the maximum uncompressed size of {value0} MiB.', {
+            value0: MAX_SKILL_ZIP_FILE_BYTES / 1024 / 1024,
+          }),
+        )
+      }
+      if (nextTotalBytes > MAX_SKILL_ZIP_UNCOMPRESSED_BYTES) {
+        throw new Error(
+          t('The skill archive exceeds the maximum uncompressed size of {value0} MiB.', {
+            value0: MAX_SKILL_ZIP_UNCOMPRESSED_BYTES / 1024 / 1024,
+          }),
+        )
+      }
+      entryBytes = nextEntryBytes
+      total.bytes = nextTotalBytes
+      chunks.push(chunk.slice())
+    },
+  })
+  await entry.getData(writable, { useWebWorkers: false })
 
-  // Auto assign icon based on python / markdown composition
-  if (!parsedIcon) {
-    const hasPython = files.some((f) => f.kind === 'python')
-    parsedIcon = hasPython ? 'code' : 'tool'
+  const content = new Uint8Array(entryBytes)
+  let offset = 0
+  for (const chunk of chunks) {
+    content.set(chunk, offset)
+    offset += chunk.byteLength
   }
-
-  return {
-    name: parsedName,
-    description: parsedDesc,
-    icon: parsedIcon,
-    entryFile,
-    files,
-    author: parsedAuthor || undefined,
-    version: parsedVersion || '1.0.0',
-    enabled: true,
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(content)
+  } catch {
+    throw new Error(t('The skill archive contains a file that is not valid UTF-8 text.'))
   }
 }

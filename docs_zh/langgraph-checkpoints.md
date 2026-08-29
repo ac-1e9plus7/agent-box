@@ -69,7 +69,7 @@ Record 层在读取前拒绝超过 32 MiB 的文件，检测认证失败，并�
 
 普通 LangGraph last-value checkpoint 会重复完整 channel value。如果每个 Agent turn 都重复 `Message[]`，存储会近似二次方增长。
 
-Saver 在序列化前把 `channel_values.messages` 以及初始/待应用 `messages` write 替换为已认证 AgentBox 引用：
+在 AgentBox 使用默认空 checkpoint namespace 的顶层 Agent Runtime 中，Saver 在序列化前把 `channel_values.messages` 以及初始/待应用 `messages` write 替换为已认证 AgentBox 引用：
 
 1. 首个消息数组保存为 thread snapshot。
 2. 后续数组与 parent materialization 比较。
@@ -77,7 +77,7 @@ Saver 在序列化前把 `channel_values.messages` 以及初始/待应用 `messa
 4. 无法精确 replay 时，保存有界 snapshot artifact。
 5. `getTuple()` 在返回 LangGraph 前递归认证并具象化引用链。
 
-引用链上限为 512。Replay 校验 provider message ID 和精确顺序，不接受有损 delta。
+引用链上限为 512。Replay 校验 provider message ID 和精确顺序，不接受有损 delta。直接 `messages` channel write 会参与 parent lookup；对象包裹的初始或 pending `messages` 值则可能创建有界 snapshot artifact。
 
 ## Thread 身份与 descriptor
 
@@ -89,8 +89,9 @@ Renderer 在启动 Agent 响应前创建 `responseMessageId`。Gateway 从 conve
 - Runtime 版本；
 - 已清洗基础上下文、model ID 和 API format 的 SHA-256 digest；
 - `active`、`interrupted`、`completed` 或 `abandoned` 生命周期；
-- 是否有已持久化 `agentTrace` 回退；
-- 创建、更新和访问时间。
+- 是否有已持久化 `agentTrace` 回退。
+
+外层 manifest 还保存创建、更新和 `lastAccessedAt` 时间戳。读取不会刷新 `lastAccessedAt`；checkpoint 写入、pending write、snapshot/artifact 和常规 descriptor 更新会刷新它，因此它记录的是最近一次符合条件的 mutation/descriptor touch，而不是真正基于读取的 LRU access。启动时的生命周期重分类会更新 `updatedAt`，但不会刷新 `lastAccessedAt`。
 
 启动时，进程内 `active` thread 在有 trace 回退时改为 `interrupted`，否则改为 `abandoned`，避免崩溃进程留下永久受保护的 active 记录。
 
@@ -98,38 +99,38 @@ Renderer 在启动 Agent 响应前创建 `responseMessageId`。Gateway 从 conve
 
 `agentTrace` 继续保存在 Assistant 消息中，并进入会话备份。它是 Responses reasoning item、Anthropic thinking signature、tool call 和 tool result 的协议无关回放账本。
 
-Gateway 只在以下条件全部成立时恢复原 graph thread：
+Gateway 只在 Agent mode 已启用、`resumeFromMessageId` 指向紧邻当前用户指令的中断 Assistant 消息，并且以下条件全部成立时恢复原 graph thread：
 
 - conversation 和中断 response ID 匹配；
 - 上下文 digest 与当前基础分支匹配；
 - 中断原因是限流、网络、超时或 API 错误。
 
-Checkpoint 缺失或过期时，从现有已校验 provider-history/`agentTrace` 路径创建新 thread。取消、输出上限、工具上限和副作用不确定状态也使用这条路径，避免盲目重放 tool node。
+Checkpoint 缺失或过期时，从现有已校验 provider-history/`agentTrace` 路径创建新 thread。取消、输出上限、工具上限和副作用不确定状态也使用这条路径，避免盲目重放 tool node。过期的原 thread 会保留到常规分支/会话删除、namespace 清理或符合条件的配额回收。
 
-Checkpoint 损坏和 I/O 失败会作为 checkpoint 错误上报，不会静默当作有效 trace 回退。
+读取活动 repository record 时遇到损坏会作为类型化 checkpoint 错误上报。启动时发现损坏或缺失 manifest 会被隔离，随后表现为缺失，因此恢复可使用已校验 history/`agentTrace` 回退。repository 来源错误会映射为本地化 checkpoint 类别；Saver 层 message-artifact 校验失败目前表现为通用 `unknown_error`。这些路径均不暴露解密记录或逻辑 ID。
 
 ## 配额
 
 Checkpoint 配额与会话配额独立。
 
-| 维度                              |    上限 |
-| --------------------------------- | ------: |
-| Thread                            |     256 |
-| 单 thread namespace               |       8 |
-| 单 thread checkpoint              |     512 |
-| 单 checkpoint pending write       |   1,024 |
-| 序列化 checkpoint value           |   2 MiB |
-| 序列化 metadata                   | 256 KiB |
-| 单 pending-write value            |   1 MiB |
-| 单 checkpoint pending-write value |   8 MiB |
-| 基础消息 snapshot                 |  24 MiB |
-| 单消息 artifact                   |   4 MiB |
-| 单 thread                         |  64 MiB |
-| 完整 checkpoint namespace         | 256 MiB |
-| Manifest                          |   2 MiB |
-| 单加密 record 文件                |  32 MiB |
+| 维度                                      |    上限 |
+| ----------------------------------------- | ------: |
+| Thread                                    |     256 |
+| 单 thread namespace                       |       8 |
+| 单 thread checkpoint                      |     512 |
+| 单 checkpoint pending write               |   1,024 |
+| 序列化 checkpoint value                   |   2 MiB |
+| 序列化 metadata                           | 256 KiB |
+| 单 pending-write value                    |   1 MiB |
+| 单 checkpoint pending-write value         |   8 MiB |
+| 基础消息 snapshot                         |  24 MiB |
+| 单消息 artifact                           |   4 MiB |
+| 单 thread                                 |  64 MiB |
+| 有效 manifest 计量的 checkpoint namespace | 256 MiB |
+| Manifest                                  |   2 MiB |
+| 单加密 record 文件                        |  32 MiB |
 
-Manifest 提交前按预计加密 record 大小计量，包括 envelope 开销和序列化 wrapper。已超限 thread 仍可读取和删除，但不能继续增长。
+Manifest 提交前按预计加密 record 大小计量，包括 envelope 开销和序列化 wrapper。已超限 thread 仍可读取和删除，但不能继续增长。被隔离的 `corrupt-*` scope 不计入正常 thread/字节配额，因此在 namespace 清理或 Vault 重置删除它们之前，物理 sidecar 目录可能超过有效 256 MiB 配额。
 
 ## 回收与删除
 
@@ -137,7 +138,7 @@ Manifest 提交前按预计加密 record 大小计量，包括 envelope 开销�
 
 回收顺序：
 
-1. `abandoned` thread，最旧访问优先；
+1. `abandoned` thread，最旧记录 mutation/descriptor touch 时间戳优先；
 2. 清理失败遗留的 `completed` thread；
 3. 有已校验 `agentTrace` 回退的 `interrupted` thread。
 
@@ -162,7 +163,7 @@ Repository 初始化时：
 - 删除原子写入中断留下的密文临时文件；
 - 认证每个 manifest，不急切加载所有 checkpoint；
 - 把损坏或缺失 manifest 的 scope 隔离到加密 `corrupt-*` 目录名下；
-- 删除没有被有效 manifest 引用的加密 record；
+- 在该 scope 内删除没有被成功解析 manifest 引用的加密 record；被隔离的损坏 scope 会保留 record，直到 namespace 清理或 Vault 重置；
 - 重分类进程内 active 生命周期。
 
 类型化 repository 错误区分无效输入、缺失记录、配额、损坏和 I/O。UI 错误只暴露本地化类别，不暴露解密记录或逻辑 ID。

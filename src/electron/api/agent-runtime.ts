@@ -5,6 +5,7 @@ import type { Message } from '../../shared/types'
 
 export interface AgentModelTurnResult<TToolCall = unknown> {
   toolCalls: readonly TToolCall[]
+  finishReason?: string
 }
 
 export interface AgentModelTurnInput {
@@ -18,7 +19,7 @@ export interface AgentToolTurnInput<TResult extends AgentModelTurnResult> extend
   modelResult: TResult
 }
 
-export type AgentRuntimeTerminalReason = 'complete' | 'unexpected_tool_call' | 'tool_turn_limit'
+export type AgentRuntimeTerminalReason = 'complete' | 'output_limit' | 'unexpected_tool_call' | 'tool_turn_limit'
 
 export interface AgentTerminalInput<TResult extends AgentModelTurnResult> extends AgentToolTurnInput<TResult> {
   terminalReason: AgentRuntimeTerminalReason
@@ -35,6 +36,7 @@ export interface AgentRuntimeOptions<TResult extends AgentModelTurnResult> {
   invokeModel(input: AgentModelTurnInput): Promise<TResult>
   executeTools(input: AgentToolTurnInput<TResult>): Promise<Message[]>
   onComplete(input: AgentTerminalInput<TResult>): Promise<void> | void
+  onOutputLimit?(input: AgentTerminalInput<TResult>): Promise<void> | void
   onUnexpectedToolCall(input: AgentTerminalInput<TResult>): Promise<void> | void
   onToolTurnLimit(input: AgentTerminalInput<TResult>): Promise<void> | void
 }
@@ -88,6 +90,7 @@ export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
 
   const routeModelTurn = (state: RuntimeStateValue): AgentRoute => {
     const modelResult = requireModelResult(state.modelResult)
+    if (isOutputLimitFinishReason(modelResult.finishReason)) return 'output_limit'
     if (modelResult.toolCalls.length === 0) return 'complete'
     if (!options.agentMode) return 'unexpected_tool_call'
     if (state.toolTurns >= options.maxToolTurns) return 'tool_turn_limit'
@@ -137,6 +140,12 @@ export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
       terminalNode('complete', (input) => options.onComplete(input)),
     )
     .addNode(
+      'output_limit',
+      terminalNode('output_limit', (input) =>
+        options.onOutputLimit ? options.onOutputLimit(input) : options.onComplete(input),
+      ),
+    )
+    .addNode(
       'unexpected_tool_call',
       terminalNode('unexpected_tool_call', (input) => options.onUnexpectedToolCall(input)),
     )
@@ -148,6 +157,7 @@ export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
     .addConditionalEdges('model', routeModelTurn)
     .addEdge('tools', 'model')
     .addEdge('complete', END)
+    .addEdge('output_limit', END)
     .addEdge('unexpected_tool_call', END)
     .addEdge('tool_turn_limit', END)
   const graph = graphBuilder.compile(options.checkpointer ? { checkpointer: options.checkpointer } : undefined)
@@ -185,6 +195,15 @@ export async function runAgentRuntime<TResult extends AgentModelTurnResult>(
     modelResult: state.modelResult,
     terminalReason: state.terminalReason,
   }
+}
+
+function isOutputLimitFinishReason(finishReason: string | undefined): boolean {
+  return (
+    finishReason === 'length' ||
+    finishReason === 'max_tokens' ||
+    finishReason === 'max_output_tokens' ||
+    finishReason === 'incomplete'
+  )
 }
 
 function requireModelResult<TResult extends AgentModelTurnResult>(result: TResult | undefined): TResult {

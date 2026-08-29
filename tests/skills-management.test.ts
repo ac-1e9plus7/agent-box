@@ -2,7 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { strToU8, zipSync } from 'fflate'
 import { DEFAULT_SKILLS } from '../src/electron/storage/default-skills'
+import { setLanguage } from '../src/shared/i18n'
 import { exportSkillToZip, parseSkillFromZip, inferFileKind, parseSkillFrontmatter } from '../src/shared/skill-zip'
 import type { Skill } from '../src/shared/types'
 
@@ -16,6 +18,7 @@ vi.mock('electron', () => ({
 
 const { AppRepository } = await import('../src/electron/storage/app-repository')
 const { buildAgentSystemPrompt, validateChatRequest } = await import('../src/electron/api/gateway')
+const { retrieveRelevantSkills } = await import('../src/electron/api/skill-retriever')
 const { normalizeAppSettings } = await import('../src/electron/storage/settings-schema')
 
 describe('Skills Management and Agent Mode (Multi-file & Zip)', () => {
@@ -152,6 +155,89 @@ icon: "code"
       expect(formulasDoc?.kind).toBe('markdown')
       expect(formulasDoc?.content).toContain('欧拉公式')
     })
+
+    it('preserves a custom Markdown entry file through ZIP round trips', async () => {
+      const parsed = await parseSkillFromZip(
+        await exportSkillToZip({
+          id: 'custom-entry',
+          name: 'Custom entry',
+          description: 'Keeps its selected entry document.',
+          entryFile: 'instructions/START.md',
+          files: [
+            { path: 'README.md', kind: 'markdown', content: '# Read me\n\nNot the entry.' },
+            { path: 'instructions/START.md', kind: 'markdown', content: '# Start\n\nUse this document.' },
+          ],
+          enabled: true,
+        }),
+      )
+
+      expect(parsed.entryFile).toBe('instructions/START.md')
+      expect(parsed.files?.map((file) => file.path)).toEqual(['README.md', 'instructions/START.md'])
+    })
+
+    it('caps scanned ZIP entries before ignored metadata can exhaust parsing work', async () => {
+      const entries = Object.fromEntries(
+        Array.from({ length: 129 }, (_, index) => [`__MACOSX/${index}.txt`, strToU8('metadata')]),
+      )
+      await expect(parseSkillFromZip(zipSync(entries))).rejects.toThrow()
+    })
+
+    it('stops ZIP entry enumeration at the archive file limit', async () => {
+      const entries = Object.fromEntries(
+        Array.from({ length: 52 }, (_, index) => [`references/${index}.md`, strToU8(`# ${index}`)]),
+      )
+      await expect(parseSkillFromZip(zipSync(entries))).rejects.toThrow()
+    })
+
+    it('rejects more than 50 actual Skill resources even without an import manifest', async () => {
+      const entries = Object.fromEntries(
+        Array.from({ length: 51 }, (_, index) => [`references/${index}.md`, strToU8(`# ${index}`)]),
+      )
+      await expect(parseSkillFromZip(zipSync(entries))).rejects.toThrow()
+    })
+
+    it('preserves a user resource that collides with the generated manifest base name', async () => {
+      const parsed = await parseSkillFromZip(
+        await exportSkillToZip({
+          id: 'manifest-resource',
+          name: 'Manifest resource',
+          description: 'Preserves a similarly named resource.',
+          entryFile: 'SKILL.md',
+          files: [
+            { path: 'SKILL.md', kind: 'markdown', content: '# Entry' },
+            {
+              path: 'agentbox-skill-manifest.json',
+              kind: 'other',
+              content: '{"userResource":true}',
+            },
+          ],
+          enabled: true,
+        }),
+      )
+
+      expect(parsed.files).toContainEqual({
+        path: 'agentbox-skill-manifest.json',
+        kind: 'other',
+        content: '{"userResource":true}',
+      })
+    })
+
+    it('rejects ZIP archives without a Markdown entry document', async () => {
+      const archive = zipSync({ 'scripts/run.py': strToU8('print("hello")') })
+      await expect(parseSkillFromZip(archive)).rejects.toThrow()
+    })
+
+    it('rejects ZIP text resources above the persisted character limit', async () => {
+      const archive = zipSync({ 'SKILL.md': strToU8(`# Too long\n\n${'x'.repeat(500_000)}`) })
+      await expect(parseSkillFromZip(archive)).rejects.toThrow()
+    })
+
+    it('rejects ZIP entries whose uncompressed content exceeds the import limit', async () => {
+      const archive = zipSync({
+        'SKILL.md': strToU8(`# Oversized\n\n${'x'.repeat(2 * 1024 * 1024)}`),
+      })
+      await expect(parseSkillFromZip(archive)).rejects.toThrow()
+    })
   })
 
   describe('AppRepository Skills Operations with Multi-file Support', () => {
@@ -206,6 +292,28 @@ icon: "code"
       expect(fetched).toBeDefined()
       expect(fetched?.name).toBe('物理模拟专家')
       expect(fetched?.files.find((f) => f.path === 'scripts/simulate.py')).toBeDefined()
+    })
+
+    it('rejects a new Skill whose entry is not an included Markdown file', async () => {
+      await expect(
+        repository.upsertSkill({
+          name: 'Invalid entry Skill',
+          description: 'The entry must be Markdown.',
+          entryFile: 'payload.txt',
+          files: [{ path: 'payload.txt', kind: 'other', content: 'not instructions' }],
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('rejects unsafe paths when saving a new Skill', async () => {
+      await expect(
+        repository.upsertSkill({
+          name: 'Unsafe path Skill',
+          description: 'Paths must stay package-relative.',
+          entryFile: 'C:\\outside.md',
+          files: [{ path: 'C:\\outside.md', kind: 'markdown', content: '# Unsafe' }],
+        }),
+      ).rejects.toThrow()
     })
 
     it('prevents deleting built-in skills', async () => {
@@ -289,6 +397,66 @@ icon: "code"
       expect(prompt).toContain('全局系统指令')
     })
 
+    it('does not inject an other file selected as a Skill entry', () => {
+      const prompt = buildAgentSystemPrompt(
+        [
+          {
+            id: 'invalid-entry',
+            name: 'Invalid entry',
+            description: 'A malformed legacy Skill.',
+            entryFile: 'payload.txt',
+            files: [
+              { path: 'payload.txt', kind: 'other', content: 'INJECTED_OTHER_FILE_CONTENT' },
+              { path: 'reference.md', kind: 'markdown', content: 'Reference content' },
+            ],
+            enabled: true,
+          },
+        ],
+        '',
+      )
+
+      expect(prompt).not.toContain('INJECTED_OTHER_FILE_CONTENT')
+      expect(prompt).not.toContain('[Skill 1: Invalid entry]')
+    })
+
+    it('does not use other assets for fuzzy Skill retrieval', () => {
+      const skills: Skill[] = [
+        {
+          id: 'other-asset',
+          name: 'General Skill',
+          description: 'General guidance.',
+          entryFile: 'SKILL.md',
+          files: [
+            { path: 'SKILL.md', kind: 'markdown', content: 'General instructions.' },
+            { path: 'payload.bin', kind: 'other', content: 'secret-retrieval-token' },
+          ],
+          enabled: true,
+        },
+      ]
+
+      expect(retrieveRelevantSkills('secret-retrieval-token', skills)).toEqual([])
+    })
+
+    it('rebuilds localized generic retrieval terms after switching to English', () => {
+      setLanguage('en-US')
+      try {
+        const skills: Skill[] = [
+          {
+            id: 'analysis-skill',
+            name: 'Analyze guide',
+            description: 'Reference material.',
+            entryFile: 'SKILL.md',
+            files: [{ path: 'SKILL.md', kind: 'markdown', content: 'Analyze information carefully.' }],
+            enabled: true,
+          },
+        ]
+
+        expect(retrieveRelevantSkills('analyze', skills)).toEqual([])
+      } finally {
+        setLanguage('zh-CN')
+      }
+    })
+
     it('omits disabled skills from the assembled prompt', () => {
       const skills: Skill[] = [
         {
@@ -335,6 +503,19 @@ icon: "code"
           skillIds: ['code-interpreter', 'web-extractor'],
         }),
       ).not.toThrow()
+    })
+
+    it('rejects more pinned Skills than the persisted activation limit', () => {
+      expect(() =>
+        validateChatRequest({
+          conversationId: 'c1',
+          modelId: 'm1',
+          messages: [{ id: 'msg-1', role: 'user', content: 'hello', createdAt: new Date().toISOString() }],
+          reasoningEnabled: false,
+          agentMode: true,
+          skillIds: Array.from({ length: 51 }, (_, index) => `skill-${index}`),
+        }),
+      ).toThrow()
     })
 
     it('rejects invalid agentMode type', () => {

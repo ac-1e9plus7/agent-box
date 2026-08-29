@@ -69,7 +69,7 @@ The inherited parent-chain `getDeltaChannelHistory()` remains available. AgentBo
 
 Ordinary LangGraph last-value checkpoints repeat full channel values. Repeating `Message[]` at every Agent turn would make storage grow approximately quadratically.
 
-Before serialization, the saver replaces both `channel_values.messages` and initial/pending `messages` writes with an authenticated AgentBox reference:
+In AgentBox's top-level Agent runtime, which uses the default empty checkpoint namespace, the saver replaces both `channel_values.messages` and initial/pending `messages` writes with an authenticated AgentBox reference:
 
 1. The first message array is stored as the thread snapshot.
 2. Later arrays are compared with the parent materialization.
@@ -77,7 +77,7 @@ Before serialization, the saver replaces both `channel_values.messages` and init
 4. If exact delta replay is not possible, a bounded snapshot artifact is stored instead.
 5. `getTuple()` recursively authenticates and materializes the chain before returning it to LangGraph.
 
-The reference chain is limited to 512 records. Provider message IDs and the exact order are checked by replay; a lossy delta is never accepted.
+The reference chain is limited to 512 records. Provider message IDs and the exact order are checked by replay; a lossy delta is never accepted. Direct `messages` channel writes participate in parent lookup; object-wrapped initial or pending values containing `messages` may instead create a bounded snapshot artifact.
 
 ## Thread identity and descriptors
 
@@ -89,8 +89,9 @@ The encrypted manifest descriptor contains:
 - runtime version;
 - SHA-256 digest of the sanitized base context, model ID, and API format;
 - lifecycle: `active`, `interrupted`, `completed`, or `abandoned`;
-- whether a persisted `agentTrace` fallback is available;
-- creation, update, and access timestamps.
+- whether a persisted `agentTrace` fallback is available.
+
+The enclosing manifest also stores creation, update, and `lastAccessedAt` timestamps. Reads do not refresh `lastAccessedAt`; checkpoint writes, pending writes, snapshots/artifacts, and ordinary descriptor updates refresh it, so it records the most recent qualifying mutation/descriptor touch rather than true read-based LRU access. Startup lifecycle reclassification updates `updatedAt` without refreshing `lastAccessedAt`.
 
 On startup, a process-local `active` thread becomes `interrupted` when it has a trace fallback, otherwise `abandoned`. This prevents a crashed process from leaving permanently protected active entries.
 
@@ -98,38 +99,38 @@ On startup, a process-local `active` thread becomes `interrupted` when it has a 
 
 `agentTrace` remains stored in assistant messages and exported in conversation backups. It is the protocol-neutral replay ledger for Responses reasoning items, Anthropic thinking signatures, tool calls, and tool results.
 
-The Gateway resumes an existing graph thread only when:
+The Gateway resumes an existing graph thread only when Agent mode is enabled, `resumeFromMessageId` identifies an interrupted Assistant message immediately preceding the current user instruction, and:
 
 - the conversation and interrupted response IDs match;
 - the context digest matches the current base branch;
 - the interruption was a rate limit, network failure, timeout, or API error.
 
-Missing or stale checkpoints create a new thread from the existing validated provider-history/`agentTrace` path. Cancellation, output limits, tool limits, and uncertain side-effect states also use this path, preventing a tool node from being blindly replayed.
+Missing or stale checkpoints create a new thread from the existing validated provider-history/`agentTrace` path. Cancellation, output limits, tool limits, and uncertain side-effect states also use this path, preventing a tool node from being blindly replayed. A stale original thread is retained until normal branch/conversation deletion, namespace clearing, or eligible quota eviction.
 
-Checkpoint corruption and I/O failures are surfaced as checkpoint errors; they are not silently treated as a valid trace fallback.
+Corruption encountered while reading a live repository record is surfaced as a typed checkpoint error. Corrupt or missing manifests found during startup are quarantined and then appear absent, so resume can use the validated history/`agentTrace` fallback. Repository-originated errors map to localized checkpoint categories; saver-level message-artifact validation failures currently surface as generic `unknown_error` messages. None expose decrypted records or logical IDs.
 
 ## Quotas
 
 Checkpoint quotas are independent from conversation quotas.
 
-| Dimension                           |   Limit |
-| ----------------------------------- | ------: |
-| Threads                             |     256 |
-| Namespaces per thread               |       8 |
-| Checkpoints per thread              |     512 |
-| Pending writes per checkpoint       |   1,024 |
-| Serialized checkpoint value         |   2 MiB |
-| Serialized metadata                 | 256 KiB |
-| One pending-write value             |   1 MiB |
-| Pending-write values per checkpoint |   8 MiB |
-| Base message snapshot               |  24 MiB |
-| One message artifact                |   4 MiB |
-| One thread                          |  64 MiB |
-| Complete checkpoint namespace       | 256 MiB |
-| Manifest                            |   2 MiB |
-| One encrypted record file           |  32 MiB |
+| Dimension                                     |   Limit |
+| --------------------------------------------- | ------: |
+| Threads                                       |     256 |
+| Namespaces per thread                         |       8 |
+| Checkpoints per thread                        |     512 |
+| Pending writes per checkpoint                 |   1,024 |
+| Serialized checkpoint value                   |   2 MiB |
+| Serialized metadata                           | 256 KiB |
+| One pending-write value                       |   1 MiB |
+| Pending-write values per checkpoint           |   8 MiB |
+| Base message snapshot                         |  24 MiB |
+| One message artifact                          |   4 MiB |
+| One thread                                    |  64 MiB |
+| Valid manifest-accounted checkpoint namespace | 256 MiB |
+| Manifest                                      |   2 MiB |
+| One encrypted record file                     |  32 MiB |
 
-Projected encrypted record sizes, including envelope overhead and serialized wrappers, are counted before the manifest is committed. An already-over-limit thread remains readable and deletable but cannot grow.
+Projected encrypted record sizes, including envelope overhead and serialized wrappers, are counted before the manifest is committed. An already-over-limit thread remains readable and deletable but cannot grow. Quarantined `corrupt-*` scopes remain outside normal thread and byte accounting, so they can make the physical sidecar directory exceed the valid 256 MiB quota until namespace clearing or Vault reset removes them.
 
 ## Eviction and deletion
 
@@ -137,7 +138,7 @@ Quota recovery removes whole inactive threads only. Ancestor checkpoints and pen
 
 Eviction order:
 
-1. abandoned threads, oldest access first;
+1. abandoned threads, oldest recorded mutation/descriptor-touch timestamp first;
 2. completed threads left by cleanup failure;
 3. interrupted threads with a validated `agentTrace` fallback.
 
@@ -162,7 +163,7 @@ Repository initialization:
 - removes ciphertext temporary files left by interrupted atomic writes;
 - authenticates each manifest without eagerly loading every checkpoint;
 - quarantines corrupt or missing manifests under an encrypted `corrupt-*` directory name;
-- removes encrypted record files not referenced by a valid manifest;
+- removes encrypted record files not referenced by a successfully parsed manifest within that scope; quarantined corrupt scopes retain their records until namespace clearing or Vault reset;
 - reclassifies process-local active lifecycles.
 
 Typed repository errors distinguish invalid input, missing records, quotas, corruption, and I/O failures. UI-facing errors expose only a localized category, never decrypted record data or logical IDs.

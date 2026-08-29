@@ -124,7 +124,7 @@ vi.mock('electron', () => ({
 
 const { BrowserManager } = await import('../src/electron/browser/browser-manager')
 
-function repositoryMock(profile?: BrowserCookieProfile) {
+function repositoryMock(profile?: BrowserCookieProfile, settingsPatch: Partial<AppSettings> = {}) {
   const settings = {
     builtInBrowserEnabled: true,
     browserAllowHttpLoopback: false,
@@ -133,6 +133,7 @@ function repositoryMock(profile?: BrowserCookieProfile) {
     browserFileUploadsEnabled: false,
     browserDownloadsEnabled: false,
     proxy: { mode: 'off', url: '' },
+    ...settingsPatch,
   } as AppSettings
   return {
     getSettings: () => settings,
@@ -159,6 +160,58 @@ describe('BrowserManager multi-tab lifecycle', () => {
 
     expect((await manager.switchTab('conversation-1', firstTabId)).activeTabId).toBe(firstTabId)
     expect((await manager.closeTab('conversation-1', firstTabId)).tabs).toHaveLength(1)
+    await manager.closeAll()
+  })
+
+  it('does not expose absolute download paths through browser events', async () => {
+    const manager = new BrowserManager(repositoryMock(undefined, { browserDownloadsEnabled: true }))
+    const events: unknown[] = []
+    manager.onEvent((event) => events.push(event))
+    const state = await manager.ensure('conversation-download')
+    const tabId = state.activeTabId
+    const internals = manager as unknown as {
+      sessions: Map<string, { tabs: Map<string, { view: { webContents: { id: number } } }> }>
+      handleDownload: (
+        managed: unknown,
+        event: { preventDefault: () => void },
+        item: unknown,
+        webContentsId: number,
+      ) => void
+    }
+    const managed = internals.sessions.get('conversation-download')!
+    const contentsId = managed.tabs.get(tabId)!.view.webContents.id
+    const item = {
+      getFilename: () => 'report.pdf',
+      getReceivedBytes: () => 0,
+      getTotalBytes: () => 100,
+      setSavePath: vi.fn(),
+      cancel: vi.fn(),
+      on: vi.fn(),
+      once: vi.fn(),
+    }
+
+    internals.handleDownload(managed, { preventDefault: vi.fn() }, item, contentsId)
+
+    const downloadEvent = events.find(
+      (event): event is { type: 'download'; download: Record<string, unknown> } =>
+        typeof event === 'object' && event !== null && (event as { type?: string }).type === 'download',
+    )
+    expect(downloadEvent?.download).toMatchObject({ fileName: 'report.pdf', status: 'started' })
+    expect(downloadEvent?.download).not.toHaveProperty('filePath')
+
+    const agentPending = {
+      tabId,
+      directoryPath: 'C:\\workspace',
+      relativeDirectory: 'downloads',
+      resolve: vi.fn(),
+      reject: vi.fn(),
+      timer: setTimeout(() => undefined, 10_000),
+      item,
+    }
+    ;(managed as unknown as { pendingDownload?: typeof agentPending }).pendingDownload = agentPending
+    const secondItem = { ...item, cancel: vi.fn(), setSavePath: vi.fn() }
+    internals.handleDownload(managed, { preventDefault: vi.fn() }, secondItem, contentsId)
+    expect(secondItem.cancel).toHaveBeenCalledOnce()
     await manager.closeAll()
   })
 

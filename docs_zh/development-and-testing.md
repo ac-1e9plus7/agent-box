@@ -6,24 +6,24 @@
 
 ## 开发命令
 
-CI 当前以 Node.js 24 和 pnpm 11.24.0 为基线。仓库通过 `engines` 要求 Node.js 24 或更高版本，并通过 `packageManager` 固定 pnpm 版本；排查环境差异时应优先与这些版本对齐。
+CI 当前以 Node.js 24 和 pnpm 11.24.0 为基线。仓库通过 `engines` 要求 Node.js 24 或更高版本，并通过 `packageManager` 固定 pnpm 版本；排查环境差异时应优先与这些版本对齐。Node.js 25+ 不再分发 Corepack，因此在 Node 25+ 上应安装独立 Corepack 或以其他方式提供 pnpm 11.24.0，不能假定存在 `corepack enable`。
 
-| 命令                | 实际行为                                                                                            |
-| ------------------- | --------------------------------------------------------------------------------------------------- |
-| `pnpm install`      | 安装依赖；CI 使用 `pnpm install --frozen-lockfile`                                                  |
-| `pnpm dev`          | 通过 `electron-vite dev` 启动 renderer 开发服务器和 Electron                                        |
-| `pnpm preview`      | 预览已经生成的 electron-vite 构建                                                                   |
-| `pnpm typecheck`    | 分别以 `tsconfig.node.json` 和 `tsconfig.web.json` 检查 main/preload/shared 与 renderer，不生成文件 |
-| `pnpm lint`         | 运行带 TypeScript 类型信息的 ESLint，并将 warning 视为失败                                          |
-| `pnpm lint:fix`     | 应用 ESLint 可安全执行的自动修复                                                                    |
-| `pnpm format`       | 使用 Prettier 格式化受支持的源码、配置、样式与文档文件                                              |
-| `pnpm format:check` | 只检查 Prettier 格式，不修改文件                                                                    |
-| `pnpm test`         | 以 `vitest run` 单次运行全部测试                                                                    |
-| `pnpm test:watch`   | 以 Vitest watch 模式运行受影响测试                                                                  |
-| `pnpm check`        | 依次运行类型检查、lint、格式、本地化检查与完整测试                                                  |
-| `pnpm build`        | 先运行 `pnpm typecheck`，再执行 `electron-vite build`                                               |
-| `pnpm package`      | 先构建，再以 `electron-builder --dir` 生成未封装应用目录                                            |
-| `pnpm dist`         | 先构建，再为当前平台生成 electron-builder 分发产物                                                  |
+| 命令                | 实际行为                                                                                                                                                                                    |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm install`      | 安装依赖；CI 使用 `pnpm install --frozen-lockfile`                                                                                                                                          |
+| `pnpm dev`          | 通过 `electron-vite dev` 启动 renderer 开发服务器和 Electron                                                                                                                                |
+| `pnpm preview`      | 预览已经生成的 electron-vite 构建                                                                                                                                                           |
+| `pnpm typecheck`    | 分别以 `tsconfig.node.json` 和 `tsconfig.web.json` 检查 main/preload/shared 与 renderer，不生成 JavaScript 或声明文件；composite TypeScript project 仍可能刷新被忽略的 `*.tsbuildinfo` 缓存 |
+| `pnpm lint`         | 运行带 TypeScript 类型信息的 ESLint，并将 warning 视为失败                                                                                                                                  |
+| `pnpm lint:fix`     | 应用 ESLint 可安全执行的自动修复                                                                                                                                                            |
+| `pnpm format`       | 使用 Prettier 格式化受支持的源码、配置、样式与文档文件                                                                                                                                      |
+| `pnpm format:check` | 只检查 Prettier 格式，不修改文件                                                                                                                                                            |
+| `pnpm test`         | 以 `vitest run` 单次运行全部测试                                                                                                                                                            |
+| `pnpm test:watch`   | 以 Vitest watch 模式运行受影响测试                                                                                                                                                          |
+| `pnpm check`        | 依次运行类型检查、lint、格式、本地化检查与完整测试                                                                                                                                          |
+| `pnpm build`        | 先运行 `pnpm typecheck`，再执行 `electron-vite build`                                                                                                                                       |
+| `pnpm package`      | 先构建，再以 `electron-builder --dir` 生成未封装应用目录                                                                                                                                    |
+| `pnpm dist`         | 先构建，再为当前平台生成 electron-builder 分发产物                                                                                                                                          |
 
 ## 构建产物与打包冒烟测试
 
@@ -39,7 +39,7 @@ pnpm package
 
 ## Vitest 测试体系
 
-[`vitest.config.ts`](../vitest.config.ts) 默认使用 Node 环境，同时匹配 `tests/**/*.test.ts` 与 `tests/**/*.test.tsx`。适合单测的 renderer 行为仍应尽量拆成纯函数。Renderer 集成测试通过文件级配置启用 jsdom，使用 Testing Library 渲染真实 React 组件，并以进程内 mock 替换 `window.agentbox` preload bridge；它们不属于完整 Electron UI 自动化。由于这些测试会导入真实组件图，`tsconfig.node.json` 纳入完整 renderer 源码树；`.ts` 与 `.tsx` 测试都会参加 TypeScript 检查。
+[`vitest.config.ts`](../vitest.config.ts) 默认使用 Node 环境，同时匹配 `tests/**/*.test.ts` 与 `tests/**/*.test.tsx`。适合单测的 renderer 行为仍应尽量拆成纯函数。Renderer 集成测试通过文件级配置启用 jsdom，使用 Testing Library 渲染真实 React 组件；`app.integration` 和 `browser-panel.integration` 会安装类型化的进程内 `window.agentbox` preload bridge mock，`settings-dialog.integration` 和 `chat-content-usage` 则通过组件 props/callback 测试，不跨越该 bridge。它们不属于完整 Electron UI 自动化。由于这些测试会导入真实组件图，`tsconfig.node.json` 纳入完整 renderer 源码树；`.ts` 与 `.tsx` 测试都会参加 TypeScript 检查。
 
 | 范围                                         | 代表性测试                                                                                                                                                                                                                                                                                                                                                                             |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -64,7 +64,7 @@ pnpm check
 pnpm build
 ```
 
-`pnpm check` 是不会修改文件的统一质量门禁。需要自动修复时先运行 `pnpm lint:fix` 与 `pnpm format`，再重新执行检查。自动生成的语言包与包管理器锁文件不交给 Prettier，以各自的生成器输出为准。`pnpm build` 包含类型检查，但不包含其他质量检查。涉及打包入口、依赖外置、preload 或 Electron 启动生命周期时，额外执行 `pnpm package` 和 unpacked 应用冒烟测试。
+`pnpm check` 是不重写应用源码的统一质量门禁；其 composite TypeScript 检查仍可能刷新被忽略的 `*.tsbuildinfo` 缓存。需要自动修复时先运行 `pnpm lint:fix` 与 `pnpm format`，再重新执行检查。自动生成的语言包与包管理器锁文件不交给 Prettier，以各自的生成器输出为准。`pnpm build` 包含类型检查，但不包含其他质量检查。涉及打包入口、依赖外置、preload 或 Electron 启动生命周期时，额外执行 `pnpm package` 和 unpacked 应用冒烟测试。
 
 ## GitHub Actions
 
