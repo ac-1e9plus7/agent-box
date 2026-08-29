@@ -255,8 +255,20 @@ export function McpTab({
   }, [mcpServersList, mcpSearch])
 
   const builtinExploredTools = useMemo<ExploredToolDefinition[]>(
-    () => createBuiltinAgentToolCatalog(skillsList).map((tool) => ({ ...tool, source: 'builtin' })),
-    [skillsList],
+    () =>
+      createBuiltinAgentToolCatalog(skillsList, {
+        browserEnabled: preferenceDraft.builtInBrowserEnabled,
+        browserScreenshotsEnabled: preferenceDraft.browserAgentScreenshotsEnabled,
+        browserUploadsEnabled: preferenceDraft.browserFileUploadsEnabled,
+        browserDownloadsEnabled: preferenceDraft.browserDownloadsEnabled,
+      }).map((tool) => ({ ...tool, source: 'builtin' })),
+    [
+      preferenceDraft.browserAgentScreenshotsEnabled,
+      preferenceDraft.browserDownloadsEnabled,
+      preferenceDraft.browserFileUploadsEnabled,
+      preferenceDraft.builtInBrowserEnabled,
+      skillsList,
+    ],
   )
 
   const allExploredTools = useMemo<ExploredToolDefinition[]>(

@@ -6,12 +6,17 @@ import { registerIpcHandlers } from './ipc/register-ipc'
 import { McpManager } from './mcp/mcp-manager'
 import { AppRepository } from './storage/app-repository'
 import { languageFromSystemLocale, setLanguage, t } from '../shared/i18n'
+import { BrowserManager } from './browser/browser-manager'
+import { BrowserToolExecutor } from './browser/browser-tool-executor'
 
 let mainWindow: BrowserWindow | undefined
 let repository: AppRepository | undefined
 let gateway: ChatGateway | undefined
 let mcpManager: McpManager | undefined
+let browserManager: BrowserManager | undefined
 let unregisterIpc: (() => void) | undefined
+let quitCleanupStarted = false
+let quitCleanupFinished = false
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -69,17 +74,23 @@ async function start(): Promise<void> {
   await repository.initialize()
   setLanguage(repository.getSettings().language)
   mcpManager = new McpManager(repository)
-  gateway = new ChatGateway(repository, mcpManager)
+  browserManager = new BrowserManager(repository)
+  gateway = new ChatGateway(repository, mcpManager, new BrowserToolExecutor(browserManager))
   openMainWindow()
 }
 
 function openMainWindow(): void {
-  if (!repository || !gateway || !mcpManager) throw new Error('Application services are unavailable')
+  if (!repository || !gateway || !mcpManager || !browserManager) {
+    throw new Error('Application services are unavailable')
+  }
   const window = createWindow()
   mainWindow = window
-  unregisterIpc = registerIpcHandlers(window, repository, gateway, mcpManager)
+  browserManager.attachHostWindow(window)
+  unregisterIpc = registerIpcHandlers(window, repository, gateway, mcpManager, browserManager)
   window.on('closed', () => {
     gateway?.cancelAll()
+    browserManager?.detachHostWindow(window)
+    void browserManager?.closeAll().catch(() => undefined)
     void mcpManager?.closeAll().catch(() => {})
     unregisterIpc?.()
     unregisterIpc = undefined
@@ -211,8 +222,19 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (quitCleanupFinished) return
+  event.preventDefault()
+  if (quitCleanupStarted) return
+  quitCleanupStarted = true
   gateway?.cancelAll()
-  unregisterIpc?.()
-  repository?.destroy()
+  const browserCleanup = browserManager?.closeAll() ?? Promise.resolve()
+  void browserCleanup
+    .catch(() => undefined)
+    .finally(() => {
+      unregisterIpc?.()
+      repository?.destroy()
+      quitCleanupFinished = true
+      app.quit()
+    })
 })

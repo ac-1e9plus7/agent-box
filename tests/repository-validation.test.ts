@@ -338,6 +338,7 @@ describe('AppRepository business constraints and relational integrity', () => {
       title: 'Skills',
       modelId: 'openrouter-auto',
       agentMode: true,
+      browserToolEnabled: true,
       skillIds: ['translator-polyglot'],
       mcpServerIds: ['filesystem'],
       workingDirectory: process.cwd(),
@@ -362,9 +363,45 @@ describe('AppRepository business constraints and relational integrity', () => {
     })
 
     expect(saved.skillIds).toEqual(['translator-polyglot'])
+    expect(saved.browserToolEnabled).toBe(true)
     expect(saved.mcpServerIds).toEqual(['filesystem'])
     expect(saved.workingDirectory).toBe(process.cwd())
     expect(saved.messages[0]?.skillActivations?.[0]?.source).toBe('explicit')
+  })
+
+  it('stores persistent browser cookies only in the encrypted Vault profile and deletes them with the conversation', async () => {
+    const conversation = await repo.saveConversation({
+      id: 'browser-cookie-conversation',
+      title: 'Browser cookies',
+      modelId: 'openrouter-auto',
+      workingDirectory: process.cwd(),
+      messages: [],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+    await repo.saveBrowserCookieProfile(conversation.id, [
+      {
+        name: 'session',
+        value: 'encrypted-secret-value',
+        domain: '.example.com',
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        session: true,
+        sameSite: 'lax',
+      },
+    ])
+
+    expect(repo.getBrowserCookieProfile(conversation.id)?.cookies[0]).toMatchObject({
+      name: 'session',
+      value: 'encrypted-secret-value',
+      httpOnly: true,
+    })
+    expect(repo.getConversation(conversation.id)).not.toHaveProperty('browserProfiles')
+    expect(readFileSync(join(dir, 'vault', 'user-data.v1.enc')).includes('encrypted-secret-value')).toBe(false)
+
+    await repo.removeConversation(conversation.id)
+    expect(repo.getBrowserCookieProfile(conversation.id)).toBeUndefined()
   })
 
   it('persists resumable Agent interruption checkpoints', async () => {

@@ -42,4 +42,32 @@ describe('built-in Agent tool catalog', () => {
       'agentbox_run_terminal',
     ])
   })
+
+  it('advertises the isolated browser family only when the feature is enabled', () => {
+    const disabled = createBuiltinAgentToolCatalog([makeSkill()])
+    const enabled = createBuiltinAgentToolCatalog([makeSkill()], { browserEnabled: true })
+
+    expect(disabled.some((tool) => tool.serverId === 'agentbox-browser')).toBe(false)
+    expect(enabled.filter((tool) => tool.serverId === 'agentbox-browser').map((tool) => tool.modelName)).toEqual([
+      'agentbox_browser_tabs',
+      'agentbox_browser_navigate',
+      'agentbox_browser_snapshot',
+      'agentbox_browser_click',
+      'agentbox_browser_type',
+      'agentbox_browser_scroll',
+      'agentbox_browser_close',
+    ])
+  })
+
+  it('adds screenshot, upload, and download tools only for their explicit settings', () => {
+    const tools = createBuiltinAgentToolCatalog([makeSkill()], {
+      browserEnabled: true,
+      browserScreenshotsEnabled: true,
+      browserUploadsEnabled: true,
+      browserDownloadsEnabled: true,
+    })
+    expect(tools.filter((tool) => tool.serverId === 'agentbox-browser').map((tool) => tool.modelName)).toEqual(
+      expect.arrayContaining(['agentbox_browser_screenshot', 'agentbox_browser_upload', 'agentbox_browser_download']),
+    )
+  })
 })

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import type {
   AppSettings,
+  BrowserEvent,
+  BrowserState,
   ChatRequest,
   ExportBackupInput,
   ExportBackupResult,
@@ -16,6 +18,7 @@ import type {
   Skill,
   SkillInput,
   StreamEvent,
+  ToolApprovalDecision,
 } from '../../shared/types'
 import { ChatContent } from './components/ChatContent'
 import { Composer } from './components/Composer'
@@ -25,6 +28,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import type { SettingsSavePayload } from './components/SettingsDialog'
 import { Sidebar } from './components/Sidebar'
 import { Topbar } from './components/Topbar'
+import { BrowserPanel } from './components/browser/BrowserPanel'
 import { promptSuggestions } from './defaults'
 import type { ChatMessage, Conversation, ModelConfig, ProviderConfig, SettingsSection, WebSearchMode } from './types'
 import { getActiveMessageChain, getAncestorsForRegeneration } from '../../shared/conversation-tree'
@@ -76,6 +80,12 @@ const emptySettings: AppSettings = {
   agentContextCompactionThresholdPercent: DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
   agentContextCompactionKeepRecentTurns: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
   agentProviderContextOptimizationMode: DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
+  builtInBrowserEnabled: false,
+  browserAllowHttpLoopback: false,
+  browserPersistCookiesEnabled: false,
+  browserAgentScreenshotsEnabled: false,
+  browserFileUploadsEnabled: false,
+  browserDownloadsEnabled: false,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -134,6 +144,8 @@ export default function App(): JSX.Element {
   const [loading, setLoading] = useState(true)
   const [bootstrapError, setBootstrapError] = useState('')
   const [toast, setToast] = useState('')
+  const [browserPanelOpen, setBrowserPanelOpen] = useState(false)
+  const [browserStates, setBrowserStates] = useState<Record<string, BrowserState>>({})
 
   const toastTimerRef = useRef<number | undefined>(undefined)
   const autoRenamingRef = useRef<Set<string>>(new Set())
@@ -181,6 +193,37 @@ export default function App(): JSX.Element {
     settings,
     showToast,
   })
+
+  const handleBrowserState = useCallback((state: BrowserState): void => {
+    setBrowserStates((current) => ({ ...current, [state.conversationId]: state }))
+  }, [])
+
+  useEffect(
+    () =>
+      window.agentbox.browser.onEvent((event: BrowserEvent) => {
+        if (event.type === 'download') {
+          if (event.download.status === 'completed') {
+            showToast(t('Browser download completed: {value0}', { value0: event.download.fileName }))
+          } else if (event.download.status === 'interrupted' || event.download.status === 'cancelled') {
+            showToast(t('Browser download did not complete: {value0}', { value0: event.download.fileName }))
+          }
+          return
+        }
+        handleBrowserState(event.state)
+        if (
+          event.state.conversationId === activeConversationId &&
+          event.state.url &&
+          event.state.phase === 'navigating'
+        ) {
+          setBrowserPanelOpen(true)
+        }
+      }),
+    [activeConversationId, handleBrowserState, showToast],
+  )
+
+  useEffect(() => {
+    if (!settings.builtInBrowserEnabled) setBrowserPanelOpen(false)
+  }, [settings.builtInBrowserEnabled])
 
   const visibleMessages = useMemo(
     () =>
@@ -521,6 +564,34 @@ export default function App(): JSX.Element {
     }
   }
 
+  const handleToggleBrowserPanel = (): void => {
+    if (!settings.builtInBrowserEnabled) {
+      setSettingsSection('general')
+      setSettingsOpen(true)
+      showToast(t('Enable the built-in browser in Settings first.'))
+      return
+    }
+    if (!activeConversation) return
+    setBrowserPanelOpen((current) => !current)
+  }
+
+  const handleBrowserToolEnabledChange = useCallback(
+    (browserToolEnabled: boolean): void => {
+      if (!activeConversation || !settings.builtInBrowserEnabled) return
+      const nextConversation: Conversation = {
+        ...activeConversation,
+        browserToolEnabled,
+        updatedAt: new Date().toISOString(),
+      }
+      replaceConversations((current) =>
+        current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
+      )
+      void persistConversation(nextConversation)
+      if (browserToolEnabled) setBrowserPanelOpen(true)
+    },
+    [activeConversation, persistConversation, replaceConversations, settings.builtInBrowserEnabled],
+  )
+
   const handleMcpServerSelectionChange = useCallback(
     (serverIds: string[]): void => {
       if (!activeConversation) return
@@ -735,6 +806,7 @@ export default function App(): JSX.Element {
         modelId: activeModel.id,
         messages,
         agentMode: conversation.agentMode ?? agentMode,
+        browserToolEnabled: conversation.browserToolEnabled,
         skillIds: conversation.skillIds,
         mcpServerIds: conversation.mcpServerIds,
         workingDirectory: conversation.workingDirectory,
@@ -892,8 +964,8 @@ export default function App(): JSX.Element {
   }
 
   const handleToolApproval = useCallback(
-    async (callId: string, approved: boolean): Promise<void> => {
-      await resolveToolApproval(activeConversationId, callId, approved)
+    async (callId: string, decision: ToolApprovalDecision): Promise<void> => {
+      await resolveToolApproval(activeConversationId, callId, decision)
     },
     [activeConversationId, resolveToolApproval],
   )
@@ -1365,6 +1437,8 @@ export default function App(): JSX.Element {
           activeModel={activeModel}
           activeTitle={activeConversation?.title ?? t('conversation.newPlaceholder')}
           agentMode={agentMode}
+          browserAvailable={settings.builtInBrowserEnabled && Boolean(activeConversation)}
+          browserPanelOpen={browserPanelOpen}
           enabledSkillsCount={skills.filter((skill) => skill.enabled).length}
           selectedSkillsCount={activeConversation?.skillIds?.length ?? 0}
           workingDirectory={activeConversation?.workingDirectory}
@@ -1378,68 +1452,84 @@ export default function App(): JSX.Element {
           onRenameConversation={(title) => activeConversation && renameConversation(activeConversation.id, title)}
           onRestoreSidebar={() => setSidebarCollapsed(false)}
           onToggleAgentMode={handleToggleAgentMode}
+          onToggleBrowserPanel={activeConversation ? handleToggleBrowserPanel : undefined}
           onToggleReasoning={handleToggleReasoning}
           onChangeWorkingDirectory={
             activeConversation ? () => void handleChangeWorkingDirectory() : openNewConversationDialog
           }
         />
 
-        <section className="chat-stage">
-          <ChatContent
-            messages={visibleMessages}
-            allMessages={activeConversation?.messages}
-            models={models}
-            streaming={isCurrentStreaming}
-            suggestions={promptSuggestions}
-            userAvatar={settings.userAvatar}
-            userNickname={settings.userNickname}
-            onDeleteMessage={(messageId) => void handleDeleteMessage(messageId)}
-            onEditMessage={(messageId, content, regenerate) => handleEditMessage(messageId, content, regenerate)}
-            onRegenerate={(targetAssistantId) => void handleRegenerate(targetAssistantId)}
-            onResumeAgent={(assistantMessageId) => void handleResumeAgentExecution(assistantMessageId)}
-            onSwitchVersion={handleSwitchVersion}
-            onSuggestion={setDraft}
-            onResolveToolApproval={(callId, approved) => void handleToolApproval(callId, approved)}
-          />
-          <Composer
-            activeModel={activeModel}
-            attachments={attachments}
-            contextLimit={contextProjection?.inputBudget ?? 0}
-            contextCanTrimOnce={contextProjection?.canTrimOnce ?? false}
-            contextMessage={contextProjection?.message ?? ''}
-            contextMode={settings.contextManagementMode}
-            contextTone={contextProjection?.tone ?? 'ok'}
-            contextTokens={contextProjection?.estimatedInputTokens ?? 0}
-            disabled={!activeModel}
-            draft={draft}
-            agentMode={agentMode}
-            skills={skills}
-            selectedSkillIds={activeConversation?.skillIds}
-            mcpToolsCount={mcpTools.length}
-            mcpServers={mcpServers}
-            selectedMcpServerIds={activeConversation?.mcpServerIds}
-            onOpenMcpSettings={() => openSettings('mcp')}
-            onOpenSkillsSettings={() => openSettings('skills')}
-            onMcpServerSelectionChange={handleMcpServerSelectionChange}
-            onSkillSelectionChange={handleSkillSelectionChange}
-            reasoningEnabled={reasoningEnabled}
-            webSearchAvailable={webSearchAvailable}
-            webSearchMode={webSearchMode}
-            sendBlocked={contextProjection?.blocked ?? false}
-            sendOnEnter={settings.sendShortcut === 'enter'}
-            streaming={isCurrentStreaming}
-            onAttachmentsChange={setAttachments}
-            onDraftChange={setDraft}
-            onOpenContextSettings={() => openSettings('general')}
-            onOpenModelSettings={() => openSettings('models')}
-            onSend={() => void handleSend()}
-            onSendWithTrim={() => void handleSend(true)}
-            onShowToast={showToast}
-            onStop={() => void handleStop(activeConversationId)}
-            onToggleAgentMode={handleToggleAgentMode}
-            onToggleReasoning={handleToggleReasoning}
-            onWebSearchModeChange={handleWebSearchModeChange}
-          />
+        <section className={`chat-stage ${browserPanelOpen ? 'has-browser' : ''}`}>
+          <div className="chat-pane">
+            <ChatContent
+              messages={visibleMessages}
+              allMessages={activeConversation?.messages}
+              models={models}
+              streaming={isCurrentStreaming}
+              suggestions={promptSuggestions}
+              userAvatar={settings.userAvatar}
+              userNickname={settings.userNickname}
+              onDeleteMessage={(messageId) => void handleDeleteMessage(messageId)}
+              onEditMessage={(messageId, content, regenerate) => handleEditMessage(messageId, content, regenerate)}
+              onRegenerate={(targetAssistantId) => void handleRegenerate(targetAssistantId)}
+              onResumeAgent={(assistantMessageId) => void handleResumeAgentExecution(assistantMessageId)}
+              onSwitchVersion={handleSwitchVersion}
+              onSuggestion={setDraft}
+              onResolveToolApproval={(callId, decision) => void handleToolApproval(callId, decision)}
+            />
+            <Composer
+              activeModel={activeModel}
+              attachments={attachments}
+              contextLimit={contextProjection?.inputBudget ?? 0}
+              contextCanTrimOnce={contextProjection?.canTrimOnce ?? false}
+              contextMessage={contextProjection?.message ?? ''}
+              contextMode={settings.contextManagementMode}
+              contextTone={contextProjection?.tone ?? 'ok'}
+              contextTokens={contextProjection?.estimatedInputTokens ?? 0}
+              disabled={!activeModel}
+              draft={draft}
+              agentMode={agentMode}
+              browserAvailable={settings.builtInBrowserEnabled}
+              browserToolEnabled={Boolean(activeConversation?.browserToolEnabled)}
+              skills={skills}
+              selectedSkillIds={activeConversation?.skillIds}
+              mcpToolsCount={mcpTools.length}
+              mcpServers={mcpServers}
+              selectedMcpServerIds={activeConversation?.mcpServerIds}
+              onOpenMcpSettings={() => openSettings('mcp')}
+              onOpenSkillsSettings={() => openSettings('skills')}
+              onMcpServerSelectionChange={handleMcpServerSelectionChange}
+              onSkillSelectionChange={handleSkillSelectionChange}
+              reasoningEnabled={reasoningEnabled}
+              webSearchAvailable={webSearchAvailable}
+              webSearchMode={webSearchMode}
+              sendBlocked={contextProjection?.blocked ?? false}
+              sendOnEnter={settings.sendShortcut === 'enter'}
+              streaming={isCurrentStreaming}
+              onAttachmentsChange={setAttachments}
+              onBrowserToolEnabledChange={handleBrowserToolEnabledChange}
+              onDraftChange={setDraft}
+              onOpenContextSettings={() => openSettings('general')}
+              onOpenModelSettings={() => openSettings('models')}
+              onSend={() => void handleSend()}
+              onSendWithTrim={() => void handleSend(true)}
+              onShowToast={showToast}
+              onStop={() => void handleStop(activeConversationId)}
+              onToggleAgentMode={handleToggleAgentMode}
+              onToggleReasoning={handleToggleReasoning}
+              onWebSearchModeChange={handleWebSearchModeChange}
+            />
+          </div>
+          {browserPanelOpen && activeConversation && settings.builtInBrowserEnabled && (
+            <BrowserPanel
+              conversationId={activeConversation.id}
+              onClosePanel={() => setBrowserPanelOpen(false)}
+              onError={showToast}
+              onState={handleBrowserState}
+              state={browserStates[activeConversation.id]}
+              viewVisible={!settingsOpen && !newConversationOpen}
+            />
+          )}
         </section>
       </main>
 

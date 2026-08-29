@@ -60,6 +60,8 @@ Provider streaming 仍位于 `ChatGateway`。在 model node 运行期间，文�
 
 同一请求级 `AbortSignal` 传给图和所有回调，用于取消 provider fetch、MCP、代码、终端、工作区和审批等待。120 秒网络停滞定时器只在等待 provider 数据时运行，工具处理期间暂停。
 
+内置浏览器操作使用同一个 signal 处理导航、截图、上传和下载取消，但活动多标签 `WebContentsView` 会话属于对话，而不是 graph state。Checkpoint 和 `agentTrace` 只保存脱敏调用以及已完成的语义/截图结果，不保存标签状态、Cookie 值、DOM 引用、进行中的下载或导航状态。可选 Cookie 持久化使用独立加密 Vault profile，绝不进入 graph state。应用重启或浏览器会话被回收后，Agent 必须重新列出/创建标签并检查页面；过期元素引用会被拒绝，不会重放。
+
 ## Checkpoint 行为
 
 Renderer 创建的 Agent 请求带 `responseMessageId`。Gateway 从 conversation/response ID 派生加密 checkpoint thread，并把 AgentBox `BaseCheckpointSaver` 适配器传给图。

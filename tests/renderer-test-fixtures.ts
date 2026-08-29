@@ -33,6 +33,12 @@ export const rendererSettings: AppSettings = {
   agentContextCompactionThresholdPercent: 70,
   agentContextCompactionKeepRecentTurns: 3,
   agentProviderContextOptimizationMode: 'off',
+  builtInBrowserEnabled: false,
+  browserAllowHttpLoopback: false,
+  browserPersistCookiesEnabled: false,
+  browserAgentScreenshotsEnabled: false,
+  browserFileUploadsEnabled: false,
+  browserDownloadsEnabled: false,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -216,6 +222,23 @@ export function createRendererApiMock({
         }
       }),
     },
+    browser: {
+      ensure: vi.fn(async (conversationId: string) => browserState(conversationId, false)),
+      navigate: vi.fn(async (conversationId: string, url: string) => ({
+        ...browserState(conversationId, true),
+        url,
+        title: 'Test page',
+      })),
+      command: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
+      newTab: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
+      switchTab: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
+      closeTab: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
+      setViewState: vi.fn(async (input: { conversationId: string; visible: boolean }) =>
+        browserState(input.conversationId, input.visible),
+      ),
+      close: vi.fn(async () => undefined),
+      onEvent: vi.fn(() => () => undefined),
+    },
     app: {
       getInfo: vi.fn(async () => ({ name: 'AgentBox', version: '0.1.0', platform: 'win32' })),
     },
@@ -225,5 +248,30 @@ export function createRendererApiMock({
     api,
     emit: (event) => listener?.(event),
     mocks: { conversationSave, stream },
+  }
+}
+
+function browserState(conversationId: string, visible: boolean) {
+  return {
+    conversationId,
+    sessionId: 'browser-test',
+    phase: 'ready' as const,
+    url: '',
+    title: '',
+    loading: false,
+    visible,
+    canGoBack: false,
+    canGoForward: false,
+    activeTabId: 'tab-test',
+    tabs: [
+      {
+        id: 'tab-test',
+        url: '',
+        title: '',
+        loading: false,
+        canGoBack: false,
+        canGoForward: false,
+      },
+    ],
   }
 }

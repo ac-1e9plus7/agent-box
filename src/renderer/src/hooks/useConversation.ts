@@ -44,6 +44,7 @@ export function toStoredConversation(conversation: Conversation): StoredConversa
     modelId: conversation.modelId,
     reasoningEnabled: conversation.reasoningEnabled,
     agentMode: conversation.agentMode,
+    browserToolEnabled: conversation.browserToolEnabled,
     skillIds: conversation.skillIds,
     mcpServerIds: conversation.mcpServerIds,
     workingDirectory: conversation.workingDirectory,

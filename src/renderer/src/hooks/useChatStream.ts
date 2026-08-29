@@ -4,6 +4,7 @@ import type {
   AgentTraceItem,
   ChatRequest,
   StreamEvent,
+  ToolApprovalDecision,
   ToolCallExecution,
   WebCitation,
 } from '../../../shared/types'
@@ -280,6 +281,8 @@ export function applyStreamEvent(
           args: event.args,
           riskLevel: event.riskLevel,
           approvalReason: event.reason,
+          approvalKind: event.approvalKind,
+          approvalScope: event.approvalScope,
           status: 'awaiting-approval',
         }
         return {
@@ -524,14 +527,14 @@ export function useChatStream({
   )
 
   const resolveToolApproval = useCallback(
-    async (conversationId: string, callId: string, approved: boolean): Promise<void> => {
+    async (conversationId: string, callId: string, decision: ToolApprovalDecision): Promise<void> => {
       const stream = activeStreamsRef.current.get(conversationId)
       if (!stream?.requestId) {
         showToast(t('This tool approval request has already ended.'))
         return
       }
       try {
-        await window.agentbox.chat.resolveToolApproval(stream.requestId, callId, approved)
+        await window.agentbox.chat.resolveToolApproval(stream.requestId, callId, decision)
       } catch (error) {
         showToast(t('Unable to submit tool for approval: {value0}', { value0: normalizeError(error) }))
       }

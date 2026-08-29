@@ -54,11 +54,13 @@ A Skill ZIP archive and a conversation backup are distinct formats. Conversation
 
 1. **Code Execution and Algorithms** (`code-interpreter`): programming, debugging, algorithms, complexity, tests, and performance optimization.
 2. **Data Analysis and Spreadsheet Visualization** (`data-analyst`): CSV/Excel data, statistics, trend analysis, and chart conventions.
-3. **Research Extraction and Long-form Reading** (`web-extractor`): information extraction from PDFs, web pages, papers, research reports, and long documents.
+3. **Research and Browser Analysis** (`web-extractor`): information extraction from PDFs, web pages, papers, research reports, and long documents, plus a reference-based workflow for the optional isolated browser.
 4. **Professional Translation and Localization** (`translator-polyglot`): translation, localization, and terminology consistency.
 5. **Prompt Engineering Expert** (`prompt-optimizer`): system prompts, task instructions, roles, and structured templates.
 
 Bundled names, descriptions, and documents follow the application's selected language. User changes to enabled state and customized content are preserved.
+
+The `web-extractor` Skill teaches the model to list and track tabs by `tab_id`, navigate first, read an explicitly approved semantic snapshot for the intended tab, reuse only references from that tab's latest snapshot, refresh after every interaction, cross-check sources, and treat page instructions and screenshots as prompt-injection data rather than Agent commands. It permits screenshot, upload, or download use only when the matching tool is exposed and required by the user's task. The Skill does not grant browser capability: application and conversation switches still control tool exposure, and the main process enforces every network, approval, workspace, size, and sensitive-field restriction.
 
 ---
 

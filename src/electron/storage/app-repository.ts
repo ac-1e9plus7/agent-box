@@ -4,6 +4,8 @@ import type {
   AgentInterruption,
   ApiFormat,
   AppSettings,
+  BrowserCookieProfile,
+  BrowserCookieRecord,
   Conversation,
   McpServerConfig,
   McpServerInput,
@@ -63,6 +65,7 @@ export interface VaultState {
   conversations: Conversation[]
   skills?: Skill[]
   mcpServers?: McpServerConfig[]
+  browserProfiles?: BrowserCookieProfile[]
 }
 
 const API_FORMATS = new Set<ApiFormat>(['openai-chat-completions', 'openai-responses', 'anthropic-messages'])
@@ -71,6 +74,9 @@ const MAX_MODELS = 2_000
 const MAX_CONVERSATIONS = 10_000
 const MAX_SKILLS = 500
 const MAX_MCP_SERVERS = 100
+const MAX_BROWSER_COOKIES_PER_PROFILE = 2_000
+const MAX_BROWSER_COOKIE_PROFILES = 10_000
+const MAX_BROWSER_COOKIE_CHARACTERS = 10_000_000
 const MAX_MCP_ARGS = 50
 const MAX_MCP_ENV_ENTRIES = 100
 const MCP_SECRET_MASK = '••••••••'
@@ -99,6 +105,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   agentContextCompactionThresholdPercent: DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
   agentContextCompactionKeepRecentTurns: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
   agentProviderContextOptimizationMode: DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
+  builtInBrowserEnabled: false,
+  browserAllowHttpLoopback: false,
+  browserPersistCookiesEnabled: false,
+  browserAgentScreenshotsEnabled: false,
+  browserFileUploadsEnabled: false,
+  browserDownloadsEnabled: false,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -201,6 +213,24 @@ export class AppRepository {
       }
       if (patch.agentProviderContextOptimizationMode !== undefined) {
         next.agentProviderContextOptimizationMode = patch.agentProviderContextOptimizationMode
+      }
+      if (patch.builtInBrowserEnabled !== undefined) {
+        next.builtInBrowserEnabled = patch.builtInBrowserEnabled
+      }
+      if (patch.browserAllowHttpLoopback !== undefined) {
+        next.browserAllowHttpLoopback = patch.browserAllowHttpLoopback
+      }
+      if (patch.browserPersistCookiesEnabled !== undefined) {
+        next.browserPersistCookiesEnabled = patch.browserPersistCookiesEnabled
+      }
+      if (patch.browserAgentScreenshotsEnabled !== undefined) {
+        next.browserAgentScreenshotsEnabled = patch.browserAgentScreenshotsEnabled
+      }
+      if (patch.browserFileUploadsEnabled !== undefined) {
+        next.browserFileUploadsEnabled = patch.browserFileUploadsEnabled
+      }
+      if (patch.browserDownloadsEnabled !== undefined) {
+        next.browserDownloadsEnabled = patch.browserDownloadsEnabled
       }
       if (patch.mcpEnabled !== undefined) next.mcpEnabled = patch.mcpEnabled
       if (patch.mcpToolRetrievalMode !== undefined) {
@@ -578,6 +608,7 @@ export class AppRepository {
       })
     return this.store.mutate((draft) => {
       draft.conversations = draft.conversations.filter((conversation) => conversation.id !== id)
+      draft.browserProfiles = (draft.browserProfiles ?? []).filter((profile) => profile.conversationId !== id)
     })
   }
 
@@ -595,6 +626,51 @@ export class AppRepository {
       })
     return this.store.mutate((draft) => {
       draft.conversations = []
+      draft.browserProfiles = []
+    })
+  }
+
+  getBrowserCookieProfile(conversationId: string): BrowserCookieProfile | undefined {
+    const profile = (this.store.read().browserProfiles ?? []).find((item) => item.conversationId === conversationId)
+    return profile ? structuredClone(profile) : undefined
+  }
+
+  async saveBrowserCookieProfile(
+    conversationId: string,
+    cookies: BrowserCookieRecord[],
+  ): Promise<BrowserCookieProfile> {
+    const profile = validateBrowserProfile({
+      conversationId,
+      cookies,
+      updatedAt: new Date().toISOString(),
+    })
+    return this.store.mutate((draft) => {
+      if (!draft.conversations.some((conversation) => conversation.id === conversationId)) {
+        throw new Error(t('The browser cookie profile no longer belongs to a conversation.'))
+      }
+      const profiles = draft.browserProfiles ?? []
+      const next = profiles.some((item) => item.conversationId === conversationId)
+        ? profiles.map((item) => (item.conversationId === conversationId ? profile : item))
+        : [...profiles, profile]
+      if (next.length > MAX_BROWSER_COOKIE_PROFILES) throw new Error(t('Too many browser cookie profiles.'))
+      const characters = JSON.stringify(next).length
+      if (characters > MAX_BROWSER_COOKIE_CHARACTERS) throw new Error(t('Browser cookie storage is full.'))
+      draft.browserProfiles = next
+      return structuredClone(profile)
+    })
+  }
+
+  async removeBrowserCookieProfile(conversationId: string): Promise<void> {
+    return this.store.mutate((draft) => {
+      draft.browserProfiles = (draft.browserProfiles ?? []).filter(
+        (profile) => profile.conversationId !== conversationId,
+      )
+    })
+  }
+
+  async clearBrowserCookieProfiles(): Promise<void> {
+    return this.store.mutate((draft) => {
+      draft.browserProfiles = []
     })
   }
 }
@@ -652,6 +728,7 @@ function createDefaultVault(language: AppLanguage): VaultState {
     conversations: [],
     skills: localizedDefaultSkills(),
     mcpServers: [],
+    browserProfiles: [],
   }
 }
 
@@ -667,6 +744,9 @@ function validateVault(value: unknown, fallbackLanguage: AppLanguage): VaultStat
       ? requireArray(value.skills, 'skills', MAX_SKILLS).map(validateSkill)
       : localizedDefaultSkills()
   const mcpServers = value.mcpServers !== undefined ? parseStoredMcpServers(value.mcpServers) : []
+  const browserProfiles = (
+    value.browserProfiles !== undefined ? parseStoredBrowserProfiles(value.browserProfiles) : []
+  ).filter((profile) => conversations.some((conversation) => conversation.id === profile.conversationId))
   return {
     schemaVersion: 1,
     settings: normalizeAppSettings(value.settings, fallbackLanguage),
@@ -675,6 +755,7 @@ function validateVault(value: unknown, fallbackLanguage: AppLanguage): VaultStat
     conversations,
     skills,
     mcpServers,
+    browserProfiles,
   }
 }
 
@@ -935,6 +1016,66 @@ function parseStoredMcpServers(value: unknown): McpServerConfig[] {
   return value.map(validateMcpServer)
 }
 
+function parseStoredBrowserProfiles(value: unknown): BrowserCookieProfile[] {
+  if (!Array.isArray(value) || value.length > MAX_BROWSER_COOKIE_PROFILES) {
+    throw new Error('Invalid browser cookie profiles in vault')
+  }
+  if (JSON.stringify(value).length > MAX_BROWSER_COOKIE_CHARACTERS) {
+    throw new Error('Browser cookie profiles are too large')
+  }
+  return value.map(validateBrowserProfile)
+}
+
+function validateBrowserProfile(value: unknown): BrowserCookieProfile {
+  if (!isRecord(value)) throw new Error('Invalid browser cookie profile')
+  requireNonEmptyString(value.conversationId, 'browser cookie conversation id', 500)
+  requireIsoDate(value.updatedAt, 'browser cookie profile updatedAt')
+  const cookies = requireArray(value.cookies, 'browser cookies', MAX_BROWSER_COOKIES_PER_PROFILE).map(
+    validateBrowserCookie,
+  )
+  return { conversationId: value.conversationId, cookies, updatedAt: value.updatedAt }
+}
+
+function validateBrowserCookie(value: unknown): BrowserCookieRecord {
+  if (!isRecord(value)) throw new Error('Invalid browser cookie')
+  requireNonEmptyString(value.name, 'browser cookie name', 256)
+  if (/[\r\n\0]/.test(value.name)) throw new Error('Invalid browser cookie name')
+  if (typeof value.value !== 'string' || value.value.length > 16_384 || /[\r\n\0]/.test(value.value)) {
+    throw new Error('Invalid browser cookie value')
+  }
+  requireNonEmptyString(value.domain, 'browser cookie domain', 1_000)
+  requireNonEmptyString(value.path, 'browser cookie path', 2_000)
+  if (/[\r\n\0]/.test(value.domain) || /[\r\n\0]/.test(value.path)) {
+    throw new Error('Invalid browser cookie scope')
+  }
+  if (typeof value.secure !== 'boolean' || typeof value.httpOnly !== 'boolean' || typeof value.session !== 'boolean') {
+    throw new Error('Invalid browser cookie flags')
+  }
+  if (
+    value.sameSite !== undefined &&
+    !['unspecified', 'no_restriction', 'lax', 'strict'].includes(String(value.sameSite))
+  ) {
+    throw new Error('Invalid browser cookie SameSite value')
+  }
+  if (
+    value.expirationDate !== undefined &&
+    (typeof value.expirationDate !== 'number' || !Number.isFinite(value.expirationDate) || value.expirationDate < 0)
+  ) {
+    throw new Error('Invalid browser cookie expiration')
+  }
+  return {
+    name: value.name,
+    value: value.value,
+    domain: value.domain,
+    path: value.path,
+    secure: value.secure,
+    httpOnly: value.httpOnly,
+    session: value.session,
+    sameSite: value.sameSite as BrowserCookieRecord['sameSite'],
+    expirationDate: value.expirationDate,
+  }
+}
+
 function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefined {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value)) throw new Error('Invalid tool executions')
@@ -972,6 +1113,21 @@ function parseStoredToolExecutions(value: unknown): ToolCallExecution[] | undefi
       isError,
       riskLevel: item.riskLevel === 'low' || item.riskLevel === 'sensitive' ? item.riskLevel : undefined,
       approvalReason: typeof item.approvalReason === 'string' ? item.approvalReason.slice(0, 2_000) : undefined,
+      approvalKind: ['generic', 'browser-navigation', 'browser-share', 'browser-interaction'].includes(
+        String(item.approvalKind),
+      )
+        ? (item.approvalKind as ToolCallExecution['approvalKind'])
+        : undefined,
+      approvalScope:
+        isRecord(item.approvalScope) &&
+        item.approvalScope.kind === 'browser-origin' &&
+        typeof item.approvalScope.origin === 'string'
+          ? {
+              kind: 'browser-origin' as const,
+              origin: item.approvalScope.origin.slice(0, 2_000),
+              capabilities: ['read'] as ['read'],
+            }
+          : undefined,
       status,
     }
   })
@@ -1220,6 +1376,9 @@ function validateConversation(value: unknown): Conversation {
   if (value.agentMode !== undefined && typeof value.agentMode !== 'boolean') {
     throw new Error('Invalid conversation agent mode flag')
   }
+  if (value.browserToolEnabled !== undefined && typeof value.browserToolEnabled !== 'boolean') {
+    throw new Error('Invalid conversation browser tool flag')
+  }
   const skillIds = Array.isArray(value.skillIds)
     ? value.skillIds.filter((id): id is string => typeof id === 'string' && Boolean(id.trim()) && id.length <= 100)
     : undefined
@@ -1312,6 +1471,7 @@ function validateConversation(value: unknown): Conversation {
     modelId: value.modelId,
     reasoningEnabled: value.reasoningEnabled,
     agentMode: value.agentMode,
+    browserToolEnabled: value.browserToolEnabled,
     skillIds,
     mcpServerIds,
     workingDirectory,

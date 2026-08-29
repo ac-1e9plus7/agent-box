@@ -9,6 +9,8 @@ interface TopbarProps {
   activeModel?: ModelConfig
   activeTitle: string
   agentMode?: boolean
+  browserAvailable?: boolean
+  browserPanelOpen?: boolean
   enabledSkillsCount?: number
   selectedSkillsCount?: number
   workingDirectory?: string
@@ -24,12 +26,15 @@ interface TopbarProps {
   onToggleAgentMode?: () => void
   onToggleReasoning: () => void
   onChangeWorkingDirectory?: () => void
+  onToggleBrowserPanel?: () => void
 }
 
 export function Topbar({
   activeModel,
   activeTitle,
   agentMode = false,
+  browserAvailable = false,
+  browserPanelOpen = false,
   enabledSkillsCount = 0,
   selectedSkillsCount = 0,
   workingDirectory,
@@ -45,6 +50,7 @@ export function Topbar({
   onToggleAgentMode,
   onToggleReasoning,
   onChangeWorkingDirectory,
+  onToggleBrowserPanel,
 }: TopbarProps): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -128,6 +134,16 @@ export function Topbar({
       </div>
 
       <div className="topbar-controls">
+        <button
+          className={`reasoning-header-button ${browserPanelOpen ? 'is-active' : ''}`}
+          disabled={!onToggleBrowserPanel}
+          onClick={onToggleBrowserPanel}
+          title={browserAvailable ? t('Toggle built-in browser') : t('Enable the built-in browser in Settings first')}
+          type="button"
+        >
+          <Icon name="globe" size={16} />
+          <span>{t('Browser')}</span>
+        </button>
         <label
           className="model-select"
           title={

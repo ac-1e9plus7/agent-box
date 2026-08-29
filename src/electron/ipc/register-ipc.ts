@@ -5,6 +5,7 @@ import { app, dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } fro
 import { IPC_CHANNELS } from '../../shared/ipc'
 import type {
   AppSettings,
+  BrowserCommand,
   ChatRequest,
   Conversation,
   DeveloperRuntimeKind,
@@ -15,6 +16,7 @@ import type {
   ModelInput,
   ProviderInput,
   StreamEvent,
+  ToolApprovalDecision,
 } from '../../shared/types'
 import { ChatGateway } from '../api/gateway'
 import { McpManager } from '../mcp/mcp-manager'
@@ -25,12 +27,14 @@ import { normalizeDeveloperRuntimes, normalizeIntegratedTerminalShell } from '..
 import { createBackupArchive, createBackupFileName, normalizeExportBackupInput } from '../backup/backup-export'
 import { setLanguage } from '../../shared/i18n'
 import { t } from '../../shared/i18n'
+import { BrowserManager } from '../browser/browser-manager'
 
 export function registerIpcHandlers(
   window: BrowserWindow,
   repository: AppRepository,
   gateway: ChatGateway,
   mcpManager: McpManager,
+  browserManager: BrowserManager,
 ): () => void {
   let backupExportInProgress = false
   const register = <Arguments extends unknown[], Result>(
@@ -57,8 +61,9 @@ export function registerIpcHandlers(
     if (patch.proxy !== undefined && patch.proxy.url !== undefined) {
       patch.proxy.url = unmaskProxyUrl(patch.proxy.url, current.proxy.url)
     }
-    return repository.updateSettings(patch).then((settings) => {
+    return repository.updateSettings(patch).then(async (settings) => {
       setLanguage(settings.language)
+      await browserManager.onSettingsChanged(current, settings)
       return {
         ...settings,
         proxy: { ...settings.proxy, url: maskProxyUrl(settings.proxy.url) },
@@ -175,8 +180,9 @@ export function registerIpcHandlers(
     assertRecord(conversation, t('conversation'))
     return repository.saveConversation(conversation)
   })
-  register(IPC_CHANNELS.conversationsRemove, (_event, id: string) => {
+  register(IPC_CHANNELS.conversationsRemove, async (_event, id: string) => {
     assertId(id)
+    await browserManager.close(id)
     return repository.removeConversation(id)
   })
 
@@ -220,8 +226,9 @@ export function registerIpcHandlers(
     }
   })
 
-  register(IPC_CHANNELS.dataClearConversations, () => {
+  register(IPC_CHANNELS.dataClearConversations, async () => {
     gateway.cancelAll()
+    await browserManager.closeAll()
     return repository.clearConversations()
   })
 
@@ -239,11 +246,79 @@ export function registerIpcHandlers(
     assertId(requestId)
     gateway.cancel(requestId)
   })
-  register(IPC_CHANNELS.chatResolveToolApproval, (_event, requestId: string, callId: string, approved: boolean) => {
-    assertId(requestId)
-    assertId(callId)
-    if (typeof approved !== 'boolean') throw new Error('Invalid tool approval decision')
-    gateway.resolveToolApproval(requestId, callId, approved)
+  register(
+    IPC_CHANNELS.chatResolveToolApproval,
+    (_event, requestId: string, callId: string, decision: ToolApprovalDecision) => {
+      assertId(requestId)
+      assertId(callId)
+      if (!isRecord(decision) || !['deny', 'allow-once', 'allow-browser-origin'].includes(String(decision.decision))) {
+        throw new Error('Invalid tool approval decision')
+      }
+      gateway.resolveToolApproval(requestId, callId, decision)
+    },
+  )
+
+  const unsubscribeBrowserState = browserManager.onEvent((browserEvent) => {
+    if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.browserEvent, browserEvent)
+  })
+  register(IPC_CHANNELS.browserEnsure, (_event, conversationId: string) => {
+    assertId(conversationId)
+    return browserManager.ensure(conversationId)
+  })
+  register(IPC_CHANNELS.browserNavigate, (_event, conversationId: string, url: string, tabId?: string) => {
+    assertId(conversationId)
+    if (typeof url !== 'string') throw new Error(t('The browser URL is invalid.'))
+    if (tabId !== undefined) assertId(tabId)
+    return browserManager.navigate(conversationId, url, { tabId })
+  })
+  register(IPC_CHANNELS.browserCommand, (_event, conversationId: string, command: BrowserCommand, tabId?: string) => {
+    assertId(conversationId)
+    if (tabId !== undefined) assertId(tabId)
+    if (!['back', 'forward', 'reload', 'stop'].includes(String(command))) {
+      throw new Error(t('The browser command is invalid.'))
+    }
+    return browserManager.command(conversationId, command, tabId)
+  })
+  register(IPC_CHANNELS.browserNewTab, (_event, conversationId: string, url?: string) => {
+    assertId(conversationId)
+    if (url !== undefined && typeof url !== 'string') throw new Error(t('The browser URL is invalid.'))
+    return browserManager.newTab(conversationId, url)
+  })
+  register(IPC_CHANNELS.browserSwitchTab, (_event, conversationId: string, tabId: string) => {
+    assertId(conversationId)
+    assertId(tabId)
+    return browserManager.switchTab(conversationId, tabId)
+  })
+  register(IPC_CHANNELS.browserCloseTab, (_event, conversationId: string, tabId: string) => {
+    assertId(conversationId)
+    assertId(tabId)
+    return browserManager.closeTab(conversationId, tabId)
+  })
+  register(IPC_CHANNELS.browserSetViewState, (_event, input: unknown) => {
+    assertRecord(input, t('Browser view state'))
+    assertId(input.conversationId)
+    if (typeof input.visible !== 'boolean' || !isRecord(input.bounds)) {
+      throw new Error(t('The browser view state is invalid.'))
+    }
+    for (const field of ['x', 'y', 'width', 'height'] as const) {
+      if (typeof input.bounds[field] !== 'number' || !Number.isFinite(input.bounds[field])) {
+        throw new Error(t('The browser view bounds are invalid.'))
+      }
+    }
+    return browserManager.setViewState({
+      conversationId: input.conversationId,
+      visible: input.visible,
+      bounds: {
+        x: Number(input.bounds.x),
+        y: Number(input.bounds.y),
+        width: Number(input.bounds.width),
+        height: Number(input.bounds.height),
+      },
+    })
+  })
+  register(IPC_CHANNELS.browserClose, (_event, conversationId: string) => {
+    assertId(conversationId)
+    return browserManager.close(conversationId)
   })
 
   register(IPC_CHANNELS.appGetInfo, () => ({
@@ -253,8 +328,9 @@ export function registerIpcHandlers(
   }))
 
   return () => {
+    unsubscribeBrowserState()
     for (const channel of Object.values(IPC_CHANNELS)) {
-      if (channel !== IPC_CHANNELS.chatEvent) ipcMain.removeHandler(channel)
+      if (channel !== IPC_CHANNELS.chatEvent && channel !== IPC_CHANNELS.browserEvent) ipcMain.removeHandler(channel)
     }
   }
 }
@@ -299,6 +375,10 @@ function assertRecord(value: unknown, label: string): asserts value is Record<st
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error(t('{value0} is invalid.', { value0: label }))
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function maskProxyUrl(url: string): string {

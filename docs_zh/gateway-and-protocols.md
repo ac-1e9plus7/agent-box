@@ -128,9 +128,11 @@ Web Search 只对 OpenRouter 连接开放，并可用于三种 API 格式。请�
 工具调用只在 Agent 模式下执行。网关组合两类工具：
 
 - 启用的 MCP server 所提供的外部工具。`auto` 检索模式使用 BM25 从本轮请求中选择最多 8 个相关工具；`all` 模式传入全部已发现工具。
-- AgentBox 内置工具：Skill loader、集成终端、有工作目录时可用的工作区文件读写工具，以及至少一个已启用 Skill 含 Python 文件时才加入的 JavaScript/Python code runner。
+- AgentBox 内置工具：Skill loader、集成终端、有工作目录时可用的工作区文件读写工具、至少一个已启用 Skill 含 Python 文件时才加入的 JavaScript/Python code runner，以及两个浏览器开关都启用时才加入的可选隔离式浏览器工具族。
 
 模型返回的参数必须是 JSON 对象，并通过工具的 JSON Schema（AJV）校验。除本地只读 Skill loader 外，审批策略由工具 annotations 和内置工具风险定义共同决定：`always` 对每个适用调用询问，`sensitive` 只自动放行明确声明为只读、非破坏且不访问开放环境的工具，`full-access` 不弹出审批。审批等待时间可选择 5 分钟或直到用户决定/取消。
+
+浏览器工具增加参数级审批和稳定标签定位。标签管理结果会列出每个 `tab_id`；后续调用默认操作当前活动标签，也可以指定其他标签。用户可以在当前内存浏览器会话内为某个来源授予页面读取/截图权限，但该权限绝不会同时授权点击、输入、上传或下载。导航参数只有在敏感 URL 查询键被脱敏后才会持久化。语义快照是带“不可信”标记的有界文本，截图是经过大小限制的 JPEG 工具内容；任何交互都会使该标签页的引用失效。Responses 与 Anthropic 在工具结果内携带截图；Chat Completions 会先收到协议要求的纯文本工具消息，再收到带“不可信工具图像”标签的 user image 消息。
 
 每次工具结果会转换回当前供应商协议并进入下一模型轮，同时记录 `toolExecutions` 和 `agentTrace`。工具轮次默认上限为 30，可配置范围为 1–100；超过上限后不会执行新增调用。上下文预算会先扣除工具定义的估算 token，再按手动或自动模式处理完整会话轮次；自动模式绝不删除 system message 和最新用户轮次。
 

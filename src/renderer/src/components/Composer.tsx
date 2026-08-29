@@ -20,6 +20,8 @@ interface ComposerProps {
   disabled?: boolean
   draft: string
   agentMode?: boolean
+  browserAvailable?: boolean
+  browserToolEnabled?: boolean
   skills?: Skill[]
   selectedSkillIds?: string[]
   mcpToolsCount?: number
@@ -31,6 +33,7 @@ interface ComposerProps {
   sendBlocked: boolean
   sendOnEnter: boolean
   onAttachmentsChange: (attachments: MessageAttachment[]) => void
+  onBrowserToolEnabledChange?: (enabled: boolean) => void
   onDraftChange: (draft: string) => void
   onOpenContextSettings: () => void
   onOpenModelSettings: () => void
@@ -66,6 +69,8 @@ export function Composer({
   disabled,
   draft,
   agentMode = false,
+  browserAvailable = false,
+  browserToolEnabled = false,
   skills = [],
   selectedSkillIds,
   mcpToolsCount,
@@ -77,6 +82,7 @@ export function Composer({
   sendBlocked,
   sendOnEnter,
   onAttachmentsChange,
+  onBrowserToolEnabledChange,
   onDraftChange,
   onOpenContextSettings,
   onOpenModelSettings,
@@ -410,6 +416,20 @@ export function Composer({
                   </button>
                 </div>
               </details>
+            )}
+            {agentMode && browserAvailable && (
+              <button
+                className={`mcp-indicator-pill browser-tool-pill ${browserToolEnabled ? 'is-active' : ''}`}
+                onClick={() => onBrowserToolEnabledChange?.(!browserToolEnabled)}
+                title={t(
+                  'Allow this conversation’s Agent to request isolated browser navigation, page reading, and approved interactions.',
+                )}
+                type="button"
+              >
+                <Icon name="globe" size={14} />
+                <span>{browserToolEnabled ? t('Browser tools on') : t('Browser tools off')}</span>
+                {browserToolEnabled && <Icon name="check" size={12} />}
+              </button>
             )}
             <button
               className={`reasoning-pill ${reasoningEnabled ? 'is-active' : ''}`}

@@ -60,6 +60,8 @@ Each usage event is tagged with the current model turn. The renderer merges part
 
 One request-scoped `AbortSignal` is passed to the graph and all callbacks. It cancels provider fetches, MCP calls, code execution, terminal commands, workspace operations, and approval waits. The 120-second network-stall timer is active only while provider data is expected and is paused during tool handling.
 
+Built-in browser operations receive the same signal for navigation, screenshot, upload, and download cancellation, but the live multi-tab `WebContentsView` session is conversation-scoped rather than graph state. Checkpoints and `agentTrace` preserve sanitized calls plus completed semantic/screenshot results, not tab state, Cookie values, DOM references, downloads in progress, or navigation state. Optional Cookie persistence uses a separate encrypted Vault profile, never graph state. After a restart or session eviction the Agent must list/recreate tabs and inspect again; stale element references are rejected instead of replayed.
+
 ## Checkpoint behavior
 
 Agent requests created by the renderer include `responseMessageId`. The Gateway derives an encrypted checkpoint thread from the conversation and response IDs and passes the AgentBox `BaseCheckpointSaver` adapter to the graph.

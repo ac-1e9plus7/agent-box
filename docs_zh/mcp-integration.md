@@ -114,9 +114,16 @@ sequenceDiagram
 - `agentbox_search_tools`、`agentbox_read_tool_result` 和 `agentbox_read_skill_resource` 只检查本次请求已授权的内存或本地数据。它们绝不执行搜索到的工具或 Skill 脚本，也不会弹出审批。
 - `agentbox_run_code` 和 `agentbox_run_terminal` 始终按敏感操作处理；除 Full Access 外都需要用户批准。
 - `agentbox_read_file` 带有完整的只读、非破坏、封闭环境声明，因此在默认策略下可自动执行；`agentbox_write_file` 是破坏性写入，需要审批。
+- 可选的 `agentbox_browser_*` 工具族只有在应用级浏览器开关和对话级“浏览器工具”开关同时启用时才会暴露。`agentbox_browser_tabs` 会列出稳定 tab ID，并新建、激活或关闭标签页。默认策略下，新来源导航和第一次读取页面语义快照需要审批；来源读取授权仅在当前内存浏览器会话内有效。点击和文本输入始终属于敏感操作；即使启用 Full Access，密码、支付信息、一次性验证码和隐藏字段也会被硬性拒绝。截图、上传和下载工具只有在各自独立设置开启时才会出现；上传和 Agent 下载均限制在对话工作目录内。
 - 外部 MCP Server 的 `ToolAnnotations` 是 Server 自行声明的数据；缺少任意一项完整低风险声明时，默认按敏感工具处理。
 
 审批默认等待 5 分钟，也可设置为永不超时。等待审批时，120 秒网络停滞计时器会暂停；用户拒绝、停止请求或请求生命周期结束都会终止等待。Full Access 只适用于完全可信的模型、MCP Server 和任务。
+
+### 隔离式多标签浏览器
+
+浏览器是 AgentBox 内部工具服务，而不是 MCP Server 进程；但它会复用 `McpToolDefinition`、三协议适配器、JSON Schema 校验、工具卡片、审批等待、`toolExecutions` 和 `agentTrace`。每个结果都会标明 `tab_id`。`agentbox_browser_navigate` 只打开经过策略检查的 URL，不返回页面内容；`agentbox_browser_snapshot` 返回带“不可信”标记的有界可见文本和短期元素引用。点击、输入、上传、下载和滚动只能使用同一标签页最新快照中的引用；导航或交互后引用立即失效。截图工具返回经过大小限制的 JPEG。Responses 与 Anthropic 会在工具结果内回放图像；Chat Completions 的[官方 tool message Schema](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)只接受文本，因此客户端会先结束文本工具结果，再追加带明确“不可信工具图像”标签的 user image 输入。
+
+每个对话使用一个由全部标签页共享的非持久 Electron session。弹窗会转换成经过策略检查的标签页；Web 权限、嵌入式凭据、不支持的协议、私网目标和敏感表单字段仍会被阻止。只有显式启用设置后，本地开发环回地址才可使用明文 HTTP。启用 Cookie 持久化时，客户端会把 Chromium 接受的 Cookie 快照写入按对话隔离的加密 Vault profile，并在新的内存 session 中恢复；缓存、站点存储、DOM 状态、标签历史、元素引用和来源授权始终不持久化。手动下载进入系统“下载”目录；Agent 下载等待完成后创建不覆盖已有文件的工作区相对文件，上限 100 MiB。上传最多接受十个普通且非符号链接的工作区文件，单文件 25 MiB、总计 100 MiB。
 
 ### 资源与数据边界
 

@@ -8,6 +8,72 @@ export type ThemeMode = 'system' | 'light' | 'dark'
 export type ContextManagementMode = 'manual' | 'auto'
 export type WebSearchMode = 'off' | 'auto' | 'native'
 
+export interface BrowserViewBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export type BrowserCommand = 'back' | 'forward' | 'reload' | 'stop'
+export type BrowserSessionPhase = 'creating' | 'ready' | 'navigating' | 'failed' | 'closing'
+
+export interface BrowserTabState {
+  id: string
+  url: string
+  title: string
+  loading: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  crashed?: boolean
+}
+
+export interface BrowserState {
+  conversationId: string
+  sessionId: string
+  phase: BrowserSessionPhase
+  url: string
+  title: string
+  loading: boolean
+  visible: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  activeTabId: string
+  tabs: BrowserTabState[]
+  error?: string
+}
+
+export interface BrowserDownloadEvent {
+  conversationId: string
+  tabId: string
+  downloadId: string
+  fileName: string
+  filePath?: string
+  receivedBytes: number
+  totalBytes: number
+  status: 'started' | 'progressing' | 'completed' | 'cancelled' | 'interrupted'
+}
+
+export type BrowserEvent = { type: 'state'; state: BrowserState } | { type: 'download'; download: BrowserDownloadEvent }
+
+export interface BrowserCookieRecord {
+  name: string
+  value: string
+  domain: string
+  path: string
+  secure: boolean
+  httpOnly: boolean
+  session: boolean
+  sameSite?: 'unspecified' | 'no_restriction' | 'lax' | 'strict'
+  expirationDate?: number
+}
+
+export interface BrowserCookieProfile {
+  conversationId: string
+  cookies: BrowserCookieRecord[]
+  updatedAt: string
+}
+
 /** `off` connects directly; `custom` routes requests through the configured URL. */
 export type ProxyMode = 'off' | 'custom'
 
@@ -83,6 +149,17 @@ export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'full-access'
 export type ToolApprovalTimeoutMode = 'five-minutes' | 'never'
 export type AgentProviderContextOptimizationMode = 'off' | 'auto' | 'prefix-cache' | 'native-continuation'
 
+export type ToolApprovalDecision =
+  { decision: 'deny' } | { decision: 'allow-once' } | { decision: 'allow-browser-origin' }
+
+export type ToolApprovalKind = 'generic' | 'browser-navigation' | 'browser-share' | 'browser-interaction'
+
+export interface BrowserApprovalScope {
+  kind: 'browser-origin'
+  origin: string
+  capabilities: ['read']
+}
+
 export interface AppSettings {
   /** Persisted UI language. Missing legacy values migrate from the system locale. */
   language: import('./i18n').AppLanguage
@@ -110,6 +187,18 @@ export interface AppSettings {
   agentContextCompactionKeepRecentTurns: number
   /** Provider-side Agent context reuse. Missing legacy values default to `off`. */
   agentProviderContextOptimizationMode: AgentProviderContextOptimizationMode
+  /** Global opt-in for the isolated built-in browser. Missing legacy values default to disabled. */
+  builtInBrowserEnabled: boolean
+  /** Allows explicitly approved plain-HTTP loopback navigation for local development only. */
+  browserAllowHttpLoopback: boolean
+  /** Encrypt browser cookies in the Vault and restore them for the same conversation. */
+  browserPersistCookiesEnabled: boolean
+  /** Allow Agent tools to capture and send browser screenshots to vision-capable models. */
+  browserAgentScreenshotsEnabled: boolean
+  /** Allow Agent tools to upload workspace files into browser file inputs. */
+  browserFileUploadsEnabled: boolean
+  /** Allow browser downloads. Agent downloads remain scoped to the conversation workspace. */
+  browserDownloadsEnabled: boolean
   mcpEnabled?: boolean
   mcpToolRetrievalMode?: McpToolRetrievalMode
   /** Defaults to `sensitive`: only explicitly read-only, closed-world tools run automatically. */
@@ -352,6 +441,8 @@ export interface ToolCallExecution {
   isError?: boolean
   riskLevel?: 'low' | 'sensitive'
   approvalReason?: string
+  approvalKind?: ToolApprovalKind
+  approvalScope?: BrowserApprovalScope
   status: 'calling' | 'awaiting-approval' | 'executing' | 'complete' | 'denied' | 'error'
 }
 
@@ -439,6 +530,8 @@ export interface Conversation {
   modelId: string
   reasoningEnabled?: boolean
   agentMode?: boolean
+  /** Exposes the built-in browser tools to Agent mode for this conversation. */
+  browserToolEnabled?: boolean
   skillIds?: string[]
   mcpServerIds?: string[]
   /**
@@ -462,6 +555,7 @@ export interface ChatRequest {
   messages: Message[]
   reasoningEnabled: boolean
   agentMode?: boolean
+  browserToolEnabled?: boolean
   skillIds?: string[]
   mcpServerIds?: string[]
   workingDirectory?: string
@@ -548,6 +642,8 @@ export type StreamEvent =
       args: Record<string, unknown>
       riskLevel: 'low' | 'sensitive'
       reason: string
+      approvalKind?: ToolApprovalKind
+      approvalScope?: BrowserApprovalScope
       turn: number
     }
   | {
@@ -674,8 +770,19 @@ export interface AgentboxAPI {
   chat: {
     stream(request: ChatRequest): Promise<{ requestId: string }>
     cancel(requestId: string): Promise<void>
-    resolveToolApproval(requestId: string, callId: string, approved: boolean): Promise<void>
+    resolveToolApproval(requestId: string, callId: string, decision: ToolApprovalDecision): Promise<void>
     onEvent(listener: (event: StreamEvent) => void): () => void
+  }
+  browser: {
+    ensure(conversationId: string): Promise<BrowserState>
+    navigate(conversationId: string, url: string, tabId?: string): Promise<BrowserState>
+    command(conversationId: string, command: BrowserCommand, tabId?: string): Promise<BrowserState>
+    newTab(conversationId: string, url?: string): Promise<BrowserState>
+    switchTab(conversationId: string, tabId: string): Promise<BrowserState>
+    closeTab(conversationId: string, tabId: string): Promise<BrowserState>
+    setViewState(input: { conversationId: string; visible: boolean; bounds: BrowserViewBounds }): Promise<BrowserState>
+    close(conversationId: string): Promise<void>
+    onEvent(listener: (event: BrowserEvent) => void): () => void
   }
   app: {
     getInfo(): Promise<AppInfo>

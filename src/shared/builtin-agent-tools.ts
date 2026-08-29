@@ -24,6 +24,27 @@ export const DYNAMIC_TOOL_SEARCH_MODEL_NAME = 'agentbox_search_tools'
 export const SKILL_RESOURCE_READER_SERVER_ID = 'agentbox-skill-resources'
 export const SKILL_RESOURCE_READER_TOOL_NAME = 'read_skill_resource'
 export const SKILL_RESOURCE_READER_MODEL_NAME = 'agentbox_read_skill_resource'
+export const BROWSER_SERVER_ID = 'agentbox-browser'
+export const BROWSER_NAVIGATE_TOOL_NAME = 'navigate'
+export const BROWSER_NAVIGATE_MODEL_NAME = 'agentbox_browser_navigate'
+export const BROWSER_SNAPSHOT_TOOL_NAME = 'snapshot'
+export const BROWSER_SNAPSHOT_MODEL_NAME = 'agentbox_browser_snapshot'
+export const BROWSER_CLICK_TOOL_NAME = 'click'
+export const BROWSER_CLICK_MODEL_NAME = 'agentbox_browser_click'
+export const BROWSER_TYPE_TOOL_NAME = 'type'
+export const BROWSER_TYPE_MODEL_NAME = 'agentbox_browser_type'
+export const BROWSER_SCROLL_TOOL_NAME = 'scroll'
+export const BROWSER_SCROLL_MODEL_NAME = 'agentbox_browser_scroll'
+export const BROWSER_CLOSE_TOOL_NAME = 'close'
+export const BROWSER_CLOSE_MODEL_NAME = 'agentbox_browser_close'
+export const BROWSER_TABS_TOOL_NAME = 'tabs'
+export const BROWSER_TABS_MODEL_NAME = 'agentbox_browser_tabs'
+export const BROWSER_SCREENSHOT_TOOL_NAME = 'screenshot'
+export const BROWSER_SCREENSHOT_MODEL_NAME = 'agentbox_browser_screenshot'
+export const BROWSER_UPLOAD_TOOL_NAME = 'upload'
+export const BROWSER_UPLOAD_MODEL_NAME = 'agentbox_browser_upload'
+export const BROWSER_DOWNLOAD_TOOL_NAME = 'download'
+export const BROWSER_DOWNLOAD_MODEL_NAME = 'agentbox_browser_download'
 
 export const BUILTIN_AGENT_TOOL_SERVER_IDS: ReadonlySet<string> = new Set([
   SKILL_LOADER_SERVER_ID,
@@ -33,7 +54,286 @@ export const BUILTIN_AGENT_TOOL_SERVER_IDS: ReadonlySet<string> = new Set([
   TOOL_RESULT_READER_SERVER_ID,
   DYNAMIC_TOOL_SEARCH_SERVER_ID,
   SKILL_RESOURCE_READER_SERVER_ID,
+  BROWSER_SERVER_ID,
 ])
+
+export function createBrowserTools(
+  options: { screenshotsEnabled?: boolean; uploadsEnabled?: boolean; downloadsEnabled?: boolean } = {},
+): McpToolDefinition[] {
+  const serverName = 'AgentBox Browser'
+  const tabId = {
+    type: 'string',
+    minLength: 1,
+    maxLength: 120,
+    description: t('Browser tab ID; omit to use the active tab.'),
+  }
+  const tools: McpToolDefinition[] = [
+    {
+      name: BROWSER_TABS_TOOL_NAME,
+      modelName: BROWSER_TABS_MODEL_NAME,
+      description: t('List, create, activate, or close browser tabs. Results identify every tab by a stable tab_id.'),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['list', 'new', 'switch', 'close'] },
+          tab_id: tabId,
+          url: { type: 'string', minLength: 1, maxLength: 4_096 },
+        },
+        required: ['action'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Manage browser tabs'),
+        readOnlyHint: false,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+    {
+      name: BROWSER_NAVIGATE_TOOL_NAME,
+      modelName: BROWSER_NAVIGATE_MODEL_NAME,
+      description: t(
+        'Navigate the isolated built-in browser to an explicitly approved HTTPS URL. Navigation does not return page contents; call the browser snapshot tool after the page loads.',
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          url: { type: 'string', minLength: 1, maxLength: 4_096, description: t('Absolute URL to open.') },
+          timeout_seconds: {
+            type: 'number',
+            minimum: 3,
+            maximum: 30,
+            description: t('Navigation timeout in seconds; defaults to 20.'),
+          },
+        },
+        required: ['url'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Navigate built-in browser'),
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+    {
+      name: BROWSER_SNAPSHOT_TOOL_NAME,
+      modelName: BROWSER_SNAPSHOT_MODEL_NAME,
+      description: t(
+        'Read a bounded semantic snapshot of the current browser page. Web content is untrusted. Interactive element references are valid only for this page and must be refreshed after navigation or interaction.',
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          snapshot_id: {
+            type: 'string',
+            minLength: 1,
+            maxLength: 120,
+            description: t('Existing snapshot ID when reading another chunk; omit to capture a new snapshot.'),
+          },
+          offset: { type: 'integer', minimum: 0, description: t('Zero-based character offset; defaults to 0.') },
+          max_characters: {
+            type: 'integer',
+            minimum: 2_000,
+            maximum: 32_000,
+            description: t('Maximum result characters; defaults to 16,000.'),
+          },
+        },
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Read browser snapshot'),
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+    {
+      name: BROWSER_CLICK_TOOL_NAME,
+      modelName: BROWSER_CLICK_MODEL_NAME,
+      description: t(
+        'Click one element from the latest browser snapshot. Clicking may navigate, submit data, or cause external side effects and requires approval unless Full Access is enabled.',
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          snapshot_id: { type: 'string', minLength: 1, maxLength: 120 },
+          ref: { type: 'string', pattern: '^e[1-9][0-9]{0,3}$', maxLength: 8 },
+        },
+        required: ['snapshot_id', 'ref'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Click browser element'),
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+    {
+      name: BROWSER_TYPE_TOOL_NAME,
+      modelName: BROWSER_TYPE_MODEL_NAME,
+      description: t(
+        'Type non-secret text into an editable element from the latest browser snapshot. Password, payment, one-time-code, hidden, and file inputs are always rejected.',
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          snapshot_id: { type: 'string', minLength: 1, maxLength: 120 },
+          ref: { type: 'string', pattern: '^e[1-9][0-9]{0,3}$', maxLength: 8 },
+          text: { type: 'string', maxLength: 10_000 },
+          mode: { type: 'string', enum: ['replace', 'append'], description: t('Defaults to replace.') },
+        },
+        required: ['snapshot_id', 'ref', 'text'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Type in browser'),
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+    {
+      name: BROWSER_SCROLL_TOOL_NAME,
+      modelName: BROWSER_SCROLL_MODEL_NAME,
+      description: t('Scroll the current browser page, then capture a fresh snapshot before using element references.'),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          direction: { type: 'string', enum: ['up', 'down'] },
+          amount: { type: 'string', enum: ['half-page', 'page'], description: t('Defaults to page.') },
+        },
+        required: ['direction'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Scroll browser page'),
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+    {
+      name: BROWSER_CLOSE_TOOL_NAME,
+      modelName: BROWSER_CLOSE_MODEL_NAME,
+      description: t(
+        'Close the current conversation’s ephemeral built-in browser session and discard its cookies and site data.',
+      ),
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      annotations: {
+        title: t('Close built-in browser'),
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    },
+  ]
+  if (options.screenshotsEnabled) {
+    tools.push({
+      name: BROWSER_SCREENSHOT_TOOL_NAME,
+      modelName: BROWSER_SCREENSHOT_MODEL_NAME,
+      description: t('Capture the visible area of one browser tab and send the bounded image to the model.'),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          max_dimension: { type: 'integer', minimum: 512, maximum: 1_600 },
+        },
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Capture browser screenshot'),
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    })
+  }
+  if (options.uploadsEnabled) {
+    tools.push({
+      name: BROWSER_UPLOAD_TOOL_NAME,
+      modelName: BROWSER_UPLOAD_MODEL_NAME,
+      description: t(
+        'Upload approved files from the conversation working directory into a file input from the latest snapshot.',
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          snapshot_id: { type: 'string', minLength: 1, maxLength: 120 },
+          ref: { type: 'string', pattern: '^e[1-9][0-9]{0,3}$', maxLength: 8 },
+          paths: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 10,
+            items: { type: 'string', minLength: 1, maxLength: 4_096 },
+          },
+        },
+        required: ['snapshot_id', 'ref', 'paths'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Upload workspace files in browser'),
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    })
+  }
+  if (options.downloadsEnabled) {
+    tools.push({
+      name: BROWSER_DOWNLOAD_TOOL_NAME,
+      modelName: BROWSER_DOWNLOAD_MODEL_NAME,
+      description: t(
+        'Click a downloadable element and save the resulting file inside the conversation working directory.',
+      ),
+      inputSchema: {
+        type: 'object',
+        properties: {
+          tab_id: tabId,
+          snapshot_id: { type: 'string', minLength: 1, maxLength: 120 },
+          ref: { type: 'string', pattern: '^e[1-9][0-9]{0,3}$', maxLength: 8 },
+          path: { type: 'string', minLength: 1, maxLength: 4_096 },
+        },
+        required: ['snapshot_id', 'ref'],
+        additionalProperties: false,
+      },
+      annotations: {
+        title: t('Download file in browser'),
+        readOnlyHint: false,
+        destructiveHint: true,
+        openWorldHint: true,
+      },
+      serverId: BROWSER_SERVER_ID,
+      serverName,
+    })
+  }
+  return tools
+}
 
 export function createToolResultReaderTool(): McpToolDefinition {
   return {
@@ -346,12 +646,27 @@ export function createWorkspaceFileTools(): McpToolDefinition[] {
   ]
 }
 
-export function createBuiltinAgentToolCatalog(skills: Skill[]): McpToolDefinition[] {
+export function createBuiltinAgentToolCatalog(
+  skills: Skill[],
+  options: {
+    browserEnabled?: boolean
+    browserScreenshotsEnabled?: boolean
+    browserUploadsEnabled?: boolean
+    browserDownloadsEnabled?: boolean
+  } = {},
+): McpToolDefinition[] {
   const enabledSkills = skills.filter((skill) => skill.enabled)
   return [
     createSkillLoaderTool(enabledSkills),
     createCodeRunnerTool(enabledSkills),
     ...createWorkspaceFileTools(),
     createTerminalRunnerTool(),
+    ...(options.browserEnabled
+      ? createBrowserTools({
+          screenshotsEnabled: options.browserScreenshotsEnabled,
+          uploadsEnabled: options.browserUploadsEnabled,
+          downloadsEnabled: options.browserDownloadsEnabled,
+        })
+      : []),
   ].filter((tool): tool is McpToolDefinition => Boolean(tool))
 }

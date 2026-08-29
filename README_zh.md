@@ -19,6 +19,7 @@
 - **MCP 服务器集成：** 支持本地 `stdio`、远程 Streamable HTTP，并兼容旧式 HTTP+SSE。BM25 工具检索、会话级服务器选择、审批策略和 Tool Explorer 便于管理大型工具目录。
 - **可恢复的 Agent 执行：** Agent 模式默认最多运行 30 轮工具调用，可配置为 1–100。安全 provider 失败使用加密 LangGraph checkpoint sidecar；输出上限、取消和副作用不确定状态仍使用可移植 `agentTrace` 回退。
 - **集成终端和工作区文件工具：** 自动探测跨平台 Shell，也可自定义可执行文件和参数。原生文件工具可分段读取 UTF-8 文本，并在不经过 Shell 转义的情况下创建、覆盖或追加文件。
+- **隔离式多标签浏览器：** 可选地在沙箱化 Electron `WebContentsView` 标签页中同时打开多个远程页面。Agent 模式通过稳定 tab ID 跟踪页面、读取有界语义快照，并请求批准后按元素引用交互。独立设置可分别启用 Vault 加密的持久 Cookie、Agent 截图、工作区范围上传和受控下载；远程页面始终无法使用 Node.js 或 AgentBox IPC。
 - **会话级开发环境：** 每个会话都绑定工作目录。可配置 JDK、Go、PHP 和 Python；Python 支持项目 `.venv`/`venv`、系统解释器、普通虚拟环境、Conda 环境和自定义解释器。
 - **多文件 Agent Skills：** Skill 可包含 Markdown 指令、参考文档以及不会自动执行的 Python / Shell 参考脚本。支持会话固定、`$skill-id` 显式调用、自动检索和模型按需加载，并可导入导出 ZIP Skill 归档。
 - **富聊天界面：** 支持 Markdown、GFM、代码高亮、KaTeX 数学公式、多模态附件、图片优化与预览、可编辑会话树、重新生成分支和版本切换。

@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '../shared/ipc'
 import type {
   AgentboxAPI,
   AppSettings,
+  BrowserEvent,
   ChatRequest,
   Conversation,
   ExportBackupInput,
@@ -10,9 +11,11 @@ import type {
   ProviderInput,
   SkillInput,
   StreamEvent,
+  ToolApprovalDecision,
 } from '../shared/types'
 
 const streamListeners = new Set<(event: StreamEvent) => void>()
+const browserListeners = new Set<(event: BrowserEvent) => void>()
 
 ipcRenderer.on(IPC_CHANNELS.chatEvent, (_event, streamEvent: StreamEvent) => {
   for (const listener of streamListeners) {
@@ -20,6 +23,16 @@ ipcRenderer.on(IPC_CHANNELS.chatEvent, (_event, streamEvent: StreamEvent) => {
       listener(streamEvent)
     } catch (error) {
       console.error('Chat stream listener failed', error)
+    }
+  }
+})
+
+ipcRenderer.on(IPC_CHANNELS.browserEvent, (_event, browserEvent: BrowserEvent) => {
+  for (const listener of browserListeners) {
+    try {
+      listener(browserEvent)
+    } catch (error) {
+      console.error('Browser event listener failed', error)
     }
   }
 })
@@ -81,11 +94,30 @@ const agentboxApi: AgentboxAPI = {
   chat: {
     stream: (request: ChatRequest) => ipcRenderer.invoke(IPC_CHANNELS.chatStart, request),
     cancel: (requestId: string) => ipcRenderer.invoke(IPC_CHANNELS.chatCancel, requestId),
-    resolveToolApproval: (requestId: string, callId: string, approved: boolean) =>
-      ipcRenderer.invoke(IPC_CHANNELS.chatResolveToolApproval, requestId, callId, approved),
+    resolveToolApproval: (requestId: string, callId: string, decision: ToolApprovalDecision) =>
+      ipcRenderer.invoke(IPC_CHANNELS.chatResolveToolApproval, requestId, callId, decision),
     onEvent: (listener: (event: StreamEvent) => void) => {
       streamListeners.add(listener)
       return () => streamListeners.delete(listener)
+    },
+  },
+  browser: {
+    ensure: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.browserEnsure, conversationId),
+    navigate: (conversationId: string, url: string, tabId?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.browserNavigate, conversationId, url, tabId),
+    command: (conversationId, command, tabId?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.browserCommand, conversationId, command, tabId),
+    newTab: (conversationId: string, url?: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.browserNewTab, conversationId, url),
+    switchTab: (conversationId: string, tabId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.browserSwitchTab, conversationId, tabId),
+    closeTab: (conversationId: string, tabId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.browserCloseTab, conversationId, tabId),
+    setViewState: (input) => ipcRenderer.invoke(IPC_CHANNELS.browserSetViewState, input),
+    close: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.browserClose, conversationId),
+    onEvent: (listener: (event: BrowserEvent) => void) => {
+      browserListeners.add(listener)
+      return () => browserListeners.delete(listener)
     },
   },
   app: {

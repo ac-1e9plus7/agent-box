@@ -185,6 +185,25 @@ describe('agent protocol ledger', () => {
     ).toBe(true)
   })
 
+  it('replays browser screenshot tool output as images in every supported API format', () => {
+    const traced = messagesWithTrace()
+    const result = traced[1]?.agentTrace?.find((item) => item.type === 'tool_result')
+    if (result?.type === 'tool_result') {
+      result.resultContent = [{ type: 'image', mimeType: 'image/jpeg', data: 'abc123==' }]
+    }
+
+    const chat = buildRequestBody('openai-chat-completions', { kind: 'openai' }, model, traced, request, 4_096, [tool])
+    expect(JSON.stringify(chat.messages)).toContain('data:image/jpeg;base64,abc123==')
+
+    const responses = buildRequestBody('openai-responses', { kind: 'openai' }, model, traced, request, 4_096, [tool])
+    expect(JSON.stringify(responses.input)).toContain('data:image/jpeg;base64,abc123==')
+
+    const anthropic = buildRequestBody('anthropic-messages', { kind: 'anthropic' }, model, traced, request, 4_096, [
+      tool,
+    ])
+    expect(JSON.stringify(anthropic.messages)).toContain('abc123==')
+  })
+
   it('preserves Anthropic thinking signatures around tool use', () => {
     expect(
       parseAnthropicEvent({

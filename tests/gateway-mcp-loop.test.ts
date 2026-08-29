@@ -667,6 +667,64 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     ).toBe(true)
   })
 
+  it('exposes and executes the built-in browser only for an opted-in Agent conversation', async () => {
+    await repo.updateSettings({ builtInBrowserEnabled: true })
+    const executeBrowser = vi.fn(async () => ({
+      result: '{"action":"navigate","url":"https://example.com/"}',
+      structuredResult: { action: 'navigate', url: 'https://example.com/' },
+    }))
+    const browserExecutor = {
+      canHandle: (tool: { serverId: string }) => tool.serverId === 'agentbox-browser',
+      sanitizeArguments: (_tool: unknown, args: Record<string, unknown>) => args,
+      approvalFor: () => ({ required: false, riskLevel: 'sensitive' as const, reason: 'Full Access' }),
+      applyDecision: vi.fn(),
+      execute: executeBrowser,
+    } as unknown as ConstructorParameters<typeof ChatGateway>[2]
+    const browserGateway = new ChatGateway(repo, mcpManager, browserExecutor)
+    const requestBodies: unknown[] = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)))
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-browser', function: { name: 'agentbox_browser_navigate', arguments: '{"url":"https://example.com"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Page opened.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    await browserGateway.stream(
+      'req-browser',
+      {
+        conversationId: 'conversation-browser',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          { id: 'user-browser', role: 'user', content: 'Open example.com', createdAt: new Date().toISOString() },
+        ],
+        reasoningEnabled: false,
+        agentMode: true,
+        browserToolEnabled: true,
+      },
+      (event) => events.push(event),
+    )
+
+    expect(JSON.stringify(requestBodies[0])).toContain('agentbox_browser_navigate')
+    expect(executeBrowser).toHaveBeenCalledWith(
+      'conversation-browser',
+      expect.objectContaining({ serverId: 'agentbox-browser', name: 'navigate' }),
+      { url: 'https://example.com' },
+      expect.any(AbortSignal),
+      undefined,
+    )
+    expect(events).toContainEqual(expect.objectContaining({ type: 'done' }))
+  })
+
   it('executes approved built-in JavaScript and returns the real result to the model', async () => {
     await repo.updateSettings({ mcpToolApprovalPolicy: 'full-access' })
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
@@ -1150,7 +1208,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1_000)
     expect(settled).toBe(false)
     gateway.resolveToolApproval('req-no-timeout', 'call-no-timeout', true)
-    await expect(waiting).resolves.toBe(true)
+    await expect(waiting).resolves.toEqual({ decision: 'allow-once' })
   })
 
   it('executes at most thirty tool turns by default and always emits a terminal event', async () => {

@@ -145,7 +145,7 @@ export async function writeWorkspaceFile(
   }
 }
 
-async function resolveWorkspaceFilePath(
+export async function resolveWorkspaceFilePath(
   workingDirectory: string | undefined,
   requestedPath: string,
 ): Promise<{ absolutePath: string; relativePath: string; rootPath: string; segments: string[] }> {

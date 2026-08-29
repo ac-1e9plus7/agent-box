@@ -4,7 +4,7 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/renderer/src/App'
-import { createRendererApiMock, rendererConversation } from './renderer-test-fixtures'
+import { createRendererApiMock, rendererConversation, rendererSettings } from './renderer-test-fixtures'
 
 describe('App renderer integration', () => {
   beforeEach(() => {
@@ -130,5 +130,20 @@ describe('App renderer integration', () => {
     expect(userBody?.innerHTML).toContain('&lt;br&gt;')
 
     expect(document.querySelector('.assistant-message .message-body br')).not.toBeNull()
+  })
+
+  it('persists the per-conversation browser tool opt-in independently of manual browsing', async () => {
+    const bridge = createRendererApiMock({
+      conversations: [{ ...rendererConversation, agentMode: true }],
+      settings: { ...rendererSettings, builtInBrowserEnabled: true },
+    })
+    Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: '浏览器工具已关闭' }))
+
+    await waitFor(() => {
+      expect(bridge.mocks.conversationSave).toHaveBeenCalledWith(expect.objectContaining({ browserToolEnabled: true }))
+    })
   })
 })

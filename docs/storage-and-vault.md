@@ -70,10 +70,11 @@ interface VaultState {
   conversations: Conversation[]
   skills?: Skill[]
   mcpServers?: McpServerConfig[]
+  browserProfiles?: BrowserCookieProfile[]
 }
 ```
 
-`skills` and `mcpServers` remain optional in the interface for compatibility with older Vaults; loading and validation normalize both to arrays. [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) similarly migrates missing newer settings to safe defaults.
+`skills`, `mcpServers`, and encrypted `browserProfiles` remain optional in the interface for compatibility with older Vaults; loading and validation normalize them to arrays. [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) similarly migrates missing newer settings to safe defaults.
 
 The LangGraph checkpoint sidecar is deliberately not a `VaultState` field. Superstep writes therefore do not rewrite the complete conversation Vault. It is machine-local execution state; `agentTrace` remains in the conversation schema and portable backups.
 
@@ -84,6 +85,10 @@ Assistant `usage` retains aggregate token counters plus an optional `modelReques
 Agent token optimizations are persisted as independent `AppSettings` preferences and all default to disabled for new and legacy Vaults. Their retained parameter defaults remain available while a feature is off: tool-result compaction uses `agentToolResultMaxCharacters: 16000` (2,000–100,000), dynamic tool exposure uses `agentDynamicToolLimit: 4` (1–16), and in-run context compaction uses a 70% threshold (50%–95%) while keeping 3 recent turns (1–10). `agentProviderContextOptimizationMode` accepts `off`, `auto`, `prefix-cache`, or `native-continuation` and defaults to `off`. Settings normalization rejects unknown modes, non-boolean switches, and non-integer or out-of-range parameters instead of silently coercing them.
 
 When native continuation is active, an Assistant message may store a validated `providerContinuation` containing an OpenAI Responses handle and one-based model turn. The handle is bounded to 200 safe identifier characters, belongs only to Assistant messages, remains inside the encrypted Vault, and is included in conversation backups as part of the message JSON. It is an opaque provider-side state reference rather than an API credential; deleting local conversation data removes the local reference but does not override the provider’s own retention policy.
+
+`builtInBrowserEnabled`, persistent cookies, Agent screenshots, file uploads, downloads, and loopback HTTP are independent conservative application opt-ins and default to `false` for older Vaults. `Conversation.browserToolEnabled` is also optional and defaults to disabled. Live browser sessions always use partitions without `persist:`. When cookie persistence is enabled, the main process snapshots accepted cookies into optional `browserProfiles`, keyed by conversation ID and encrypted as part of the Vault; no cookie profile is returned through IPC. Cache, local storage, navigation history, DOM state, approved origins, and element references remain memory only. Sanitized browser calls, semantic text, and approved screenshot images are ordinary `toolExecutions`/`agentTrace` data and remain encrypted with the conversation.
+
+Turning Cookie persistence off first closes active browser sessions and then deletes all stored `browserProfiles`. Disabling only the overall browser feature closes live tabs but retains encrypted Cookie profiles while the persistence preference remains enabled.
 
 ---
 
@@ -126,6 +131,8 @@ Saving a conversation applies both per-conversation and aggregate quotas. To avo
 
 This operation removes conversations from the active Vault. It is not a forensic secure-erasure guarantee for the underlying storage medium.
 
+The operation also closes every in-memory browser session and removes every encrypted browser Cookie profile before deleting conversations. Removing one conversation closes its tabs and removes only its Cookie profile. Hiding the browser panel does not clear temporary state; closing the session, deleting the conversation, closing the window, or quitting the application does. Application quit waits for the final enabled Cookie snapshot before destroying the Vault key.
+
 ---
 
 ## 📦 Conversation ZIP backups
@@ -135,6 +142,7 @@ This operation removes conversations from the active Vault. It is not a forensic
 ### Backup modes
 
 - **Shallow:** Exports every conversation. Each conversation has both a complete JSON representation and readable Markdown. JSON preserves every branch in the conversation tree, attachments, citations, usage, skill activations, tool executions, Agent trace, and interruption metadata.
+- Browser text and screenshot tool results already stored in messages are included. Encrypted browser Cookie profiles and live cookies, cache, storage, DOM state, origin grants, tab state, and navigation history are excluded.
 - **Deep:** Adds every working directory referenced by a conversation. The implementation deduplicates identical directories by `realpath`, preserves empty directories and symbolic links without following symlinks, and skips other special files while recording their paths in manifest warnings.
 
 ### Encryption and privacy boundary

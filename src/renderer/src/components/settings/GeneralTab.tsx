@@ -116,6 +116,110 @@ export function GeneralTab({
         )}
       </section>
       <section className="settings-card">
+        <h3>{t('Built-in browser')}</h3>
+        <div className="settings-row">
+          <div>
+            <strong>{t('Enable the isolated built-in browser')}</strong>
+            <small>
+              {t(
+                'Remote pages run without Node.js or AgentBox IPC. Browser tools remain disabled until enabled for an individual conversation.',
+              )}
+            </small>
+          </div>
+          <SettingsToggle
+            checked={preferenceDraft.builtInBrowserEnabled}
+            label={t('Enable the isolated built-in browser')}
+            onChange={(builtInBrowserEnabled) =>
+              setPreferenceDraft((current) => ({ ...current, builtInBrowserEnabled }))
+            }
+          />
+        </div>
+        {preferenceDraft.builtInBrowserEnabled && (
+          <>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Persist browser cookies')}</strong>
+                <small>
+                  {t(
+                    'Encrypt cookies in the Vault and restore them only for the same conversation. Turning this off deletes all stored browser cookies.',
+                  )}
+                </small>
+              </div>
+              <SettingsToggle
+                checked={preferenceDraft.browserPersistCookiesEnabled}
+                label={t('Persist browser cookies')}
+                onChange={(browserPersistCookiesEnabled) =>
+                  setPreferenceDraft((current) => ({ ...current, browserPersistCookiesEnabled }))
+                }
+              />
+            </div>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Allow Agent browser screenshots')}</strong>
+                <small>{t('Allow approved screenshots to be sent to vision-capable model APIs.')}</small>
+              </div>
+              <SettingsToggle
+                checked={preferenceDraft.browserAgentScreenshotsEnabled}
+                label={t('Allow Agent browser screenshots')}
+                onChange={(browserAgentScreenshotsEnabled) =>
+                  setPreferenceDraft((current) => ({ ...current, browserAgentScreenshotsEnabled }))
+                }
+              />
+            </div>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Allow browser file uploads')}</strong>
+                <small>{t('Allow approved Agent uploads from the conversation working directory only.')}</small>
+              </div>
+              <SettingsToggle
+                checked={preferenceDraft.browserFileUploadsEnabled}
+                label={t('Allow browser file uploads')}
+                onChange={(browserFileUploadsEnabled) =>
+                  setPreferenceDraft((current) => ({ ...current, browserFileUploadsEnabled }))
+                }
+              />
+            </div>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Allow browser downloads')}</strong>
+                <small>
+                  {t(
+                    'Allow approved Agent downloads into the conversation working directory and manual downloads into the system Downloads folder.',
+                  )}
+                </small>
+              </div>
+              <SettingsToggle
+                checked={preferenceDraft.browserDownloadsEnabled}
+                label={t('Allow browser downloads')}
+                onChange={(browserDownloadsEnabled) =>
+                  setPreferenceDraft((current) => ({ ...current, browserDownloadsEnabled }))
+                }
+              />
+            </div>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Allow HTTP loopback pages')}</strong>
+                <small>
+                  {t('Allow explicitly approved http://localhost and loopback URLs for local web development only.')}
+                </small>
+              </div>
+              <SettingsToggle
+                checked={preferenceDraft.browserAllowHttpLoopback}
+                label={t('Allow HTTP loopback pages')}
+                onChange={(browserAllowHttpLoopback) =>
+                  setPreferenceDraft((current) => ({ ...current, browserAllowHttpLoopback }))
+                }
+              />
+            </div>
+          </>
+        )}
+        <p className="settings-card-note">
+          {t(
+            'Browser sessions and site storage are temporary. When Cookie persistence is enabled, accepted cookies are encrypted in the Vault; approved text and screenshot results remain in encrypted conversation history.',
+          )}
+        </p>
+      </section>
+      <section className="settings-card">
         <h3>{t('Appearance and behavior')}</h3>
         <div className="settings-row">
           <div>

@@ -124,6 +124,28 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
   if (!['off', 'auto', 'prefix-cache', 'native-continuation'].includes(String(agentProviderContextOptimizationMode))) {
     throw new Error('Invalid Agent provider context optimization mode')
   }
+  const builtInBrowserEnabled = normalizeOptionalBoolean(value.builtInBrowserEnabled, false, 'built-in browser')
+  const browserAllowHttpLoopback = normalizeOptionalBoolean(
+    value.browserAllowHttpLoopback,
+    false,
+    'browser HTTP loopback access',
+  )
+  const browserPersistCookiesEnabled = normalizeOptionalBoolean(
+    value.browserPersistCookiesEnabled,
+    false,
+    'persistent browser cookies',
+  )
+  const browserAgentScreenshotsEnabled = normalizeOptionalBoolean(
+    value.browserAgentScreenshotsEnabled,
+    false,
+    'Agent browser screenshots',
+  )
+  const browserFileUploadsEnabled = normalizeOptionalBoolean(
+    value.browserFileUploadsEnabled,
+    false,
+    'browser file uploads',
+  )
+  const browserDownloadsEnabled = normalizeOptionalBoolean(value.browserDownloadsEnabled, false, 'browser downloads')
   if (value.mcpEnabled !== undefined && typeof value.mcpEnabled !== 'boolean') {
     throw new Error('Invalid MCP enabled setting')
   }
@@ -166,6 +188,12 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     agentContextCompactionKeepRecentTurns,
     agentProviderContextOptimizationMode:
       agentProviderContextOptimizationMode as AppSettings['agentProviderContextOptimizationMode'],
+    builtInBrowserEnabled,
+    browserAllowHttpLoopback,
+    browserPersistCookiesEnabled,
+    browserAgentScreenshotsEnabled,
+    browserFileUploadsEnabled,
+    browserDownloadsEnabled,
     mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
     mcpToolRetrievalMode: mcpToolRetrievalMode as AppSettings['mcpToolRetrievalMode'],
     mcpToolApprovalPolicy: mcpToolApprovalPolicy as AppSettings['mcpToolApprovalPolicy'],

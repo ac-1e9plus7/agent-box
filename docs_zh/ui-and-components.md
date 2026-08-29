@@ -22,6 +22,12 @@ Settings 外壳统一持有 `preferences`、模型、供应商和 API Key 的暂
 
 主题通过 `document.documentElement.dataset.theme` 在 `system`、`light` 和 `dark` 之间切换；系统主题使用 `prefers-color-scheme`。宽度不超过 860px 时侧栏改为抽屉，680px 以下进一步压缩顶部栏与输入区；`prefers-reduced-motion` 会关闭非必要动画。
 
+## 内置浏览器面板
+
+浏览器需要先在「设置 → 通用 → 内置浏览器」全局启用；是否允许 Agent 使用，还需要在每个对话中单独开启。面板包含可横向滚动的标签栏；默认支持新建标签、把页面弹窗转换为标签、切换和关闭，关闭最后一个标签时会自动补一个空白标签。工具栏控制当前活动标签的地址、后退、前进、刷新/停止、隐藏和关闭会话。宽屏布局下，可信聊天区域和浏览器共享 Chat Stage；窄屏下浏览器占满 Stage。React 只渲染标签栏、工具栏、状态和边界占位区，活动的主进程 `WebContentsView` 实际占据该矩形，因此 renderer 会通过类型化 IPC 报告边界；打开设置或新建对话框时会隐藏所有原生标签 View。
+
+手动浏览本身不会向模型暴露工具。Composer 的“浏览器工具”开关控制持久化的 `Conversation.browserToolEnabled`。主进程状态事件包含每个标签的脱敏元数据、活动 `tab_id` 和临时下载进度；页面文本和截图只有通过经过审批的 Agent 结果才会进入 renderer/模型。设置项可独立启用加密 Cookie 持久化、Agent 截图、文件上传、下载和环回 HTTP。隐藏面板会保留标签；关闭会话会丢弃活动站点存储和 DOM 状态，只有启用持久 Cookie 时才会先把 Cookie 快照写入加密 Vault。
+
 ## 本地用户资料
 
 - 「设置 → 通用 → 个人资料」支持昵称与头像编辑，昵称最多 50 个字符且不能包含换行。

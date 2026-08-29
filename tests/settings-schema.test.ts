@@ -88,6 +88,38 @@ describe('settings schema migration', () => {
     })
   })
 
+  it('defaults legacy settings to a disabled built-in browser and validates its opt-ins', () => {
+    expect(normalizeAppSettings(legacySettings)).toMatchObject({
+      builtInBrowserEnabled: false,
+      browserAllowHttpLoopback: false,
+      browserPersistCookiesEnabled: false,
+      browserAgentScreenshotsEnabled: false,
+      browserFileUploadsEnabled: false,
+      browserDownloadsEnabled: false,
+    })
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        builtInBrowserEnabled: true,
+        browserAllowHttpLoopback: true,
+        browserPersistCookiesEnabled: true,
+        browserAgentScreenshotsEnabled: true,
+        browserFileUploadsEnabled: true,
+        browserDownloadsEnabled: true,
+      }),
+    ).toMatchObject({
+      builtInBrowserEnabled: true,
+      browserAllowHttpLoopback: true,
+      browserPersistCookiesEnabled: true,
+      browserAgentScreenshotsEnabled: true,
+      browserFileUploadsEnabled: true,
+      browserDownloadsEnabled: true,
+    })
+    expect(() => normalizeAppSettings({ ...legacySettings, builtInBrowserEnabled: 'yes' })).toThrow(
+      'Invalid built-in browser',
+    )
+  })
+
   it('preserves enabled Agent token optimizations and valid boundary values', () => {
     expect(
       normalizeAppSettings({

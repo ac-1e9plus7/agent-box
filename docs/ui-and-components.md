@@ -22,6 +22,12 @@ The Settings shell owns the staged `preferences`, model, provider, and API-key c
 
 The renderer sets `document.documentElement.dataset.theme` to `system`, `light`, or `dark`; system mode follows `prefers-color-scheme`. At widths up to 860px, the sidebar becomes a drawer, and below 680px the top bar and composer are further condensed. The stylesheet also honors `prefers-reduced-motion`.
 
+## Built-in browser panel
+
+The browser is globally opt-in under **Settings → General → Built-in browser** and separately opt-in for Agent access in each conversation. The panel includes a horizontally scrollable tab strip; new tabs, page-created windows, switching, and closing are supported by default, with the final closed tab replaced by a blank tab. The toolbar controls the active tab's address, back, forward, reload/stop, hide, and session close. On wide layouts the trusted chat pane and browser share the chat stage; on narrow layouts the browser occupies the stage. React renders only the tab strip, toolbar, status, and a bounds placeholder. The active main-process `WebContentsView` occupies that rectangle, so the renderer reports bounds through typed IPC and hides every native tab view whenever Settings or the New conversation dialog is open.
+
+Manual browsing never exposes tools to the model by itself. The Composer's Browser tools switch controls the persisted `Conversation.browserToolEnabled` flag. Main-process state events contain sanitized metadata for every tab, its active `tab_id`, and transient download progress; page text and screenshots reach the renderer/model only through approved Agent results. Settings independently enable encrypted Cookie persistence, Agent screenshots, file uploads, downloads, and loopback HTTP. Hiding the panel preserves tabs. Closing the session discards live site storage and DOM state; cookies are first snapshotted to the encrypted Vault only when persistence is enabled.
+
 ## Local user profile
 
 - **Settings → General → Profile** lets the user set a nickname and avatar. Nicknames are limited to 50 characters and cannot contain line breaks.

@@ -10,6 +10,7 @@ import type {
   MessageAttachment,
   SkillActivation,
   TokenUsage,
+  ToolApprovalDecision,
   ToolCallExecution,
   WebCitation,
 } from '../../../shared/types'
@@ -33,7 +34,7 @@ interface ChatContentProps {
   onResumeAgent: (messageId: string) => void
   onSwitchVersion?: (messageId: string) => void
   onSuggestion: (prompt: string) => void
-  onResolveToolApproval?: (callId: string, approved: boolean) => void
+  onResolveToolApproval?: (callId: string, decision: ToolApprovalDecision) => void
 }
 
 function formatTime(timestamp: string): string {
@@ -160,7 +161,7 @@ function ToolExecutionItem({
   onResolveApproval,
 }: {
   execution: ToolCallExecution
-  onResolveApproval?: (callId: string, approved: boolean) => void
+  onResolveApproval?: (callId: string, decision: ToolApprovalDecision) => void
 }): JSX.Element {
   const awaitingApproval = execution.status === 'awaiting-approval'
   const isExecuting = execution.status === 'calling' || execution.status === 'executing'
@@ -225,10 +226,24 @@ function ToolExecutionItem({
               <span>{execution.approvalReason || t('Approve this tool execution?')}</span>
             </div>
             <div className="tool-approval-actions">
-              <button className="secondary-button" onClick={() => onResolveApproval?.(execution.id, false)}>
+              <button
+                className="secondary-button"
+                onClick={() => onResolveApproval?.(execution.id, { decision: 'deny' })}
+              >
                 {t('Deny')}
               </button>
-              <button className="primary-button" onClick={() => onResolveApproval?.(execution.id, true)}>
+              {execution.approvalScope?.kind === 'browser-origin' && (
+                <button
+                  className="secondary-button"
+                  onClick={() => onResolveApproval?.(execution.id, { decision: 'allow-browser-origin' })}
+                >
+                  {t('Allow this site for this session')}
+                </button>
+              )}
+              <button
+                className="primary-button"
+                onClick={() => onResolveApproval?.(execution.id, { decision: 'allow-once' })}
+              >
                 {t('Allow once')}
               </button>
             </div>
@@ -250,6 +265,19 @@ function ToolExecutionItem({
             </pre>
           </div>
         )}
+        {execution.resultContent?.some((item) => item.type === 'image' && item.data) && (
+          <div className="tool-result-media">
+            {execution.resultContent.map((item, index) =>
+              item.type === 'image' && item.data ? (
+                <img
+                  alt={t('Browser screenshot returned by the tool')}
+                  key={`${execution.id}-image-${index}`}
+                  src={`data:${item.mimeType};base64,${item.data}`}
+                />
+              ) : null,
+            )}
+          </div>
+        )}
       </div>
     </details>
   )
@@ -260,7 +288,7 @@ function ToolExecutionList({
   onResolveApproval,
 }: {
   executions?: ToolCallExecution[]
-  onResolveApproval?: (callId: string, approved: boolean) => void
+  onResolveApproval?: (callId: string, decision: ToolApprovalDecision) => void
 }): JSX.Element | null {
   if (!executions || executions.length === 0) return null
   return (
@@ -629,7 +657,7 @@ function AssistantMessage({
   onRegenerate: (messageId?: string) => void
   onResumeAgent: (messageId: string) => void
   onSwitchVersion?: (messageId: string) => void
-  onResolveToolApproval?: (callId: string, approved: boolean) => void
+  onResolveToolApproval?: (callId: string, decision: ToolApprovalDecision) => void
 }): JSX.Element {
   const isStreaming = message.status === 'streaming'
   const reasoningUsage = reasoningUsageLabel(message.usage)

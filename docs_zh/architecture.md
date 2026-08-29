@@ -95,6 +95,7 @@ graph TB
 - **默认拒绝权限**：默认 session 的权限请求和权限检查均返回拒绝。
 - **阻止 renderer 导航**：`will-navigate` 阻止离开当前页面；`setWindowOpenHandler` 总是拒绝创建新窗口。只有语法有效、使用 `http:`/`https:` 且不含嵌入式用户名或密码的 URL 才会交给 `shell.openExternal`。这里没有域名白名单。
 - **单实例与资源回收**：应用使用单实例锁。窗口关闭时会取消活动生成、结束相关工具审批并关闭 MCP 客户端；应用退出时还会销毁内存中的 Vault 状态与密钥。
+- **隔离式多标签浏览器**：可选内置浏览器由主进程中的 `BrowserManager` 持有。每个对话使用一个内存 Chromium session 和最多十二个沙箱化 `WebContentsView` 标签页；远程页面没有 preload、Node.js、AgentBox IPC 或已授予的 Web 权限。新窗口会转换为经过策略检查的标签页。可信 renderer 的对话框覆盖浏览器预留区域前会先隐藏原生 View；删除对话、关闭窗口或退出应用时会销毁对应浏览器会话。下载、上传、截图和 Cookie 持久化均使用互相独立的显式设置。
 
 ---
 
@@ -102,20 +103,21 @@ graph TB
 
 通道常量集中定义于 [`src/shared/ipc.ts`](../src/shared/ipc.ts)，公开方法及其类型定义于 [`src/electron/preload.ts`](../src/electron/preload.ts) 和 [`src/shared/types.ts`](../src/shared/types.ts)。当前没有旧版 `vault:*` 或 `chat:stream` 通道。
 
-| 领域         | 通道                                                                                                                   | 用途                                                                           |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| 设置         | `settings:get`, `settings:update`                                                                                      | 读取或更新应用设置；返回前掩码代理凭据                                         |
-| 供应商       | `providers:list`, `providers:upsert`, `providers:remove`, `providers:test`                                             | 管理连接、写入 API Key、测试模型列表端点                                       |
-| 模型         | `models:list`, `models:upsert`, `models:remove`, `models:discover`                                                     | 管理本地模型配置并发现远程模型                                                 |
-| Skills       | `skills:list`, `skills:upsert`, `skills:remove`, `skills:toggle`, `skills:reset-defaults`                              | 管理技能包、开关和内置技能重置                                                 |
-| MCP          | `mcp:list-servers`, `mcp:upsert-server`, `mcp:remove-server`, `mcp:toggle-server`, `mcp:test-server`, `mcp:list-tools` | 管理 MCP server、测试连接并查询工具                                            |
-| 终端与运行时 | `terminal:test-shell`, `runtime:test`, `runtime:list-conda-environments`                                               | 测试集成终端 Shell 与开发运行时，列出 Conda 环境                               |
-| 工作区       | `workspace:select-directory`                                                                                           | 由主进程打开系统目录选择器并返回规范化绝对路径                                 |
-| 会话         | `conversations:list`, `conversations:get`, `conversations:save`, `conversations:remove`                                | 读取和持久化会话树                                                             |
-| 数据         | `data:export-backup`, `data:clear-conversations`                                                                       | 导出浅/深 ZIP 备份或清除全部会话                                               |
-| Chat         | `chat:start`, `chat:cancel`, `chat:resolve-tool-approval`                                                              | 启动请求、按 `requestId` 取消请求、处理工具审批                                |
-| 流事件       | `chat:event`                                                                                                           | 主进程向 renderer 推送 `StreamEvent`：文本、推理、来源、工具、用量、完成或错误 |
-| 应用         | `app:get-info`                                                                                                         | 返回应用名称、版本和平台                                                       |
+| 领域         | 通道                                                                                                                                                                              | 用途                                                                                                  |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 设置         | `settings:get`, `settings:update`                                                                                                                                                 | 读取或更新应用设置；返回前掩码代理凭据                                                                |
+| 供应商       | `providers:list`, `providers:upsert`, `providers:remove`, `providers:test`                                                                                                        | 管理连接、写入 API Key、测试模型列表端点                                                              |
+| 模型         | `models:list`, `models:upsert`, `models:remove`, `models:discover`                                                                                                                | 管理本地模型配置并发现远程模型                                                                        |
+| Skills       | `skills:list`, `skills:upsert`, `skills:remove`, `skills:toggle`, `skills:reset-defaults`                                                                                         | 管理技能包、开关和内置技能重置                                                                        |
+| MCP          | `mcp:list-servers`, `mcp:upsert-server`, `mcp:remove-server`, `mcp:toggle-server`, `mcp:test-server`, `mcp:list-tools`                                                            | 管理 MCP server、测试连接并查询工具                                                                   |
+| 终端与运行时 | `terminal:test-shell`, `runtime:test`, `runtime:list-conda-environments`                                                                                                          | 测试集成终端 Shell 与开发运行时，列出 Conda 环境                                                      |
+| 工作区       | `workspace:select-directory`                                                                                                                                                      | 由主进程打开系统目录选择器并返回规范化绝对路径                                                        |
+| 会话         | `conversations:list`, `conversations:get`, `conversations:save`, `conversations:remove`                                                                                           | 读取和持久化会话树                                                                                    |
+| 数据         | `data:export-backup`, `data:clear-conversations`                                                                                                                                  | 导出浅/深 ZIP 备份或清除全部会话                                                                      |
+| Chat         | `chat:start`, `chat:cancel`, `chat:resolve-tool-approval`                                                                                                                         | 启动请求、按 `requestId` 取消请求、处理工具审批                                                       |
+| 流事件       | `chat:event`                                                                                                                                                                      | 主进程向 renderer 推送 `StreamEvent`：文本、推理、来源、工具、用量、完成或错误                        |
+| 浏览器       | `browser:ensure`, `browser:navigate`, `browser:command`, `browser:new-tab`, `browser:switch-tab`, `browser:close-tab`, `browser:set-view-state`, `browser:close`, `browser:event` | 控制用户可见标签页并发布脱敏标签/下载状态；Agent 执行、Cookie、文件路径和页面内容仍只在主进程内部处理 |
+| 应用         | `app:get-info`                                                                                                                                                                    | 返回应用名称、版本和平台                                                                              |
 
 `chat:start` 返回新生成的 `{ requestId }`。后续取消、工具审批和流事件都以该请求 ID 关联，而不是以会话 ID 直接控制正在运行的生成。
 

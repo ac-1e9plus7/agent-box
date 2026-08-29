@@ -70,10 +70,11 @@ interface VaultState {
   conversations: Conversation[]
   skills?: Skill[]
   mcpServers?: McpServerConfig[]
+  browserProfiles?: BrowserCookieProfile[]
 }
 ```
 
-`skills` 和 `mcpServers` 在接口中可选是为了兼容旧 Vault；加载和校验后都会补齐为数组。设置中缺失的较新字段也由 [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) 迁移为安全默认值。
+`skills`、`mcpServers` 和加密 `browserProfiles` 在接口中可选是为了兼容旧 Vault；加载和校验后都会补齐为数组。设置中缺失的较新字段也由 [`settings-schema.ts`](../src/electron/storage/settings-schema.ts) 迁移为安全默认值。
 
 LangGraph checkpoint sidecar 刻意不是 `VaultState` 字段，superstep 写入因此不会重写完整会话 Vault。它是本机执行状态；`agentTrace` 仍位于会话 Schema 和可移植备份中。
 
@@ -84,6 +85,10 @@ Assistant 的 `usage` 同时保存聚合 token 计数和可选的 `modelRequests
 Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和旧版 Vault 均默认关闭全部优化。功能关闭时仍保留参数值：工具结果压缩使用 `agentToolResultMaxCharacters: 16000`（2,000–100,000），动态工具暴露使用 `agentDynamicToolLimit: 4`（1–16），Agent 单次运行上下文压缩默认在 70%（50%–95%）触发并保留最近 3 轮（1–10）。`agentProviderContextOptimizationMode` 接受 `off`、`auto`、`prefix-cache` 或 `native-continuation`，默认使用 `off`。设置规范化会拒绝未知模式、非布尔开关、非整数及越界参数，不会静默强制转换。
 
 启用原生续接时，助手消息可以保存经过校验的 `providerContinuation`，其中包含 OpenAI Responses 句柄和从 1 开始的模型轮次。句柄最多 200 个安全标识符字符，只能属于助手消息，并保留在加密 Vault 中；会话备份也会把它作为消息 JSON 的一部分导出。它是不透明的服务方侧状态引用，不是 API 凭据；删除本地会话数据会移除本地引用，但不会覆盖服务方自己的数据保留政策。
+
+`builtInBrowserEnabled`、持久 Cookie、Agent 截图、文件上传、下载和环回 HTTP 是互相独立的保守应用级显式开关，旧 Vault 缺少它们时均默认为 `false`。`Conversation.browserToolEnabled` 同样可选且默认关闭。活动浏览器 session 始终使用不带 `persist:` 的 partition。启用 Cookie 持久化时，主进程会把 Chromium 接受的 Cookie 快照写入可选 `browserProfiles`，按对话 ID 标识并随 Vault 一起加密；Cookie profile 不会通过 IPC 返回。缓存、localStorage、导航历史、DOM 状态、已批准来源和元素引用只存在于内存中。经过脱敏的浏览器调用、语义文本和已批准截图属于普通 `toolExecutions`/`agentTrace` 数据，会随对话一起加密。
+
+关闭 Cookie 持久化开关时，会先关闭活动浏览器会话，再删除全部已存 `browserProfiles`。如果只关闭总浏览器功能、但 Cookie 持久化偏好仍开启，则会关闭活动标签，但保留加密 Cookie profile。
 
 ---
 
@@ -126,6 +131,8 @@ Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和�
 
 该操作清除活动 Vault 中的会话，不是面向磁盘取证场景的安全擦除保证。
 
+该操作还会在删除对话前关闭全部内存浏览器会话并删除全部加密浏览器 Cookie profile；删除单个对话时会关闭其全部标签并只删除对应 Cookie profile。隐藏浏览器面板不会清理临时状态；关闭会话、删除对话、关闭窗口或退出应用时才会清理。应用退出会等待最后一次已启用的 Cookie 快照完成，再销毁 Vault 密钥。
+
 ---
 
 ## 📦 会话 ZIP 备份
@@ -135,6 +142,7 @@ Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和�
 ### 备份模式
 
 - **浅备份（shallow）**：导出全部会话。每个会话同时包含一份完整 JSON 和一份可读 Markdown；JSON 保留会话树中的全部分支、附件、引用、用量、Skill 激活、工具执行、Agent trace 与中断元数据。
+- 已经写入消息的浏览器文本与截图工具结果会进入备份；加密浏览器 Cookie profile 以及活动 Cookie、缓存、站点存储、DOM 状态、来源授权、标签状态和导航历史不会进入备份。
 - **深备份（deep）**：在浅备份基础上，递归加入所有被会话引用的工作目录。实现使用 `realpath` 对同一目录去重；保留空目录和符号链接，但不跟随符号链接；跳过其他特殊文件并把路径写入清单警告。
 
 ### 加密与隐私边界
