@@ -10,6 +10,7 @@ import type {
 import type { ChatMessage, Conversation } from '../types'
 import { interruptionFromStreamEvent } from '../agent-continuation'
 import { t } from '../../../shared/i18n'
+import { mergeTokenUsage } from '../../../shared/token-usage'
 import type { ConversationUpdater, PersistConversation } from './useConversation'
 
 interface ActiveStream {
@@ -224,6 +225,10 @@ export function applyStreamEvent(
         return { ...message, agentTrace: appendProviderItemTrace(message.agentTrace, event.turn, event.item) }
       }
 
+      if (event.type === 'provider-continuation') {
+        return { ...message, providerContinuation: event.continuation }
+      }
+
       if (event.type === 'text-delta') {
         return {
           ...message,
@@ -366,7 +371,7 @@ export function applyStreamEvent(
       }
 
       if (event.type === 'usage') {
-        return { ...message, usage: { ...message.usage, ...event.usage } }
+        return { ...message, usage: mergeTokenUsage(message.usage, event.usage, event.turn) }
       }
 
       return message

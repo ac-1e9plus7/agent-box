@@ -6,6 +6,25 @@ import type {
   ProxyConfig,
 } from '../../shared/types'
 import { normalizeAgentToolTurnLimit } from '../../shared/agent-limits'
+import {
+  DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  DEFAULT_AGENT_DYNAMIC_TOOL_EXPOSURE_ENABLED,
+  DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  DEFAULT_AGENT_LAZY_SKILL_RESOURCES_ENABLED,
+  DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
+  DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
+  DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+  MAX_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  MAX_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  MAX_AGENT_DYNAMIC_TOOL_LIMIT,
+  MAX_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+  MIN_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  MIN_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  MIN_AGENT_DYNAMIC_TOOL_LIMIT,
+  MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+} from '../../shared/agent-token-optimization'
 import { MAX_USER_AVATAR_DATA_URL_LENGTH, MAX_USER_NICKNAME_LENGTH } from '../../shared/user-profile'
 import { isLoopbackUrl } from '../api/provider-policy'
 import { normalizeRuntimePathInput } from '../runtime-path'
@@ -52,6 +71,59 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     throw new Error('Invalid default agent mode')
   }
   const agentToolTurnLimit = normalizeAgentToolTurnLimit(value.agentToolTurnLimit)
+  const agentToolResultCompactionEnabled = normalizeOptionalBoolean(
+    value.agentToolResultCompactionEnabled,
+    DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
+    'Agent tool-result compaction',
+  )
+  const agentToolResultMaxCharacters = normalizeBoundedInteger(
+    value.agentToolResultMaxCharacters,
+    DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+    MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+    MAX_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+    'Agent tool-result character limit',
+  )
+  const agentDynamicToolExposureEnabled = normalizeOptionalBoolean(
+    value.agentDynamicToolExposureEnabled,
+    DEFAULT_AGENT_DYNAMIC_TOOL_EXPOSURE_ENABLED,
+    'Agent dynamic tool exposure',
+  )
+  const agentDynamicToolLimit = normalizeBoundedInteger(
+    value.agentDynamicToolLimit,
+    DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+    MIN_AGENT_DYNAMIC_TOOL_LIMIT,
+    MAX_AGENT_DYNAMIC_TOOL_LIMIT,
+    'Agent dynamic tool limit',
+  )
+  const agentLazySkillResourcesEnabled = normalizeOptionalBoolean(
+    value.agentLazySkillResourcesEnabled,
+    DEFAULT_AGENT_LAZY_SKILL_RESOURCES_ENABLED,
+    'Agent lazy Skill resources',
+  )
+  const agentContextCompactionEnabled = normalizeOptionalBoolean(
+    value.agentContextCompactionEnabled,
+    DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
+    'Agent context compaction',
+  )
+  const agentContextCompactionThresholdPercent = normalizeBoundedInteger(
+    value.agentContextCompactionThresholdPercent,
+    DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+    MIN_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+    MAX_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+    'Agent context-compaction threshold',
+  )
+  const agentContextCompactionKeepRecentTurns = normalizeBoundedInteger(
+    value.agentContextCompactionKeepRecentTurns,
+    DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+    MIN_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+    MAX_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+    'Agent context-compaction recent-turn count',
+  )
+  const agentProviderContextOptimizationMode =
+    value.agentProviderContextOptimizationMode ?? DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE
+  if (!['off', 'auto', 'prefix-cache', 'native-continuation'].includes(String(agentProviderContextOptimizationMode))) {
+    throw new Error('Invalid Agent provider context optimization mode')
+  }
   if (value.mcpEnabled !== undefined && typeof value.mcpEnabled !== 'boolean') {
     throw new Error('Invalid MCP enabled setting')
   }
@@ -84,6 +156,16 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     defaultReasoningEffort: value.defaultReasoningEffort as AppSettings['defaultReasoningEffort'],
     defaultAgentMode: Boolean(value.defaultAgentMode),
     agentToolTurnLimit,
+    agentToolResultCompactionEnabled,
+    agentToolResultMaxCharacters,
+    agentDynamicToolExposureEnabled,
+    agentDynamicToolLimit,
+    agentLazySkillResourcesEnabled,
+    agentContextCompactionEnabled,
+    agentContextCompactionThresholdPercent,
+    agentContextCompactionKeepRecentTurns,
+    agentProviderContextOptimizationMode:
+      agentProviderContextOptimizationMode as AppSettings['agentProviderContextOptimizationMode'],
     mcpEnabled: value.mcpEnabled !== undefined ? Boolean(value.mcpEnabled) : true,
     mcpToolRetrievalMode: mcpToolRetrievalMode as AppSettings['mcpToolRetrievalMode'],
     mcpToolApprovalPolicy: mcpToolApprovalPolicy as AppSettings['mcpToolApprovalPolicy'],
@@ -98,6 +180,26 @@ export function normalizeAppSettings(value: unknown, fallbackLanguage: AppLangua
     settings.titleGenerationModelId = value.titleGenerationModelId
   }
   return settings
+}
+
+function normalizeOptionalBoolean(value: unknown, fallback: boolean, label: string): boolean {
+  if (value === undefined) return fallback
+  if (typeof value !== 'boolean') throw new Error(`Invalid ${label} setting`)
+  return value
+}
+
+function normalizeBoundedInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  label: string,
+): number {
+  if (value === undefined) return fallback
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`Invalid ${label}; expected an integer from ${minimum} to ${maximum}`)
+  }
+  return value
 }
 
 function normalizeUserNickname(value: unknown): string {

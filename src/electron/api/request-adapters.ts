@@ -10,6 +10,7 @@ import type {
   WebSearchMode,
 } from '../../shared/types'
 import { t } from '../../shared/i18n'
+import type { NativeContinuationTarget, ProviderContextStrategy } from './provider-context-optimization'
 
 export class RequestAdapterError extends Error {
   constructor(
@@ -21,6 +22,12 @@ export class RequestAdapterError extends Error {
   }
 }
 
+export interface ProviderContextRequestOptions {
+  strategy: ProviderContextStrategy
+  promptCacheKey?: string
+  nativeContinuation?: NativeContinuationTarget
+}
+
 export function buildRequestBody(
   format: ApiFormat,
   provider: { kind: ProviderKind },
@@ -29,6 +36,7 @@ export function buildRequestBody(
   request: ChatRequest,
   maxOutputTokens: number,
   mcpTools?: McpToolDefinition[],
+  contextOptions?: ProviderContextRequestOptions,
 ): Record<string, unknown> {
   const effort = request.reasoningEffort ?? model.defaultReasoningEffort
   const routing = provider.kind === 'openrouter' ? toWireRouting(model.providerRouting) : undefined
@@ -42,6 +50,9 @@ export function buildRequestBody(
       max_tokens: maxOutputTokens,
     }
     if (provider.kind !== 'custom') body.stream_options = { include_usage: true }
+    if (contextOptions?.strategy === 'prefix-cache' && contextOptions.promptCacheKey) {
+      body.prompt_cache_key = contextOptions.promptCacheKey
+    }
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (routing) body.provider = routing
     applyOpenAiReasoning(body, provider.kind, request.reasoningEnabled, effort)
@@ -50,7 +61,11 @@ export function buildRequestBody(
   }
 
   if (format === 'openai-responses') {
-    const { instructions, input } = toResponsesInput(messages)
+    const continuationInput =
+      contextOptions?.strategy === 'native-continuation' && contextOptions.nativeContinuation
+        ? toResponsesContinuationInput(messages, contextOptions.nativeContinuation)
+        : undefined
+    const { instructions, input } = continuationInput ?? toResponsesInput(messages)
     const body: Record<string, unknown> = {
       model: model.remoteId,
       input,
@@ -58,6 +73,15 @@ export function buildRequestBody(
       max_output_tokens: maxOutputTokens,
     }
     if (instructions) body.instructions = instructions
+    if (contextOptions?.strategy !== 'stateless' && contextOptions?.promptCacheKey) {
+      body.prompt_cache_key = contextOptions.promptCacheKey
+    }
+    if (contextOptions?.strategy === 'native-continuation') {
+      body.store = true
+      if (continuationInput && contextOptions.nativeContinuation) {
+        body.previous_response_id = contextOptions.nativeContinuation.responseId
+      }
+    }
     if (request.temperature !== undefined) body.temperature = request.temperature
     if (routing) body.provider = routing
     if (request.reasoningEnabled) {
@@ -76,7 +100,12 @@ export function buildRequestBody(
     stream: true,
     max_tokens: maxOutputTokens,
   }
-  if (system) body.system = system
+  if (system) {
+    body.system =
+      contextOptions?.strategy === 'prefix-cache'
+        ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }]
+        : system
+  }
   if (request.temperature !== undefined) body.temperature = request.temperature
   if (routing) body.provider = routing
   if (!request.reasoningEnabled) {
@@ -230,6 +259,36 @@ export function toResponsesInput(messages: Message[]): {
     })
   }
   return { instructions, input }
+}
+
+export function toResponsesContinuationInput(
+  messages: Message[],
+  continuation: NativeContinuationTarget,
+): { instructions: string; input: Array<Record<string, unknown>> } | undefined {
+  const anchorIndex = messages.findIndex((message) => message.id === continuation.messageId)
+  if (anchorIndex < 0) return undefined
+  const anchor = messages[anchorIndex]
+  if (anchor?.role !== 'assistant') return undefined
+
+  const instructions = messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n')
+  const input: Array<Record<string, unknown>> = []
+  const group = agentTurnGroups(anchor).find((item) => item.turn === continuation.turn)
+  for (const call of group?.calls || []) {
+    input.push({
+      type: 'function_call_output',
+      call_id: call.id,
+      output: toResponsesToolOutput(group?.results.get(call.id)),
+    })
+  }
+
+  const laterMessages = messages.filter((message, index) => message.role === 'system' || index > anchorIndex)
+  if (laterMessages.some((message) => message.role !== 'system')) {
+    input.push(...toResponsesInput(laterMessages).input)
+  }
+  return input.length > 0 ? { instructions, input } : undefined
 }
 
 export function toWireRouting(routing?: ProviderRouting): Record<string, unknown> | undefined {

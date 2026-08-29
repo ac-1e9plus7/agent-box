@@ -50,9 +50,13 @@ After each model node, the graph selects one route:
 
 The graph recursion limit is derived from the configured tool-turn limit. The current product limit is 1–100 turns, with a default of 30.
 
+When optional in-run context compaction is enabled and model-visible input crosses its soft threshold, the Gateway replaces whole older completed tool-turn messages after the latest user message with a deterministic plain-Assistant summary. Configured recent turns and every incomplete call remain intact, so protocol adapters never receive an orphaned tool call or result. The optimized messages, rather than renderer event payloads, become the next graph state and checkpoint payload.
+
 ## Streaming and cancellation
 
 Provider streaming stays in `ChatGateway`. Text, reasoning, citations, usage, provider items, and tool-argument deltas are emitted while a model node is running; LangGraph checkpoints only at graph boundaries.
+
+Each usage event is tagged with the current model turn. The renderer merges partial events within that turn and preserves a per-request breakdown, allowing message-level usage to be summed across the complete `model -> tools -> model` run.
 
 One request-scoped `AbortSignal` is passed to the graph and all callbacks. It cancels provider fetches, MCP calls, code execution, terminal commands, workspace operations, and approval waits. The 120-second network-stall timer is active only while provider data is expected and is paused during tool handling.
 

@@ -2,10 +2,24 @@ import type { Dispatch, JSX, SetStateAction } from 'react'
 import type { TerminalShellTestResult } from '../../../../shared/types'
 import type { AppPreferences, ModelConfig } from '../../types'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../../../shared/agent-limits'
+import {
+  DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+  MAX_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  MAX_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  MAX_AGENT_DYNAMIC_TOOL_LIMIT,
+  MAX_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+  MIN_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  MIN_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  MIN_AGENT_DYNAMIC_TOOL_LIMIT,
+  MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+} from '../../../../shared/agent-token-optimization'
 import { MAX_USER_NICKNAME_LENGTH } from '../../../../shared/user-profile'
 import { t } from '../../../../shared/i18n'
 import { Icon } from '../Icon'
-import { AgentTurnLimitInput, FieldLabel, SettingsToggle } from './SettingsControls'
+import { AgentTurnLimitInput, BoundedNumberInput, FieldLabel, SettingsToggle } from './SettingsControls'
 
 interface GeneralTabProps {
   avatarInputError: string
@@ -205,6 +219,197 @@ export function GeneralTab({
             <option value="max">{t('Maximum (max)')}</option>
           </select>
         </div>
+      </section>
+      <section className="settings-card">
+        <h3>{t('Agent token optimization')}</h3>
+        <div className="settings-row">
+          <div>
+            <strong>{t('Compact tool results sent to the model')}</strong>
+            <small>
+              {t('Keep complete tool output locally while limiting the text replayed to later model turns.')}
+            </small>
+          </div>
+          <SettingsToggle
+            checked={preferenceDraft.agentToolResultCompactionEnabled}
+            label={t('Compact tool results sent to the model')}
+            onChange={(agentToolResultCompactionEnabled) =>
+              setPreferenceDraft((current) => ({ ...current, agentToolResultCompactionEnabled }))
+            }
+          />
+        </div>
+        {preferenceDraft.agentToolResultCompactionEnabled && (
+          <div className="settings-row">
+            <div>
+              <strong>{t('Maximum model-visible tool-result characters')}</strong>
+              <small>
+                {t('Range: {minimum}–{maximum}. Default: {defaultValue}.', {
+                  minimum: MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+                  maximum: MAX_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+                  defaultValue: DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+                })}
+              </small>
+            </div>
+            <BoundedNumberInput
+              ariaLabel={t('Maximum model-visible tool-result characters')}
+              maximum={MAX_AGENT_TOOL_RESULT_MAX_CHARACTERS}
+              minimum={MIN_AGENT_TOOL_RESULT_MAX_CHARACTERS}
+              onChange={(agentToolResultMaxCharacters) =>
+                setPreferenceDraft((current) => ({ ...current, agentToolResultMaxCharacters }))
+              }
+              suffix={t('characters')}
+              value={preferenceDraft.agentToolResultMaxCharacters}
+            />
+          </div>
+        )}
+        <div className="settings-row">
+          <div>
+            <strong>{t('Expose a smaller tool set dynamically')}</strong>
+            <small>
+              {t('Start Agent runs with a limited tool set and make additional tools available on demand.')}
+            </small>
+          </div>
+          <SettingsToggle
+            checked={preferenceDraft.agentDynamicToolExposureEnabled}
+            label={t('Expose a smaller tool set dynamically')}
+            onChange={(agentDynamicToolExposureEnabled) =>
+              setPreferenceDraft((current) => ({ ...current, agentDynamicToolExposureEnabled }))
+            }
+          />
+        </div>
+        {preferenceDraft.agentDynamicToolExposureEnabled && (
+          <div className="settings-row">
+            <div>
+              <strong>{t('Initial dynamic tool limit')}</strong>
+              <small>
+                {t('Range: {minimum}–{maximum}. Default: {defaultValue}.', {
+                  minimum: MIN_AGENT_DYNAMIC_TOOL_LIMIT,
+                  maximum: MAX_AGENT_DYNAMIC_TOOL_LIMIT,
+                  defaultValue: DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+                })}
+              </small>
+            </div>
+            <BoundedNumberInput
+              ariaLabel={t('Initial dynamic tool limit')}
+              maximum={MAX_AGENT_DYNAMIC_TOOL_LIMIT}
+              minimum={MIN_AGENT_DYNAMIC_TOOL_LIMIT}
+              onChange={(agentDynamicToolLimit) =>
+                setPreferenceDraft((current) => ({ ...current, agentDynamicToolLimit }))
+              }
+              suffix={t('tools')}
+              value={preferenceDraft.agentDynamicToolLimit}
+            />
+          </div>
+        )}
+        <div className="settings-row">
+          <div>
+            <strong>{t('Load Skill resources only when needed')}</strong>
+            <small>{t('Inject Skill entry instructions first, then load references and scripts on demand.')}</small>
+          </div>
+          <SettingsToggle
+            checked={preferenceDraft.agentLazySkillResourcesEnabled}
+            label={t('Load Skill resources only when needed')}
+            onChange={(agentLazySkillResourcesEnabled) =>
+              setPreferenceDraft((current) => ({ ...current, agentLazySkillResourcesEnabled }))
+            }
+          />
+        </div>
+        <div className="settings-row">
+          <div>
+            <strong>{t('Compact long-running Agent context')}</strong>
+            <small>{t('Summarize older in-progress tool turns before the Agent fills the context window.')}</small>
+          </div>
+          <SettingsToggle
+            checked={preferenceDraft.agentContextCompactionEnabled}
+            label={t('Compact long-running Agent context')}
+            onChange={(agentContextCompactionEnabled) =>
+              setPreferenceDraft((current) => ({ ...current, agentContextCompactionEnabled }))
+            }
+          />
+        </div>
+        {preferenceDraft.agentContextCompactionEnabled && (
+          <>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Context compaction threshold')}</strong>
+                <small>
+                  {t('Range: {minimum}%–{maximum}%. Default: {defaultValue}%.', {
+                    minimum: MIN_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+                    maximum: MAX_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+                    defaultValue: DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+                  })}
+                </small>
+              </div>
+              <BoundedNumberInput
+                ariaLabel={t('Context compaction threshold')}
+                maximum={MAX_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT}
+                minimum={MIN_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT}
+                onChange={(agentContextCompactionThresholdPercent) =>
+                  setPreferenceDraft((current) => ({ ...current, agentContextCompactionThresholdPercent }))
+                }
+                suffix="%"
+                value={preferenceDraft.agentContextCompactionThresholdPercent}
+              />
+            </div>
+            <div className="settings-row">
+              <div>
+                <strong>{t('Recent Agent turns to keep')}</strong>
+                <small>
+                  {t('Range: {minimum}–{maximum}. Default: {defaultValue}.', {
+                    minimum: MIN_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+                    maximum: MAX_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+                    defaultValue: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+                  })}
+                </small>
+              </div>
+              <BoundedNumberInput
+                ariaLabel={t('Recent Agent turns to keep')}
+                maximum={MAX_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS}
+                minimum={MIN_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS}
+                onChange={(agentContextCompactionKeepRecentTurns) =>
+                  setPreferenceDraft((current) => ({ ...current, agentContextCompactionKeepRecentTurns }))
+                }
+                suffix={t('turns')}
+                value={preferenceDraft.agentContextCompactionKeepRecentTurns}
+              />
+            </div>
+          </>
+        )}
+        <label className="settings-row">
+          <div>
+            <strong>{t('Provider context reuse')}</strong>
+            <small>
+              {t(
+                'Reuse stable prefixes or provider-native response state. Unsupported modes automatically fall back to prefix caching and then stateless replay.',
+              )}
+            </small>
+            {['auto', 'native-continuation'].includes(preferenceDraft.agentProviderContextOptimizationMode) && (
+              <small>
+                {t(
+                  'Native continuation may retain provider-side response state according to the provider’s data policy.',
+                )}
+              </small>
+            )}
+          </div>
+          <select
+            aria-label={t('Provider context reuse')}
+            value={preferenceDraft.agentProviderContextOptimizationMode}
+            onChange={(event) =>
+              setPreferenceDraft((current) => ({
+                ...current,
+                agentProviderContextOptimizationMode: event.target
+                  .value as AppPreferences['agentProviderContextOptimizationMode'],
+              }))
+            }
+          >
+            <option value="off">{t('Off (stateless replay)')}</option>
+            <option value="auto">{t('Automatic fallback')}</option>
+            <option value="prefix-cache">{t('Prefix caching')}</option>
+            <option value="native-continuation">{t('Native continuation')}</option>
+          </select>
+        </label>
+        <p className="settings-card-note">
+          {t('All Agent token optimizations are disabled by default and can be enabled independently.')}
+        </p>
       </section>
       <section className="settings-card">
         <h3>{t('Input')}</h3>

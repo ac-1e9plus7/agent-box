@@ -79,6 +79,12 @@ The LangGraph checkpoint sidecar is deliberately not a `VaultState` field. Super
 
 `AppSettings.userNickname` and `userAvatar` are display-only local profile fields and are never included in model prompts. A nickname is limited to 50 characters. An avatar must be a PNG, JPEG, or WebP Base64 data URL no longer than 3,000,000 characters, and the renderer crop flow limits each dimension to 1,000 pixels. When a legacy Vault has no `language`, validation uses the system-language fallback supplied at startup.
 
+Assistant `usage` retains aggregate token counters plus an optional `modelRequests` breakdown keyed by one-based Agent model turn. Each breakdown contains only bounded non-negative integer counters and at most 101 requests (100 tool turns plus the terminal model request). Loading recomputes aggregate totals from a valid breakdown, while legacy messages containing only aggregate usage remain readable unchanged.
+
+Agent token optimizations are persisted as independent `AppSettings` preferences and all default to disabled for new and legacy Vaults. Their retained parameter defaults remain available while a feature is off: tool-result compaction uses `agentToolResultMaxCharacters: 16000` (2,000–100,000), dynamic tool exposure uses `agentDynamicToolLimit: 4` (1–16), and in-run context compaction uses a 70% threshold (50%–95%) while keeping 3 recent turns (1–10). `agentProviderContextOptimizationMode` accepts `off`, `auto`, `prefix-cache`, or `native-continuation` and defaults to `off`. Settings normalization rejects unknown modes, non-boolean switches, and non-integer or out-of-range parameters instead of silently coercing them.
+
+When native continuation is active, an Assistant message may store a validated `providerContinuation` containing an OpenAI Responses handle and one-based model turn. The handle is bounded to 200 safe identifier characters, belongs only to Assistant messages, remains inside the encrypted Vault, and is included in conversation backups as part of the message JSON. It is an opaque provider-side state reference rather than an API credential; deleting local conversation data removes the local reference but does not override the provider’s own retention policy.
+
 ---
 
 ## 📏 Resource quotas and validation

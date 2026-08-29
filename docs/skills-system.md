@@ -69,9 +69,11 @@ Skills participate in routing only in **Agent mode**:
 1. The Gateway reads every Skill with `enabled: true` and builds a lightweight catalog from names, IDs, and descriptions.
 2. Conversation-pinned `skillIds` take precedence. Otherwise, routing first recognizes `$id`, `@id`, a complete ID delimited in the query, or a full Skill name.
 3. Without an explicit match, retrieval examines the latest 3 user messages. A text attachment contributes at most its first 2,000 characters; a binary attachment contributes only its file name and MIME type. At most 2 Skills meeting the threshold are activated automatically.
-4. Only the activated Skills' entry documents, Markdown references, and Python/Shell reference source are added to System Instructions, avoiding the cost and conflicts of loading everything at once.
+4. By default, the activated Skills' entry documents, Markdown references, and Python/Shell reference source are added to System Instructions. When optional lazy resource loading is enabled, only each entry document plus a path/kind/character-count manifest is injected.
 5. If initial routing is insufficient, the model can call the read-only `agentbox_load_skill` tool with a catalog `skill_id` to load another enabled Skill. The tool never executes scripts and does not require approval.
 6. Automatic, explicit, and model-requested activation all emit a `skill-activated` event, and the Renderer records the activation source.
+
+In lazy-resource mode, the always-available read-only `agentbox_read_skill_resource` tool reads only an exact manifest path from a currently active Skill. Markdown, Python, and shell resources are returned in bounded character chunks; Python and shell content remains reference source and is never executed. The compatibility default remains eager injection.
 
 Retrieval is implemented in [`src/electron/api/skill-retriever.ts`](../src/electron/api/skill-retriever.ts); prompt assembly and on-demand loading are in [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts).
 

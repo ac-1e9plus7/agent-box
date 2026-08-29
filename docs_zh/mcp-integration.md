@@ -52,7 +52,8 @@ Model Context Protocol（MCP）是开放的工具集成协议。AgentBox 使用�
 
 - **智能检索（`auto`）**：Gateway 使用当前最后一条用户消息作为查询，注入分数达到 0.75 的前 8 个 MCP 工具；工具全名和名称片段命中会获得额外权重。没有合格结果时不会任意补齐。
 - **全部挂载（`all`）**：注入会话允许的全部 MCP 工具，不做相关度过滤。
-- 上述检索只作用于外部 MCP 工具。`agentbox_load_skill`、代码运行器、工作区文件工具和集成终端等内置 Agent 工具按各自可用条件追加，不参与 BM25 排名。
+- 动态 Agent 工具挂载关闭时（兼容性默认），上述检索只作用于外部 MCP 工具。`agentbox_load_skill`、代码运行器、工作区文件工具和集成终端等内置 Agent 工具会按可用条件追加，不参与 BM25 排名。
+- 动态挂载开启时，同一排名会作用于本次请求已授权的完整内置/MCP 联合目录，初始上限默认为 4 个工具。始终挂载的只读后备工具 `agentbox_search_tools` 仅搜索该已授权目录，并在下一模型轮次挂载匹配项；它不会执行匹配工具。模型调用开始时会快照当前工具集，因此搜索调用不能授权同一模型响应中的第二个调用。
 
 每个会话通过 `mcpServerIds` 建立 Server 白名单：
 
@@ -104,12 +105,13 @@ sequenceDiagram
 | 设置                              | 实际行为                                                                                                                 |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | **智能确认（`sensitive`，默认）** | 只有同时声明 `readOnlyHint: true`、`destructiveHint: false`、`openWorldHint: false` 的工具可自动执行；其余工具需要审批。 |
-| **每次确认（`always`）**          | 除只加载本地指令的 `agentbox_load_skill` 外，本轮所有代码、终端、工作区和 MCP 工具调用都需要审批。                       |
+| **每次确认（`always`）**          | 所有代码、终端、工作区和 MCP 调用都需要审批。本地目录/结果/Skill 资源读取器不产生副作用，因此无需审批。                  |
 | **Full Access（`full-access`）**  | 跳过代码运行器、终端、工作区文件和外部 MCP 工具的审批。它不会放宽路径、Schema、超时或结果大小校验。                      |
 
 内置工具还有以下固定规则：
 
 - `agentbox_load_skill` 只加载已启用技能的本地文档，不执行脚本，因此直接完成且不弹出审批。
+- `agentbox_search_tools`、`agentbox_read_tool_result` 和 `agentbox_read_skill_resource` 只检查本次请求已授权的内存或本地数据。它们绝不执行搜索到的工具或 Skill 脚本，也不会弹出审批。
 - `agentbox_run_code` 和 `agentbox_run_terminal` 始终按敏感操作处理；除 Full Access 外都需要用户批准。
 - `agentbox_read_file` 带有完整的只读、非破坏、封闭环境声明，因此在默认策略下可自动执行；`agentbox_write_file` 是破坏性写入，需要审批。
 - 外部 MCP Server 的 `ToolAnnotations` 是 Server 自行声明的数据；缺少任意一项完整低风险声明时，默认按敏感工具处理。

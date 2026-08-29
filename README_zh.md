@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Electron](https://img.shields.io/badge/Electron-35-47848F.svg)](https://www.electronjs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 ## 核心特性
 
@@ -22,7 +22,7 @@
 - **会话级开发环境：** 每个会话都绑定工作目录。可配置 JDK、Go、PHP 和 Python；Python 支持项目 `.venv`/`venv`、系统解释器、普通虚拟环境、Conda 环境和自定义解释器。
 - **多文件 Agent Skills：** Skill 可包含 Markdown 指令、参考文档以及不会自动执行的 Python / Shell 参考脚本。支持会话固定、`$skill-id` 显式调用、自动检索和模型按需加载，并可导入导出 ZIP Skill 归档。
 - **富聊天界面：** 支持 Markdown、GFM、代码高亮、KaTeX 数学公式、多模态附件、图片优化与预览、可编辑会话树、重新生成分支和版本切换。
-- **推理与联网搜索：** 归一化支持供应商的推理内容与用量。OpenRouter 联网搜索使用 `openrouter:web_search` 服务器工具，支持自动或供应商原生搜索和结构化引用。
+- **推理、用量、上下文复用与联网搜索：** 归一化支持服务方的推理输出和逐模型请求 token 用量，包括 cached-input 与 cache-write 计数。可选的 Agent 上下文复用支持稳定前缀缓存、Responses 原生续接和兼容性降级。OpenRouter 联网搜索使用 `openrouter:web_search` 服务器工具，支持自动或服务方原生搜索和结构化引用。
 - **英文与简体中文 UI：** Renderer 和 Electron 主进程共用语言资源。首次启动时，中文系统 locale 默认使用简体中文，其他 locale 默认使用英文；用户选择会保存在加密设置中。
 
 ## 技术文档
@@ -88,4 +88,4 @@ Electron Builder 在 Windows 上生成 NSIS 安装包和 portable 可执行文�
 
 ## 开源许可证
 
-AgentBox 使用 [MIT License](./LICENSE)。
+AgentBox 使用 [Apache License 2.0](./LICENSE)。

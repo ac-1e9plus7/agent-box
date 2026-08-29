@@ -1,4 +1,4 @@
-import type { TokenUsage, WebCitation } from '../../shared/types'
+import type { TokenUsageDetails, WebCitation } from '../../shared/types'
 import {
   isValidTokenUsageValue,
   MAX_CITATION_VARIANTS_PER_STREAM,
@@ -27,7 +27,8 @@ export interface ParsedProtocolEvent {
   toolCallDeltas?: RawToolCallDelta[]
   anthropicThinkingDelta?: { index: number; thinkingDelta?: string; signatureDelta?: string }
   responseOutputItem?: Record<string, unknown>
-  usage?: TokenUsage
+  responseId?: string
+  usage?: TokenUsageDetails
   finishReason?: string
   completed?: boolean
   error?: ProtocolErrorData
@@ -96,6 +97,7 @@ export function parseResponsesEvent(value: unknown, sseEvent?: string): ParsedPr
   }
 
   const response = isRecord(value.response) ? value.response : undefined
+  const responseId = validResponseId(response?.id, value.response_id)
   const usage = parseUsage(response?.usage ?? value.usage)
   const citations = extractResponsesCitations(value, response)
   const deltaRecord = isRecord(value.delta) ? value.delta : undefined
@@ -157,6 +159,7 @@ export function parseResponsesEvent(value: unknown, sseEvent?: string): ParsedPr
         : undefined
     return {
       completed: true,
+      responseId,
       usage,
       citations: citations.length ? citations : undefined,
       finishReason:
@@ -170,9 +173,14 @@ export function parseResponsesEvent(value: unknown, sseEvent?: string): ParsedPr
     }
   }
   return removeUndefined({
+    responseId,
     usage,
     citations: citations.length ? citations : undefined,
   })
+}
+
+function validResponseId(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === 'string' && /^[A-Za-z0-9._:-]{1,200}$/.test(value))
 }
 
 export function parseAnthropicEvent(value: unknown, sseEvent?: string): ParsedProtocolEvent {
@@ -247,12 +255,12 @@ export function parseAnthropicEvent(value: unknown, sseEvent?: string): ParsedPr
     if (citations.length) return { citations }
   }
   if (type === 'message_start' && isRecord(value.message)) {
-    return { usage: parseUsage(value.message.usage) }
+    return { usage: parseUsage(value.message.usage, 'separate') }
   }
   if (type === 'message_delta') {
     const delta = isRecord(value.delta) ? value.delta : undefined
     return {
-      usage: parseUsage(value.usage),
+      usage: parseUsage(value.usage, 'separate'),
       finishReason: typeof delta?.stop_reason === 'string' ? delta.stop_reason : undefined,
     }
   }
@@ -260,7 +268,7 @@ export function parseAnthropicEvent(value: unknown, sseEvent?: string): ParsedPr
     const citations = extractAnthropicMessageCitations(value)
     return removeUndefined({
       completed: true,
-      usage: parseUsage(value.usage),
+      usage: parseUsage(value.usage, 'separate'),
       citations: citations.length ? citations : undefined,
     })
   }
@@ -269,23 +277,57 @@ export function parseAnthropicEvent(value: unknown, sseEvent?: string): ParsedPr
   return {}
 }
 
-export function parseUsage(value: unknown): TokenUsage | undefined {
+export function parseUsage(
+  value: unknown,
+  cacheAccounting: 'included' | 'separate' = 'included',
+): TokenUsageDetails | undefined {
   if (!isRecord(value)) return undefined
   const outputDetails = isRecord(value.output_tokens_details) ? value.output_tokens_details : undefined
   const completionDetails = isRecord(value.completion_tokens_details) ? value.completion_tokens_details : undefined
+  const inputDetails = isRecord(value.input_tokens_details) ? value.input_tokens_details : undefined
+  const promptDetails = isRecord(value.prompt_tokens_details) ? value.prompt_tokens_details : undefined
   const serverToolUse = isRecord(value.server_tool_use) ? value.server_tool_use : undefined
+  const baseInputTokens = firstNumber(value.input_tokens, value.prompt_tokens)
+  const separateCachedInputTokens = firstNumber(value.cache_read_input_tokens)
+  const separateCacheWriteTokens = firstNumber(value.cache_creation_input_tokens)
+  const cachedInputTokens = firstNumber(
+    separateCachedInputTokens,
+    inputDetails?.cached_tokens,
+    inputDetails?.cache_read_tokens,
+    promptDetails?.cached_tokens,
+    promptDetails?.cache_read_tokens,
+  )
+  const cacheWriteTokens = firstNumber(
+    separateCacheWriteTokens,
+    inputDetails?.cache_write_tokens,
+    promptDetails?.cache_write_tokens,
+  )
+  const inputTokens =
+    cacheAccounting === 'separate' &&
+    (baseInputTokens !== undefined || separateCachedInputTokens !== undefined || separateCacheWriteTokens !== undefined)
+      ? validUsageSum(baseInputTokens, separateCachedInputTokens, separateCacheWriteTokens)
+      : baseInputTokens
   const usage = removeUndefined({
-    inputTokens: firstNumber(value.input_tokens, value.prompt_tokens),
+    inputTokens,
     outputTokens: firstNumber(value.output_tokens, value.completion_tokens),
     reasoningTokens: firstNumber(
       outputDetails?.reasoning_tokens,
       outputDetails?.thinking_tokens,
       completionDetails?.reasoning_tokens,
     ),
+    cachedInputTokens,
+    cacheWriteTokens,
     webSearchRequests: firstNumber(serverToolUse?.web_search_requests),
     totalTokens: firstNumber(value.total_tokens),
-  }) as TokenUsage
+  }) as TokenUsageDetails
   return Object.keys(usage).length ? usage : undefined
+}
+
+function validUsageSum(...values: Array<number | undefined>): number | undefined {
+  const present = values.filter((value): value is number => value !== undefined)
+  if (present.length === 0) return undefined
+  const total = present.reduce((sum, value) => sum + value, 0)
+  return isValidTokenUsageValue(total) ? total : undefined
 }
 
 function extractChatDeltaText(value: unknown): string | undefined {

@@ -32,6 +32,17 @@ import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
 import { runStreamWithReplay } from './stream-helper'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import {
+  DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  DEFAULT_AGENT_DYNAMIC_TOOL_EXPOSURE_ENABLED,
+  DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  DEFAULT_AGENT_LAZY_SKILL_RESOURCES_ENABLED,
+  DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
+  DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
+  DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+} from '../../shared/agent-token-optimization'
 import { resolveNaturalAgentResumeMessageId } from './agent-continuation'
 import { cleanGeneratedTitle, cleanManualTitle, firstUserQuestion, TITLE_SYSTEM_PROMPT } from './title'
 import { languageFromSystemLocale, setLanguage } from '../../shared/i18n'
@@ -56,6 +67,15 @@ const emptySettings: AppSettings = {
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
   agentToolTurnLimit: DEFAULT_AGENT_TOOL_TURN_LIMIT,
+  agentToolResultCompactionEnabled: DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
+  agentToolResultMaxCharacters: DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+  agentDynamicToolExposureEnabled: DEFAULT_AGENT_DYNAMIC_TOOL_EXPOSURE_ENABLED,
+  agentDynamicToolLimit: DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  agentLazySkillResourcesEnabled: DEFAULT_AGENT_LAZY_SKILL_RESOURCES_ENABLED,
+  agentContextCompactionEnabled: DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
+  agentContextCompactionThresholdPercent: DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  agentContextCompactionKeepRecentTurns: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  agentProviderContextOptimizationMode: DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -831,7 +851,7 @@ export default function App(): JSX.Element {
     prepareStream(streamRegistration)
 
     const requestMessages: Message[] = [...activeChain, userMessage].map(
-      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message,
+      ({ status: _status, error: _error, ...message }) => message,
     )
 
     const persisted = await persistConversation({
@@ -940,9 +960,7 @@ export default function App(): JSX.Element {
     }
     prepareStream(streamRegistration)
 
-    const requestMessages: Message[] = ancestors.map(
-      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message,
-    )
+    const requestMessages: Message[] = ancestors.map(({ status: _status, error: _error, ...message }) => message)
 
     const persisted = await persistConversation({
       ...nextConversation,
@@ -1061,9 +1079,7 @@ export default function App(): JSX.Element {
     }
     prepareStream(streamRegistration)
 
-    const requestMessages: Message[] = historyForPrompt.map(
-      ({ status: _status, modelId: _modelId, error: _error, ...message }) => message,
-    )
+    const requestMessages: Message[] = historyForPrompt.map(({ status: _status, error: _error, ...message }) => message)
 
     const persisted = await persistConversation({
       ...nextConversation,

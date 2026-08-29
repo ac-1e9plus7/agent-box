@@ -81,6 +81,7 @@ export type McpTransportType = 'stdio' | 'http' | 'sse'
 export type McpToolRetrievalMode = 'auto' | 'all'
 export type McpToolApprovalPolicy = 'always' | 'sensitive' | 'full-access'
 export type ToolApprovalTimeoutMode = 'five-minutes' | 'never'
+export type AgentProviderContextOptimizationMode = 'off' | 'auto' | 'prefix-cache' | 'native-continuation'
 
 export interface AppSettings {
   /** Persisted UI language. Missing legacy values migrate from the system locale. */
@@ -98,6 +99,17 @@ export interface AppSettings {
   defaultAgentMode?: boolean
   /** Maximum consecutive tool-execution turns; defaults to 30 for legacy settings. */
   agentToolTurnLimit?: number
+  /** Opt-in Agent token optimizations; missing legacy values normalize to conservative disabled defaults. */
+  agentToolResultCompactionEnabled: boolean
+  agentToolResultMaxCharacters: number
+  agentDynamicToolExposureEnabled: boolean
+  agentDynamicToolLimit: number
+  agentLazySkillResourcesEnabled: boolean
+  agentContextCompactionEnabled: boolean
+  agentContextCompactionThresholdPercent: number
+  agentContextCompactionKeepRecentTurns: number
+  /** Provider-side Agent context reuse. Missing legacy values default to `off`. */
+  agentProviderContextOptimizationMode: AgentProviderContextOptimizationMode
   mcpEnabled?: boolean
   mcpToolRetrievalMode?: McpToolRetrievalMode
   /** Defaults to `sensitive`: only explicitly read-only, closed-world tools run automatically. */
@@ -384,6 +396,13 @@ export type AgentTraceItem =
       isError?: boolean
     }
 
+export interface ProviderContinuation {
+  format: 'openai-responses'
+  responseId: string
+  /** One-based model turn that produced this provider response. */
+  turn: number
+}
+
 export interface Message {
   id: string
   role: MessageRole
@@ -399,6 +418,8 @@ export interface Message {
   toolExecutions?: ToolCallExecution[]
   /** Ordered protocol-neutral ledger used to replay multi-turn agent interactions. */
   agentTrace?: AgentTraceItem[]
+  /** Opaque provider handle used only when native continuation is enabled. */
+  providerContinuation?: ProviderContinuation
   /** Persisted checkpoint marker for an Agent response that can be resumed later. */
   interruption?: AgentInterruption
   createdAt: string
@@ -455,12 +476,24 @@ export interface ChatRequest {
   temperature?: number
 }
 
-export interface TokenUsage {
+export interface TokenUsageDetails {
   inputTokens?: number
   outputTokens?: number
   reasoningTokens?: number
+  cachedInputTokens?: number
+  cacheWriteTokens?: number
   webSearchRequests?: number
   totalTokens?: number
+}
+
+export interface ModelRequestUsage extends TokenUsageDetails {
+  /** One-based model turn within this assistant response. */
+  turn: number
+}
+
+export interface TokenUsage extends TokenUsageDetails {
+  /** Per-request usage retained so multi-turn Agent totals remain auditable. */
+  modelRequests?: ModelRequestUsage[]
 }
 
 export interface ChatError {
@@ -488,6 +521,11 @@ export type StreamEvent =
       turn: number
       format: 'openai-responses'
       item: Record<string, unknown>
+    }
+  | {
+      type: 'provider-continuation'
+      requestId: string
+      continuation: ProviderContinuation
     }
   | { type: 'citation'; requestId: string; citation: WebCitation }
   | {
@@ -534,7 +572,7 @@ export type StreamEvent =
       denied?: boolean
       turn?: number
     }
-  | { type: 'usage'; requestId: string; usage: TokenUsage }
+  | { type: 'usage'; requestId: string; turn: number; usage: TokenUsageDetails }
   | { type: 'done'; requestId: string; finishReason?: string }
   | { type: 'error'; requestId: string; error: ChatError }
 

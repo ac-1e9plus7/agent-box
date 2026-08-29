@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./out/main/index.cjs",
   "author": "AgentBox contributors",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": ">=24.0.0"

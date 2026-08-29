@@ -74,6 +74,81 @@ describe('settings schema migration', () => {
     }
   })
 
+  it('defaults legacy settings to disabled Agent token optimizations and conservative parameters', () => {
+    expect(normalizeAppSettings(legacySettings)).toMatchObject({
+      agentToolResultCompactionEnabled: false,
+      agentToolResultMaxCharacters: 16_000,
+      agentDynamicToolExposureEnabled: false,
+      agentDynamicToolLimit: 4,
+      agentLazySkillResourcesEnabled: false,
+      agentContextCompactionEnabled: false,
+      agentContextCompactionThresholdPercent: 70,
+      agentContextCompactionKeepRecentTurns: 3,
+      agentProviderContextOptimizationMode: 'off',
+    })
+  })
+
+  it('preserves enabled Agent token optimizations and valid boundary values', () => {
+    expect(
+      normalizeAppSettings({
+        ...legacySettings,
+        agentToolResultCompactionEnabled: true,
+        agentToolResultMaxCharacters: 100_000,
+        agentDynamicToolExposureEnabled: true,
+        agentDynamicToolLimit: 1,
+        agentLazySkillResourcesEnabled: true,
+        agentContextCompactionEnabled: true,
+        agentContextCompactionThresholdPercent: 95,
+        agentContextCompactionKeepRecentTurns: 10,
+        agentProviderContextOptimizationMode: 'native-continuation',
+      }),
+    ).toMatchObject({
+      agentToolResultCompactionEnabled: true,
+      agentToolResultMaxCharacters: 100_000,
+      agentDynamicToolExposureEnabled: true,
+      agentDynamicToolLimit: 1,
+      agentLazySkillResourcesEnabled: true,
+      agentContextCompactionEnabled: true,
+      agentContextCompactionThresholdPercent: 95,
+      agentContextCompactionKeepRecentTurns: 10,
+      agentProviderContextOptimizationMode: 'native-continuation',
+    })
+  })
+
+  it('rejects malformed Agent token-optimization switches', () => {
+    for (const [field, value] of [
+      ['agentToolResultCompactionEnabled', 'true'],
+      ['agentDynamicToolExposureEnabled', 1],
+      ['agentLazySkillResourcesEnabled', null],
+      ['agentContextCompactionEnabled', 'false'],
+    ] as const) {
+      expect(() => normalizeAppSettings({ ...legacySettings, [field]: value })).toThrow('Invalid Agent')
+    }
+  })
+
+  it('rejects an unknown provider context optimization mode', () => {
+    expect(() =>
+      normalizeAppSettings({ ...legacySettings, agentProviderContextOptimizationMode: 'provider-magic' }),
+    ).toThrow('Invalid Agent provider context optimization mode')
+  })
+
+  it('rejects out-of-range or non-integer Agent token-optimization parameters', () => {
+    for (const [field, value] of [
+      ['agentToolResultMaxCharacters', 1_999],
+      ['agentToolResultMaxCharacters', 100_001],
+      ['agentToolResultMaxCharacters', '16000'],
+      ['agentDynamicToolLimit', 0],
+      ['agentDynamicToolLimit', 17],
+      ['agentContextCompactionThresholdPercent', 49],
+      ['agentContextCompactionThresholdPercent', 96],
+      ['agentContextCompactionKeepRecentTurns', 0],
+      ['agentContextCompactionKeepRecentTurns', 11],
+      ['agentContextCompactionKeepRecentTurns', 1.5],
+    ] as const) {
+      expect(() => normalizeAppSettings({ ...legacySettings, [field]: value })).toThrow('Invalid Agent')
+    }
+  })
+
   it('migrates legacy vault settings to manual context management', () => {
     expect(normalizeAppSettings(legacySettings).contextManagementMode).toBe('manual')
   })

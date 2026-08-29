@@ -233,6 +233,25 @@ describe('OpenAI Chat Completions adapter', () => {
       }),
     ).toBeUndefined()
   })
+
+  it('parses cached prompt tokens without adding them to provider totals', () => {
+    expect(
+      parseChatCompletionEvent({
+        choices: [{ delta: {} }],
+        usage: {
+          prompt_tokens: 40,
+          completion_tokens: 6,
+          total_tokens: 46,
+          prompt_tokens_details: { cached_tokens: 24 },
+        },
+      }).usage,
+    ).toEqual({
+      inputTokens: 40,
+      outputTokens: 6,
+      cachedInputTokens: 24,
+      totalTokens: 46,
+    })
+  })
 })
 
 describe('OpenAI Responses adapter', () => {
@@ -299,6 +318,27 @@ describe('OpenAI Responses adapter', () => {
         response: { status: 'completed', usage: { output_tokens: 4 } },
       }).completed,
     ).toBe(true)
+  })
+
+  it('parses cached-input and cache-write details from Responses usage', () => {
+    expect(
+      parseResponsesEvent({
+        type: 'response.completed',
+        response: {
+          status: 'completed',
+          usage: {
+            input_tokens: 70,
+            output_tokens: 9,
+            input_tokens_details: { cached_tokens: 50, cache_write_tokens: 8 },
+          },
+        },
+      }).usage,
+    ).toEqual({
+      inputTokens: 70,
+      outputTokens: 9,
+      cachedInputTokens: 50,
+      cacheWriteTokens: 8,
+    })
   })
 
   it('parses failed responses', () => {
@@ -418,6 +458,32 @@ describe('Anthropic Messages adapter', () => {
         error: { message: 'overloaded', error_type: 'provider_overloaded' },
       }).error,
     ).toMatchObject({ message: 'overloaded', code: 'provider_overloaded' })
+  })
+
+  it('keeps Anthropic input/cache usage and later output usage as mergeable partial events', () => {
+    expect(
+      parseAnthropicEvent({
+        type: 'message_start',
+        message: {
+          usage: {
+            input_tokens: 15,
+            cache_read_input_tokens: 90,
+            cache_creation_input_tokens: 12,
+          },
+        },
+      }).usage,
+    ).toEqual({
+      inputTokens: 117,
+      cachedInputTokens: 90,
+      cacheWriteTokens: 12,
+    })
+    expect(
+      parseAnthropicEvent({
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn' },
+        usage: { output_tokens: 7 },
+      }).usage,
+    ).toEqual({ outputTokens: 7 })
   })
 
   it('parses citations from Anthropic text blocks and citation deltas', () => {

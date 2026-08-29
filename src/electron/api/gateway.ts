@@ -18,19 +18,33 @@ import type {
   WebCitation,
 } from '../../shared/types'
 import { estimateTextTokens } from '../../shared/token-estimate'
+import { isValidProviderContinuation } from '../../shared/provider-context'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import {
+  DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+} from '../../shared/agent-token-optimization'
 import {
   BUILTIN_AGENT_TOOL_SERVER_IDS,
   CODE_RUNNER_MODEL_NAME,
   CODE_RUNNER_SERVER_ID,
   createCodeRunnerTool,
+  createDynamicToolSearchTool,
   createSkillLoaderTool,
+  createSkillResourceReaderTool,
   createTerminalRunnerTool,
+  createToolResultReaderTool,
   createWorkspaceFileTools,
+  DYNAMIC_TOOL_SEARCH_SERVER_ID,
   SKILL_LOADER_MODEL_NAME,
   SKILL_LOADER_SERVER_ID,
+  SKILL_RESOURCE_READER_MODEL_NAME,
+  SKILL_RESOURCE_READER_SERVER_ID,
   TERMINAL_RUNNER_MODEL_NAME,
   TERMINAL_RUNNER_SERVER_ID,
+  TOOL_RESULT_READER_SERVER_ID,
   WORKSPACE_FILES_SERVER_ID,
   WORKSPACE_READ_FILE_MODEL_NAME,
   WORKSPACE_READ_FILE_TOOL_NAME,
@@ -66,12 +80,35 @@ import { t } from '../../shared/i18n'
 import { agentCheckpointThreadId } from '../storage/checkpoint-identity'
 import { CheckpointRepositoryError } from '../storage/checkpoint-repository'
 import type { AgentBoxCheckpointSaver } from '../storage/agentbox-checkpoint-saver'
+import {
+  appendUniqueTools,
+  compactOlderAgentTurns,
+  compactToolResultsForModel,
+  formatFullToolResult,
+  readTextChunk,
+  rememberFullToolResult,
+  restoreDynamicallyExposedTools,
+  searchAdditionalTools,
+  seedFullToolResultStore,
+  selectInitialDynamicTools,
+  type FullToolResult,
+  type FullToolResultStore,
+} from './agent-token-optimization'
+import {
+  buildProviderPromptCacheKey,
+  findLatestNativeContinuation,
+  isProviderContextCompatibilityError,
+  resolveProviderContextStrategies,
+  type ProviderContextStrategy,
+} from './provider-context-optimization'
 
 type StreamEmitter = (event: StreamEvent) => void
 
 const MODEL_DISCOVERY_TIMEOUT_MS = 30_000
 const MAX_MODEL_RESPONSE_BYTES = 32 * 1024 * 1024
 const MAX_ERROR_RESPONSE_BYTES = 32 * 1024
+const LEGACY_MAX_STORED_TOOL_RESULT_CHARACTERS = 100_000
+const MAX_STORED_TOOL_RESULT_CHARACTERS = 600_000
 export class GatewayError extends Error {
   constructor(
     message: string,
@@ -167,7 +204,13 @@ export class ChatGateway {
 
     try {
       resetStallTimer()
-      const requestMessages = validateChatRequest(request)
+      const settings = this.repository.getSettings()
+      const requestMessages = validateChatRequest(
+        request,
+        settings.agentToolResultCompactionEnabled === true
+          ? MAX_STORED_TOOL_RESULT_CHARACTERS
+          : LEGACY_MAX_STORED_TOOL_RESULT_CHARACTERS,
+      )
       const workingDirectory = request.workingDirectory ? normalize(request.workingDirectory) : undefined
       const model = this.repository.getModel(request.modelId)
       if (!model) throw new GatewayError(t('The selected model does not exist.'), 'model_not_found')
@@ -180,12 +223,26 @@ export class ChatGateway {
 
       const format = model.apiFormat ?? provider.apiFormat
       const maxOutputTokens = Math.min(request.maxOutputTokens ?? model.maxOutputTokens, model.maxOutputTokens)
-      const settings = this.repository.getSettings()
       const isAgentMode = Boolean(request.agentMode)
+      const providerContextMode = isAgentMode ? settings.agentProviderContextOptimizationMode : 'off'
+      const providerPromptCacheKey = buildProviderPromptCacheKey(request.conversationId, provider.id, model.remoteId)
+      const disabledProviderContextStrategies = new Set<ProviderContextStrategy>()
+      const toolResultCompactionEnabled = isAgentMode && settings.agentToolResultCompactionEnabled === true
+      const toolResultMaxCharacters = settings.agentToolResultMaxCharacters ?? DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS
+      const dynamicToolExposureEnabled = isAgentMode && settings.agentDynamicToolExposureEnabled === true
+      const dynamicToolLimit = settings.agentDynamicToolLimit ?? DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT
+      const lazySkillResourcesEnabled = isAgentMode && settings.agentLazySkillResourcesEnabled === true
+      const contextCompactionEnabled = isAgentMode && settings.agentContextCompactionEnabled === true
+      const contextCompactionThresholdPercent =
+        settings.agentContextCompactionThresholdPercent ?? DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT
+      const contextCompactionKeepRecentTurns =
+        settings.agentContextCompactionKeepRecentTurns ?? DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS
       const resumeFromMessageId = resolveResumeFromMessageId(request, requestMessages, isAgentMode)
       if (resumeFromMessageId) ensureVisibleResumeCheckpoint(requestMessages, resumeFromMessageId)
       const lastUserMessage = requestMessages.filter((message) => message.role === 'user').at(-1)?.content || ''
       const skillRoutingQuery = buildSkillRetrievalQuery(requestMessages)
+      const fullToolResults: FullToolResultStore = new Map()
+      if (toolResultCompactionEnabled) seedFullToolResultStore(requestMessages, fullToolResults)
       let allMcpTools: McpToolDefinition[] = []
       let effectiveMcpTools: McpToolDefinition[] = []
       if (isAgentMode && this.mcpManager && settings.mcpEnabled !== false) {
@@ -201,6 +258,7 @@ export class ChatGateway {
       let enabledSkills: Skill[] = []
       let activeSkills: Skill[] = []
       let effectiveAgentTools = effectiveMcpTools
+      let authorizedAgentTools: McpToolDefinition[] = []
       let effectiveSystemPrompt = settings.systemPrompt
       if (isAgentMode) {
         enabledSkills = this.repository.listSkills().filter((skill) => skill.enabled)
@@ -217,8 +275,35 @@ export class ChatGateway {
           createCodeRunnerTool(enabledSkills),
           ...(workingDirectory ? createWorkspaceFileTools() : []),
           createTerminalRunnerTool(),
+          ...(toolResultCompactionEnabled ? [createToolResultReaderTool()] : []),
+          ...(lazySkillResourcesEnabled ? [createSkillResourceReaderTool()] : []),
         ].filter((tool): tool is McpToolDefinition => Boolean(tool))
-        effectiveAgentTools = [...effectiveMcpTools, ...internalTools]
+        authorizedAgentTools = [...allMcpTools, ...internalTools]
+        if (dynamicToolExposureEnabled) {
+          const forcedTools = [
+            createDynamicToolSearchTool(),
+            ...(toolResultCompactionEnabled ? [createToolResultReaderTool()] : []),
+            ...(lazySkillResourcesEnabled ? [createSkillResourceReaderTool()] : []),
+          ]
+          const routedCatalog = authorizedAgentTools.filter(
+            (tool) =>
+              tool.serverId !== TOOL_RESULT_READER_SERVER_ID && tool.serverId !== SKILL_RESOURCE_READER_SERVER_ID,
+          )
+          effectiveAgentTools = appendUniqueTools(
+            selectInitialDynamicTools(lastUserMessage, routedCatalog, dynamicToolLimit),
+            forcedTools,
+          )
+          if (resumeFromMessageId) {
+            effectiveAgentTools = restoreDynamicallyExposedTools(
+              requestMessages.find((message) => message.id === resumeFromMessageId),
+              authorizedAgentTools,
+              effectiveAgentTools,
+              dynamicToolLimit,
+            )
+          }
+        } else {
+          effectiveAgentTools = [...effectiveMcpTools, ...internalTools]
+        }
         effectiveSystemPrompt = buildAgentSystemPrompt(
           activeSkills,
           settings.systemPrompt,
@@ -226,6 +311,7 @@ export class ChatGateway {
           enabledSkills,
           workingDirectory,
           resumeFromMessageId,
+          { lazySkillResourcesEnabled },
         )
         for (const skill of activeSkills) {
           emit({
@@ -235,19 +321,48 @@ export class ChatGateway {
           })
         }
       }
-      const messages = addConfiguredSystemPrompt(requestMessages, effectiveSystemPrompt)
-      const toolDefinitionTokens = estimateTextTokens(
-        JSON.stringify(
-          effectiveAgentTools.map((tool) => ({
-            name: tool.modelName || tool.name,
-            description: tool.description,
-            parameters: tool.inputSchema,
-          })),
-        ),
-      )
-      const effectiveContextWindow = Math.max(1, model.contextWindow - toolDefinitionTokens)
       const contextMode = resolveContextManagementMode(settings.contextManagementMode, request.allowContextTrimming)
-      const prepared = prepareMessagesForContext(messages, effectiveContextWindow, maxOutputTokens, contextMode)
+      const currentEffectiveContextWindow = () => {
+        const toolDefinitionTokens = estimateTextTokens(
+          JSON.stringify(
+            effectiveAgentTools.map((tool) => ({
+              name: tool.modelName || tool.name,
+              description: tool.description,
+              parameters: tool.inputSchema,
+            })),
+          ),
+        )
+        return Math.max(1, model.contextWindow - toolDefinitionTokens)
+      }
+      const optimizeAgentMessagesForModel = (input: readonly Message[]): Message[] => {
+        let optimized = [...input]
+        if (toolResultCompactionEnabled) {
+          optimized = compactToolResultsForModel(optimized, toolResultMaxCharacters)
+        }
+        if (contextCompactionEnabled) {
+          optimized = compactOlderAgentTurns(optimized, {
+            contextWindow: currentEffectiveContextWindow(),
+            maxOutputTokens,
+            thresholdPercent: contextCompactionThresholdPercent,
+            keepRecentTurns: contextCompactionKeepRecentTurns,
+          })
+        }
+        return optimized
+      }
+      const prepareAgentMessagesForModel = (input: readonly Message[]): Message[] => {
+        const optimized = optimizeAgentMessagesForModel(input)
+        return prepareMessagesForContext(optimized, currentEffectiveContextWindow(), maxOutputTokens, contextMode)
+          .messages
+      }
+      const messages = addConfiguredSystemPrompt(requestMessages, effectiveSystemPrompt)
+      const nativeContinuationEnabled = resolveProviderContextStrategies(
+        providerContextMode,
+        format,
+        provider.kind,
+      ).includes('native-continuation')
+      const initialRuntimeMessages = nativeContinuationEnabled
+        ? optimizeAgentMessagesForModel(messages)
+        : prepareAgentMessagesForModel(messages)
 
       const maxAgentToolTurns = settings.agentToolTurnLimit ?? DEFAULT_AGENT_TOOL_TURN_LIMIT
       let resumeExistingCheckpoint = false
@@ -294,7 +409,7 @@ export class ChatGateway {
         }
       }
       const runtimeResult = await runAgentRuntime<StreamConsumptionResult>({
-        initialMessages: prepared.messages,
+        initialMessages: initialRuntimeMessages,
         agentMode: isAgentMode,
         maxToolTurns: maxAgentToolTurns,
         signal: controller.signal,
@@ -303,64 +418,116 @@ export class ChatGateway {
         resumeExisting: resumeExistingCheckpoint,
         invokeModel: async ({ messages: currentTurnMessages, turn }) => {
           resetStallTimer()
-
-          const response = await fetch(
-            endpointFor(provider.baseUrl, format),
-            this.withProxy({
-              method: 'POST',
-              headers: buildProviderHeaders(provider, format),
-              body: JSON.stringify(
-                buildRequestBody(
-                  format,
-                  provider,
-                  model,
-                  currentTurnMessages,
-                  request,
-                  maxOutputTokens,
-                  effectiveAgentTools.length > 0 ? effectiveAgentTools : undefined,
-                ),
-              ),
-              signal: controller.signal,
-              redirect: 'error',
-            }),
+          // Also normalize checkpoint state from older versions. The graph may
+          // resume messages that predate model-only P1 compaction.
+          const modelVisibleMessages = prepareAgentMessagesForModel(currentTurnMessages)
+          const nativeSourceMessages = optimizeAgentMessagesForModel(currentTurnMessages)
+          const strategies = resolveProviderContextStrategies(providerContextMode, format, provider.kind).filter(
+            (strategy) => !disabledProviderContextStrategies.has(strategy),
           )
+          let lastCompatibilityError: GatewayError | undefined
 
-          if (!response.ok) throw await httpError(response)
-          if (!response.body)
-            throw new GatewayError(t('The provider did not return a response stream.'), 'empty_response')
+          for (let index = 0; index < strategies.length; index += 1) {
+            const strategy = strategies[index]!
+            const nativeContinuation =
+              strategy === 'native-continuation'
+                ? findLatestNativeContinuation(nativeSourceMessages, model.id)
+                : undefined
+            const requestMessagesForStrategy =
+              strategy === 'native-continuation' && nativeContinuation ? nativeSourceMessages : modelVisibleMessages
+            const response = await fetch(
+              endpointFor(provider.baseUrl, format),
+              this.withProxy({
+                method: 'POST',
+                headers: buildProviderHeaders(provider, format),
+                body: JSON.stringify(
+                  buildRequestBody(
+                    format,
+                    provider,
+                    model,
+                    requestMessagesForStrategy,
+                    request,
+                    maxOutputTokens,
+                    effectiveAgentTools.length > 0 ? effectiveAgentTools : undefined,
+                    {
+                      strategy,
+                      promptCacheKey: providerPromptCacheKey,
+                      nativeContinuation,
+                    },
+                  ),
+                ),
+                signal: controller.signal,
+                redirect: 'error',
+              }),
+            )
 
-          const wrappedBody = new ReadableStream<Uint8Array>({
-            async start(ctrl) {
-              const reader = response.body!.getReader()
-              try {
-                while (true) {
-                  const { value, done } = await reader.read()
-                  resetStallTimer()
-                  if (done) {
-                    ctrl.close()
-                    break
-                  }
-                  ctrl.enqueue(value)
-                }
-              } catch (e) {
-                ctrl.error(e)
-              } finally {
-                reader.releaseLock()
+            if (!response.ok) {
+              const error = await httpError(response)
+              const canFallback = index + 1 < strategies.length && strategy !== 'stateless'
+              if (canFallback && isProviderContextCompatibilityError(error, strategy)) {
+                disabledProviderContextStrategies.add(strategy)
+                lastCompatibilityError = error
+                continue
               }
-            },
-            cancel(reason) {
-              response.body!.cancel(reason).catch(() => {})
-            },
-          })
+              throw error
+            }
+            if (!response.body) {
+              throw new GatewayError(t('The provider did not return a response stream.'), 'empty_response')
+            }
 
-          const streamResult = await consumeStream(format, wrappedBody, requestId, emit, effectiveAgentTools, turn)
-          // The 120-second watchdog protects network inactivity only. Tool
-          // approval intentionally has its own five-minute timeout and must not
-          // be aborted by a stale response-stream timer.
-          pauseStallTimer()
-          return streamResult
+            const wrappedBody = new ReadableStream<Uint8Array>({
+              async start(ctrl) {
+                const reader = response.body!.getReader()
+                try {
+                  while (true) {
+                    const { value, done } = await reader.read()
+                    resetStallTimer()
+                    if (done) {
+                      ctrl.close()
+                      break
+                    }
+                    ctrl.enqueue(value)
+                  }
+                } catch (e) {
+                  ctrl.error(e)
+                } finally {
+                  reader.releaseLock()
+                }
+              },
+              cancel(reason) {
+                response.body!.cancel(reason).catch(() => {})
+              },
+            })
+
+            const streamResult = await consumeStream(
+              format,
+              wrappedBody,
+              requestId,
+              emit,
+              effectiveAgentTools,
+              turn,
+              strategy === 'native-continuation',
+            )
+            if (strategy === 'native-continuation' && !streamResult.responseId) {
+              disabledProviderContextStrategies.add('native-continuation')
+            }
+            // The 120-second watchdog protects network inactivity only. Tool
+            // approval intentionally has its own five-minute timeout and must not
+            // be aborted by a stale response-stream timer.
+            pauseStallTimer()
+            return streamResult
+          }
+
+          throw (
+            lastCompatibilityError ||
+            new GatewayError(t('The provider rejected every context reuse strategy.'), 'context_reuse_failed')
+          )
         },
         executeTools: async ({ messages: currentTurnMessages, modelResult: streamResult, turn }) => {
+          // Tool search can mount definitions only for a later provider turn.
+          // Keep this immutable snapshot so a second call in the same model
+          // response cannot bypass the exposed-tool allowlist.
+          const turnExposedAgentTools = [...effectiveAgentTools]
           const toolExecutions: ToolCallExecution[] = []
           const agentTrace: AgentTraceItem[] = streamResult.responseOutputItems.map((item) => ({
             type: 'provider_item' as const,
@@ -379,9 +546,64 @@ export class ChatGateway {
           )
           if (streamResult.text) agentTrace.push({ type: 'assistant_text', turn, text: streamResult.text })
           let skillLoadedThisTurn = false
+          let toolsChangedThisTurn = false
+          const recordLowRiskInternalResult = (
+            rawCall: AccumulatedToolCall,
+            toolDef: McpToolDefinition,
+            args: Record<string, unknown>,
+            result: string,
+            isError: boolean,
+            approvalReason: string,
+          ) => {
+            emit({
+              type: 'tool-call-complete',
+              requestId,
+              callId: rawCall.id,
+              toolName: toolDef.name,
+              modelToolName: toolDef.modelName || toolDef.name,
+              args,
+              turn,
+            })
+            emit({
+              type: 'tool-result',
+              requestId,
+              callId: rawCall.id,
+              toolName: toolDef.name,
+              result,
+              isError,
+              turn,
+            })
+            toolExecutions.push({
+              id: rawCall.id,
+              toolName: toolDef.name,
+              modelToolName: toolDef.modelName || toolDef.name,
+              serverId: toolDef.serverId,
+              serverName: toolDef.serverName,
+              turn,
+              args,
+              result,
+              isError,
+              riskLevel: 'low',
+              approvalReason,
+              status: isError ? 'error' : 'complete',
+            })
+            agentTrace.push(
+              {
+                type: 'tool_call',
+                turn,
+                callId: rawCall.id,
+                toolName: toolDef.name,
+                modelToolName: toolDef.modelName || toolDef.name,
+                serverId: toolDef.serverId,
+                serverName: toolDef.serverName,
+                args,
+              },
+              { type: 'tool_result', turn, callId: rawCall.id, toolName: toolDef.name, result, isError },
+            )
+          }
 
           for (const rawCall of streamResult.toolCalls) {
-            const toolDef = effectiveAgentTools.find((tool) => (tool.modelName || tool.name) === rawCall.name)
+            const toolDef = turnExposedAgentTools.find((tool) => (tool.modelName || tool.name) === rawCall.name)
             const displayName = toolDef?.name || rawCall.name
             let parsedValue: unknown
             let argumentError: string | undefined
@@ -398,12 +620,22 @@ export class ChatGateway {
             const isSkillLoader = toolDef?.serverId === SKILL_LOADER_SERVER_ID
             const isCodeRunner = toolDef?.serverId === CODE_RUNNER_SERVER_ID
             const isTerminalRunner = toolDef?.serverId === TERMINAL_RUNNER_SERVER_ID
+            const isToolResultReader = toolDef?.serverId === TOOL_RESULT_READER_SERVER_ID
+            const isDynamicToolSearch = toolDef?.serverId === DYNAMIC_TOOL_SEARCH_SERVER_ID
+            const isSkillResourceReader = toolDef?.serverId === SKILL_RESOURCE_READER_SERVER_ID
             const isWorkspaceFileReader =
               toolDef?.serverId === WORKSPACE_FILES_SERVER_ID && toolDef.name === WORKSPACE_READ_FILE_TOOL_NAME
             const isWorkspaceFileWriter =
               toolDef?.serverId === WORKSPACE_FILES_SERVER_ID && toolDef.name === WORKSPACE_WRITE_FILE_TOOL_NAME
             const isInternalTool =
-              isSkillLoader || isCodeRunner || isTerminalRunner || isWorkspaceFileReader || isWorkspaceFileWriter
+              isSkillLoader ||
+              isCodeRunner ||
+              isTerminalRunner ||
+              isToolResultReader ||
+              isDynamicToolSearch ||
+              isSkillResourceReader ||
+              isWorkspaceFileReader ||
+              isWorkspaceFileWriter
             const failure = !toolDef
               ? t(
                   'The model requested a tool that is unavailable or unauthorized for this turn, so the call was denied.',
@@ -466,6 +698,123 @@ export class ChatGateway {
               continue
             }
 
+            if (isToolResultReader) {
+              const callId = typeof parsedArgs.call_id === 'string' ? parsedArgs.call_id : ''
+              const stored = fullToolResults.get(callId)
+              let result: string
+              let isError = false
+              if (!stored) {
+                result = t('No complete tool result is available for call ID {value0}.', {
+                  value0: callId || t('(empty)'),
+                })
+                isError = true
+              } else {
+                const requestedOffset = typeof parsedArgs.offset === 'number' ? parsedArgs.offset : 0
+                const requestedMax = typeof parsedArgs.max_characters === 'number' ? parsedArgs.max_characters : 8_000
+                const responseBudget = Math.max(256, toolResultMaxCharacters - 512)
+                const chunk = readTextChunk(
+                  formatFullToolResult(stored),
+                  requestedOffset,
+                  Math.min(requestedMax, responseBudget),
+                )
+                result = `${JSON.stringify({
+                  call_id: callId,
+                  offset: chunk.offset,
+                  next_offset: chunk.nextOffset,
+                  total_characters: chunk.totalCharacters,
+                  has_more: chunk.hasMore,
+                })}\n${chunk.text}`
+              }
+              recordLowRiskInternalResult(
+                rawCall,
+                toolDef,
+                parsedArgs,
+                result,
+                isError,
+                t('Read a previously completed local tool result without executing the tool again.'),
+              )
+              continue
+            }
+
+            if (isDynamicToolSearch) {
+              const query = typeof parsedArgs.query === 'string' ? parsedArgs.query : ''
+              const requestedLimit = typeof parsedArgs.max_tools === 'number' ? parsedArgs.max_tools : dynamicToolLimit
+              const loaded = searchAdditionalTools(
+                query,
+                authorizedAgentTools,
+                effectiveAgentTools,
+                Math.min(requestedLimit, dynamicToolLimit),
+              )
+              if (loaded.length > 0) {
+                effectiveAgentTools = appendUniqueTools(effectiveAgentTools, loaded)
+                toolsChangedThisTurn = true
+              }
+              const result =
+                loaded.length > 0
+                  ? t('The following authorized tools are now exposed for the next model turn:\n{value0}', {
+                      value0: loaded
+                        .map(
+                          (tool) =>
+                            `- ${tool.modelName || tool.name} (${tool.serverName}): ${tool.description || tool.name}`,
+                        )
+                        .join('\n'),
+                    })
+                  : t('No additional authorized tools matched this search.')
+              recordLowRiskInternalResult(
+                rawCall,
+                toolDef,
+                parsedArgs,
+                result,
+                false,
+                t('Search the request-authorized local tool catalog without executing a matched tool.'),
+              )
+              continue
+            }
+
+            if (isSkillResourceReader) {
+              const skillId = typeof parsedArgs.skill_id === 'string' ? parsedArgs.skill_id : ''
+              const path = typeof parsedArgs.path === 'string' ? parsedArgs.path : ''
+              const skill = activeSkills.find((item) => item.id === skillId)
+              const resource = skill?.files.find(
+                (file) =>
+                  file.path === path &&
+                  file.path !== skill.entryFile &&
+                  (file.kind === 'markdown' || file.kind === 'python' || file.kind === 'shell'),
+              )
+              let result: string
+              let isError = false
+              if (!skill || !resource) {
+                result = t('The requested active Skill resource was not found or is not readable.')
+                isError = true
+              } else {
+                const requestedOffset = typeof parsedArgs.offset === 'number' ? parsedArgs.offset : 0
+                const requestedMax = typeof parsedArgs.max_characters === 'number' ? parsedArgs.max_characters : 8_000
+                const responseBudget = toolResultCompactionEnabled
+                  ? Math.max(256, toolResultMaxCharacters - 512)
+                  : 32_000
+                const chunk = readTextChunk(resource.content, requestedOffset, Math.min(requestedMax, responseBudget))
+                result = `${JSON.stringify({
+                  skill_id: skill.id,
+                  path: resource.path,
+                  kind: resource.kind,
+                  offset: chunk.offset,
+                  next_offset: chunk.nextOffset,
+                  total_characters: chunk.totalCharacters,
+                  has_more: chunk.hasMore,
+                  scripts_are_reference_only: resource.kind === 'python' || resource.kind === 'shell',
+                })}\n${chunk.text}`
+              }
+              recordLowRiskInternalResult(
+                rawCall,
+                toolDef,
+                parsedArgs,
+                result,
+                isError,
+                t('Read a local active Skill reference resource without executing scripts.'),
+              )
+              continue
+            }
+
             if (isSkillLoader) {
               emit({
                 type: 'tool-call-complete',
@@ -486,10 +835,15 @@ export class ChatGateway {
                   })
                 : alreadyActive
                   ? t('The skill "{value0}" is already active.', { value0: skill.name })
-                  : t(
-                      'Skill "{value0}" has been loaded; subsequent answers must follow the complete instructions for this skill.',
-                      { value0: skill.name },
-                    )
+                  : lazySkillResourcesEnabled
+                    ? t(
+                        'Skill "{value0}" entry instructions and resource manifest have been loaded. Follow the entry instructions and read listed resources only when needed.',
+                        { value0: skill.name },
+                      )
+                    : t(
+                        'Skill "{value0}" has been loaded; subsequent answers must follow the complete instructions for this skill.',
+                        { value0: skill.name },
+                      )
 
               if (skill && !alreadyActive) {
                 activeSkills = [...activeSkills, skill]
@@ -896,16 +1250,34 @@ export class ChatGateway {
             )
           }
 
+          if (toolResultCompactionEnabled) {
+            for (const execution of toolExecutions) {
+              if (execution.result === undefined) continue
+              const completeResult: FullToolResult = {
+                result: execution.result,
+                resultContent: execution.resultContent,
+                structuredResult: execution.structuredResult,
+                resultTruncated: execution.resultTruncated,
+                isError: execution.isError,
+              }
+              rememberFullToolResult(fullToolResults, execution.id, completeResult)
+            }
+          }
+
           const assistantMsg: Message = {
             id: `assistant-turn-${turn}-${Date.now()}`,
             role: 'assistant',
             content: streamResult.text,
+            modelId: model.id,
             toolExecutions,
             agentTrace,
+            providerContinuation: streamResult.responseId
+              ? { format: 'openai-responses', responseId: streamResult.responseId, turn }
+              : undefined,
             createdAt: new Date().toISOString(),
           }
           const nextTurnMessages = [...currentTurnMessages, assistantMsg]
-          if (skillLoadedThisTurn) {
+          if (skillLoadedThisTurn || toolsChangedThisTurn) {
             replaceConfiguredSystemPrompt(
               nextTurnMessages,
               buildAgentSystemPrompt(
@@ -915,11 +1287,11 @@ export class ChatGateway {
                 enabledSkills,
                 workingDirectory,
                 resumeFromMessageId,
+                { lazySkillResourcesEnabled },
               ),
             )
           }
-          return prepareMessagesForContext(nextTurnMessages, effectiveContextWindow, maxOutputTokens, contextMode)
-            .messages
+          return prepareAgentMessagesForModel(nextTurnMessages)
         },
         onComplete: ({ modelResult: streamResult }) => {
           if (!streamResult.completed) {
@@ -1133,6 +1505,7 @@ function buildAgentSystemPrompt(
   availableSkills: Skill[] = skills,
   workingDirectory?: string,
   resumeFromMessageId?: string,
+  options: { lazySkillResourcesEnabled?: boolean } = {},
 ): string {
   const activeSkills = skills.filter((skill) => skill.enabled)
   const externalTools = (mcpTools ?? []).filter((tool) => !BUILTIN_AGENT_TOOL_SERVER_IDS.has(tool.serverId))
@@ -1140,6 +1513,9 @@ function buildAgentSystemPrompt(
   const codeRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === CODE_RUNNER_SERVER_ID)
   const terminalRunnerAvailable = (mcpTools ?? []).some((tool) => tool.serverId === TERMINAL_RUNNER_SERVER_ID)
   const workspaceFilesAvailable = (mcpTools ?? []).some((tool) => tool.serverId === WORKSPACE_FILES_SERVER_ID)
+  const skillResourceReaderAvailable = (mcpTools ?? []).some(
+    (tool) => tool.serverId === SKILL_RESOURCE_READER_SERVER_ID,
+  )
   const parts: string[] = []
 
   parts.push(
@@ -1279,6 +1655,29 @@ function buildAgentSystemPrompt(
               ),
             ]
 
+            if (options.lazySkillResourcesEnabled) {
+              const resources = files.filter(
+                (file) =>
+                  file.path !== (skill.entryFile || 'SKILL.md') &&
+                  (file.kind === 'markdown' || file.kind === 'python' || file.kind === 'shell'),
+              )
+              if (resources.length > 0) {
+                const manifest = resources
+                  .map((file) => `- ${file.path} (${file.kind}, ${file.content.length} characters)`)
+                  .join('\n')
+                skillSections.push(
+                  t(
+                    '## Available Skill Resources (load only when needed):\n{value0}\nUse `{value1}` with this Skill ID and an exact path to read a resource in chunks. Python and shell resources are reference source and are never executed by this reader.',
+                    {
+                      value0: manifest,
+                      value1: skillResourceReaderAvailable ? SKILL_RESOURCE_READER_MODEL_NAME : '(unavailable)',
+                    },
+                  ),
+                )
+              }
+              return skillSections.join('\n\n')
+            }
+
             if (pythonScripts.length > 0) {
               const pySection = pythonScripts
                 .map((s) =>
@@ -1358,7 +1757,10 @@ function replaceConfiguredSystemPrompt(messages: Message[], systemPrompt: string
   else messages.unshift(replacement)
 }
 
-function validateChatRequest(request: ChatRequest): Message[] {
+function validateChatRequest(
+  request: ChatRequest,
+  maxToolResultCharacters = LEGACY_MAX_STORED_TOOL_RESULT_CHARACTERS,
+): Message[] {
   if (
     typeof request.conversationId !== 'string' ||
     !request.conversationId ||
@@ -1450,17 +1852,24 @@ function validateChatRequest(request: ChatRequest): Message[] {
     }
     totalCharacters += message.content.length
     const attachments = sanitizeRequestAttachments(message.attachments)
-    const toolExecutions = sanitizeRequestToolExecutions(message.toolExecutions)
-    const agentTrace = sanitizeRequestAgentTrace(message.agentTrace)
+    const toolExecutions = sanitizeRequestToolExecutions(message.toolExecutions, maxToolResultCharacters)
+    const agentTrace = sanitizeRequestAgentTrace(message.agentTrace, maxToolResultCharacters)
+    const providerContinuation = sanitizeRequestProviderContinuation(message.providerContinuation)
+    if (providerContinuation && message.role !== 'assistant') {
+      throw new GatewayError(t('Only assistant messages can contain provider continuation state.'), 'invalid_request')
+    }
     totalCharacters += attachments?.reduce((sum, attachment) => sum + attachment.data.length, 0) || 0
+    totalCharacters += providerContinuation?.responseId.length || 0
     totalCharacters += toolExecutions?.reduce((sum, execution) => sum + (execution.result?.length || 0), 0) || 0
     sanitizedMessages.push({
       id: message.id,
       role: message.role,
       content: message.content,
+      modelId: typeof message.modelId === 'string' && message.modelId.length <= 500 ? message.modelId : undefined,
       attachments,
       toolExecutions,
       agentTrace,
+      providerContinuation,
       createdAt:
         typeof message.createdAt === 'string' && message.createdAt.length <= 100
           ? message.createdAt
@@ -1477,6 +1886,14 @@ function validateChatRequest(request: ChatRequest): Message[] {
     throw new GatewayError(t('temperature must be between 0 and 2.'), 'invalid_request')
   }
   return sanitizedMessages
+}
+
+function sanitizeRequestProviderContinuation(value: unknown): Message['providerContinuation'] {
+  if (value === undefined) return undefined
+  if (!isValidProviderContinuation(value)) {
+    throw new GatewayError(t('Provider continuation state is invalid.'), 'invalid_request')
+  }
+  return { format: value.format, responseId: value.responseId, turn: value.turn }
 }
 
 function resolveResumeFromMessageId(request: ChatRequest, messages: Message[], agentMode: boolean): string | undefined {
@@ -1541,7 +1958,10 @@ function sanitizeRequestAttachments(value: unknown): Message['attachments'] {
   })
 }
 
-function sanitizeRequestToolExecutions(value: unknown): ToolCallExecution[] | undefined {
+function sanitizeRequestToolExecutions(
+  value: unknown,
+  maxToolResultCharacters: number,
+): ToolCallExecution[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value) || value.length > 500)
     throw new GatewayError(t('Invalid tool-call history.'), 'invalid_request')
@@ -1553,7 +1973,7 @@ function sanitizeRequestToolExecutions(value: unknown): ToolCallExecution[] | un
       !isRecord(execution.args)
     )
       throw new GatewayError(t('Invalid tool-call history format.'), 'invalid_request')
-    const result = typeof execution.result === 'string' ? execution.result.slice(0, 100_000) : undefined
+    const result = typeof execution.result === 'string' ? execution.result.slice(0, maxToolResultCharacters) : undefined
     const status = ['calling', 'awaiting-approval', 'executing', 'complete', 'denied', 'error'].includes(
       String(execution.status),
     )
@@ -1582,7 +2002,7 @@ function sanitizeRequestToolExecutions(value: unknown): ToolCallExecution[] | un
   })
 }
 
-function sanitizeRequestAgentTrace(value: unknown): AgentTraceItem[] | undefined {
+function sanitizeRequestAgentTrace(value: unknown, maxToolResultCharacters: number): AgentTraceItem[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value) || value.length > 2_000)
     throw new GatewayError(t('Agent event history is invalid.'), 'invalid_request')
@@ -1645,7 +2065,7 @@ function sanitizeRequestAgentTrace(value: unknown): AgentTraceItem[] | undefined
         turn,
         callId: item.callId.slice(0, 200),
         toolName: item.toolName.slice(0, 200),
-        result: item.result.slice(0, 100_000),
+        result: item.result.slice(0, maxToolResultCharacters),
         resultContent: sanitizeToolResultContent(item.resultContent),
         structuredResult: isRecord(item.structuredResult) ? cloneJsonRecord(item.structuredResult, 100_000) : undefined,
         resultTruncated: typeof item.resultTruncated === 'boolean' ? item.resultTruncated : undefined,
@@ -1731,6 +2151,7 @@ interface StreamConsumptionResult {
   toolCalls: AccumulatedToolCall[]
   anthropicThinkingBlocks: Array<{ blockIndex: number; thinking: string; signature?: string }>
   responseOutputItems: Record<string, unknown>[]
+  responseId?: string
 }
 
 async function consumeStream(
@@ -1740,6 +2161,7 @@ async function consumeStream(
   emit: StreamEmitter,
   effectiveMcpTools: McpToolDefinition[] = [],
   turn = 1,
+  captureContinuation = false,
 ): Promise<StreamConsumptionResult> {
   let completed = false
   let finishReason: string | undefined
@@ -1748,6 +2170,18 @@ async function consumeStream(
   const toolCallsMap = new Map<number | string, AccumulatedToolCall>()
   const anthropicThinking = new Map<number, { blockIndex: number; thinking: string; signature: string }>()
   const responseOutputItems: Record<string, unknown>[] = []
+  let responseId: string | undefined
+  let continuationEmitted = false
+
+  const emitContinuation = () => {
+    if (!responseId || continuationEmitted) return
+    continuationEmitted = true
+    emit({
+      type: 'provider-continuation',
+      requestId,
+      continuation: { format: 'openai-responses', responseId, turn },
+    })
+  }
 
   const handleToolDelta = (delta: {
     index?: number
@@ -1802,6 +2236,7 @@ async function consumeStream(
 
   for await (const message of parseSse(stream)) {
     if (message.data === '[DONE]') {
+      if (format === 'openai-responses' && captureContinuation) emitContinuation()
       if (!completed && toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
       return {
         completed: true,
@@ -1810,6 +2245,7 @@ async function consumeStream(
         toolCalls: Array.from(toolCallsMap.values()),
         anthropicThinkingBlocks: Array.from(anthropicThinking.values()),
         responseOutputItems,
+        responseId,
       }
     }
 
@@ -1832,7 +2268,7 @@ async function consumeStream(
       }
       for (const delta of parsed.toolCallDeltas || []) handleToolDelta(delta)
       emitNewCitations(parsed.citations, citationState, requestId, emit)
-      if (parsed.usage) emit({ type: 'usage', requestId, usage: parsed.usage })
+      if (parsed.usage) emit({ type: 'usage', requestId, turn, usage: parsed.usage })
       finishReason = parsed.finishReason ?? finishReason
       continue
     }
@@ -1840,6 +2276,7 @@ async function consumeStream(
     if (format === 'openai-responses') {
       const parsed = parseResponsesEvent(payload, message.event)
       if (parsed.error) throw toGatewayError(parsed.error)
+      if (captureContinuation) responseId = parsed.responseId ?? responseId
       if (parsed.text) {
         text += parsed.text
         emit({ type: 'text-delta', requestId, delta: parsed.text, turn })
@@ -1854,10 +2291,11 @@ async function consumeStream(
         emit({ type: 'agent-provider-item', requestId, turn, format: 'openai-responses', item })
       }
       emitNewCitations(parsed.citations, citationState, requestId, emit)
-      if (parsed.usage) emit({ type: 'usage', requestId, usage: parsed.usage })
+      if (parsed.usage) emit({ type: 'usage', requestId, turn, usage: parsed.usage })
       if (parsed.completed) {
         completed = true
         finishReason = parsed.finishReason
+        emitContinuation()
         if (toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
       }
       continue
@@ -1888,7 +2326,7 @@ async function consumeStream(
     }
     for (const delta of parsed.toolCallDeltas || []) handleToolDelta(delta)
     emitNewCitations(parsed.citations, citationState, requestId, emit)
-    if (parsed.usage) emit({ type: 'usage', requestId, usage: parsed.usage })
+    if (parsed.usage) emit({ type: 'usage', requestId, turn, usage: parsed.usage })
     finishReason = parsed.finishReason ?? finishReason
     if (parsed.completed) {
       completed = true
@@ -1902,6 +2340,7 @@ async function consumeStream(
     toolCalls: Array.from(toolCallsMap.values()),
     anthropicThinkingBlocks: Array.from(anthropicThinking.values()),
     responseOutputItems,
+    responseId,
   }
 }
 

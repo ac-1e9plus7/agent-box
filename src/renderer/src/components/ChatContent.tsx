@@ -57,6 +57,45 @@ function reasoningUsageLabel(usage?: TokenUsage): string {
   return ''
 }
 
+function tokenUsageValue(value: number | undefined): string {
+  return value === undefined ? '—' : compactTokenCount(value)
+}
+
+function TokenUsageSummary({ usage }: { usage?: TokenUsage }): JSX.Element | null {
+  if (!usage) return null
+  const modelRequests = usage.modelRequests?.length ?? 1
+  const items = [
+    t('Model requests: {value0}', { value0: modelRequests }),
+    t('Total {value0} tokens', { value0: tokenUsageValue(usage.totalTokens) }),
+    t('Input {value0} tokens', { value0: tokenUsageValue(usage.inputTokens) }),
+    t('Output {value0} tokens', { value0: tokenUsageValue(usage.outputTokens) }),
+    t('Reasoning {value0} tokens', { value0: tokenUsageValue(usage.reasoningTokens) }),
+    t('Cached input {value0} tokens', { value0: tokenUsageValue(usage.cachedInputTokens) }),
+    t('Cache write {value0} tokens', { value0: tokenUsageValue(usage.cacheWriteTokens) }),
+  ]
+  return (
+    <span className="message-usage-summary" title={t('Total token usage across all model requests')}>
+      {items.map((item, index) => (
+        <span key={item}>
+          {index > 0 && <i aria-hidden="true">·</i>}
+          {item}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function ModelUsageInfo({ modelName, usage }: { modelName: string; usage?: TokenUsage }): JSX.Element {
+  return (
+    <div className="message-model-info">
+      <span className="message-model-name">
+        <Icon name="app" size={14} /> {modelName}
+      </span>
+      <TokenUsageSummary usage={usage} />
+    </div>
+  )
+}
+
 function safeCitationUrl(value: string): URL | undefined {
   try {
     const url = new URL(value)
@@ -661,7 +700,7 @@ function AssistantMessage({
           </div>
         ) : null}
         <CitationSources citations={message.citations} usage={message.usage} />
-        {!isStreaming && message.status !== 'error' && Boolean(message.content.trim()) && (
+        {!isStreaming && message.status !== 'error' && Boolean(message.content.trim() || message.usage) && (
           <div className="message-tools">
             {total > 1 && (
               <div className="message-pagination">
@@ -694,10 +733,12 @@ function AssistantMessage({
                 </button>
               </div>
             )}
-            <button onClick={() => navigator.clipboard?.writeText(message.content)}>
-              <Icon name="copy" size={14} />
-              {t('Copy')}
-            </button>
+            {Boolean(message.content.trim()) && (
+              <button onClick={() => navigator.clipboard?.writeText(message.content)}>
+                <Icon name="copy" size={14} />
+                {t('Copy')}
+              </button>
+            )}
             {showRegenerate && (
               <button onClick={() => onRegenerate(message.id)}>
                 <Icon name="refresh" size={14} />
@@ -717,10 +758,7 @@ function AssistantMessage({
                 {t('Delete')}
               </button>
             )}
-            <div className="message-model-info">
-              <Icon name="app" size={14} /> {model?.name ?? message.modelId ?? t('Unknown model')}{' '}
-              {message.usage?.outputTokens ? `(${message.usage.outputTokens} tokens)` : ''}
-            </div>
+            <ModelUsageInfo modelName={model?.name ?? message.modelId ?? t('Unknown model')} usage={message.usage} />
           </div>
         )}
         {message.status === 'error' && (
@@ -793,6 +831,11 @@ function AssistantMessage({
                 {t('Delete')}
               </button>
             </div>
+          </div>
+        )}
+        {!isStreaming && message.status === 'error' && message.usage && (
+          <div className="message-error-usage">
+            <ModelUsageInfo modelName={model?.name ?? message.modelId ?? t('Unknown model')} usage={message.usage} />
           </div>
         )}
       </div>

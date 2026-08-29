@@ -30,7 +30,7 @@ export function toUiConversation(conversation: StoredConversation): Conversation
     currentLeafId: conversation.currentLeafId ?? normalizedMessages.at(-1)?.id,
     messages: normalizedMessages.map((message) => ({
       ...message,
-      modelId: message.role === 'assistant' ? conversation.modelId : undefined,
+      modelId: message.role === 'assistant' ? (message.modelId ?? conversation.modelId) : undefined,
       error: message.interruption?.message,
       status: message.interruption ? 'error' : 'complete',
     })),
@@ -51,7 +51,7 @@ export function toStoredConversation(conversation: Conversation): StoredConversa
     currentLeafId: conversation.currentLeafId,
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt,
-    messages: conversation.messages.map(({ status: _status, modelId: _modelId, error: _error, ...message }) => message),
+    messages: conversation.messages.map(({ status: _status, error: _error, ...message }) => message),
   }
 }
 

@@ -217,6 +217,403 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     expect(events.some((e) => e.type === 'done')).toBe(true)
   })
 
+  it('keeps renderer tool output complete while the model rereads a compacted result by call ID', async () => {
+    await repo.updateSettings({
+      agentToolResultCompactionEnabled: true,
+      agentToolResultMaxCharacters: 2_000,
+      agentDynamicToolExposureEnabled: false,
+      agentLazySkillResourcesEnabled: false,
+      agentContextCompactionEnabled: false,
+    })
+    const completeResult = `HEAD-${'a'.repeat(2_500)}-MIDDLE_SECRET-${'b'.repeat(2_500)}-TAIL`
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'large_lookup',
+        description: 'Look up a large complete record',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'large-server',
+        serverName: 'Large Server',
+      },
+    ])
+    vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: completeResult,
+      isError: false,
+      serverName: 'Large Server',
+    })
+    const requestBodies: Array<Record<string, unknown>> = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-large-result', function: { name: 'large_lookup', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      if (fetchCount === 2) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-reread-result', function: { name: 'agentbox_read_tool_result', arguments: '{"call_id":"call-large-result","offset":2450,"max_characters":512}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Recovered the omitted middle.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    try {
+      await gateway.stream(
+        'req-result-compaction',
+        {
+          conversationId: 'conversation-result-compaction',
+          modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+          messages: [
+            {
+              id: 'user-result-compaction',
+              role: 'user',
+              content: 'Use large_lookup and inspect its complete result.',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          agentMode: true,
+          reasoningEnabled: false,
+        },
+        (event) => events.push(event),
+      )
+    } finally {
+      await repo.updateSettings({ agentToolResultCompactionEnabled: false })
+    }
+
+    expect(fetchCount).toBe(3)
+    const secondBody = JSON.stringify(requestBodies[1])
+    const thirdBody = JSON.stringify(requestBodies[2])
+    expect(secondBody).toContain('call_id=\\"call-large-result\\"')
+    expect(secondBody).not.toContain('MIDDLE_SECRET')
+    expect(thirdBody).toContain('MIDDLE_SECRET')
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'tool-result' &&
+          event.callId === 'call-large-result' &&
+          event.result === completeResult &&
+          event.result.includes('MIDDLE_SECRET'),
+      ),
+    ).toBe(true)
+  })
+
+  it('searches the authorized catalog and mounts matching tools only on the next model turn', async () => {
+    await repo.updateSettings({
+      agentToolResultCompactionEnabled: false,
+      agentDynamicToolExposureEnabled: true,
+      agentDynamicToolLimit: 1,
+      agentLazySkillResourcesEnabled: false,
+      agentContextCompactionEnabled: false,
+    })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'analyze_report',
+        description: 'Analyze a report document',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'reports',
+        serverName: 'Reports',
+      },
+      {
+        name: 'fetch_weather',
+        modelName: 'safe_fetch_weather',
+        description: 'Fetch a weather forecast for a city',
+        inputSchema: {
+          type: 'object',
+          properties: { city: { type: 'string' } },
+          required: ['city'],
+        },
+        serverId: 'weather',
+        serverName: 'Weather',
+      },
+    ])
+    const execute = vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: 'Sunny',
+      isError: false,
+      serverName: 'Weather',
+    })
+    const requestBodies: Array<Record<string, unknown>> = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-search-tools', function: { name: 'agentbox_search_tools', arguments: '{"query":"safe_fetch_weather","max_tools":1}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      if (fetchCount === 2) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-weather', function: { name: 'safe_fetch_weather', arguments: '{"city":"Shanghai"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'It is sunny.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    try {
+      await gateway.stream(
+        'req-dynamic-tools',
+        {
+          conversationId: 'conversation-dynamic-tools',
+          modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+          messages: [
+            {
+              id: 'user-dynamic-tools',
+              role: 'user',
+              content: 'Analyze this report. Discover an additional capability only if needed.',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          agentMode: true,
+          reasoningEnabled: false,
+        },
+        () => {},
+      )
+    } finally {
+      await repo.updateSettings({ agentDynamicToolExposureEnabled: false })
+    }
+
+    expect(fetchCount).toBe(3)
+    expect(JSON.stringify(requestBodies[0])).toContain('agentbox_search_tools')
+    expect(JSON.stringify(requestBodies[0])).not.toContain('safe_fetch_weather')
+    expect(JSON.stringify(requestBodies[1])).toContain('safe_fetch_weather')
+    expect(execute).toHaveBeenCalledWith('weather', 'fetch_weather', { city: 'Shanghai' }, expect.any(AbortSignal))
+  })
+
+  it('injects only a Skill entry and manifest, then reads a listed resource on demand', async () => {
+    await repo.updateSettings({
+      agentToolResultCompactionEnabled: false,
+      agentDynamicToolExposureEnabled: false,
+      agentLazySkillResourcesEnabled: true,
+      agentContextCompactionEnabled: false,
+    })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
+    const skill = await repo.upsertSkill({
+      id: 'runtime-lazy-skill',
+      name: 'Runtime Lazy Skill',
+      description: 'Test progressive Skill resource loading',
+      entryFile: 'SKILL.md',
+      files: [
+        { path: 'SKILL.md', kind: 'markdown', content: 'ENTRY_INSTRUCTIONS_ONLY' },
+        {
+          path: 'references/details.md',
+          kind: 'markdown',
+          content: 'RESOURCE_SECRET_BODY_FOR_LAZY_LOADING',
+        },
+      ],
+      enabled: true,
+    })
+    const requestBodies: Array<Record<string, unknown>> = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-skill-resource', function: { name: 'agentbox_read_skill_resource', arguments: '{"skill_id":"runtime-lazy-skill","path":"references/details.md"}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Loaded the relevant reference.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    const events: StreamEvent[] = []
+    try {
+      await gateway.stream(
+        'req-lazy-skill-resource',
+        {
+          conversationId: 'conversation-lazy-skill-resource',
+          modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+          messages: [
+            {
+              id: 'user-lazy-skill-resource',
+              role: 'user',
+              content: 'Use the selected Skill and load details only if needed.',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          skillIds: [skill.id],
+          agentMode: true,
+          reasoningEnabled: false,
+        },
+        (event) => events.push(event),
+      )
+    } finally {
+      await repo.updateSettings({ agentLazySkillResourcesEnabled: false })
+    }
+
+    const firstBody = JSON.stringify(requestBodies[0])
+    expect(firstBody).toContain('ENTRY_INSTRUCTIONS_ONLY')
+    expect(firstBody).toContain('references/details.md')
+    expect(firstBody).not.toContain('RESOURCE_SECRET_BODY_FOR_LAZY_LOADING')
+    expect(JSON.stringify(requestBodies[1])).toContain('RESOURCE_SECRET_BODY_FOR_LAZY_LOADING')
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'tool-result' &&
+          event.callId === 'call-skill-resource' &&
+          event.result.includes('RESOURCE_SECRET_BODY_FOR_LAZY_LOADING'),
+      ),
+    ).toBe(true)
+  })
+
+  it('summarizes complete older in-run tool turns before the next provider request', async () => {
+    await repo.updateSettings({
+      agentToolResultCompactionEnabled: false,
+      agentDynamicToolExposureEnabled: false,
+      agentLazySkillResourcesEnabled: false,
+      agentContextCompactionEnabled: true,
+      agentContextCompactionThresholdPercent: 50,
+      agentContextCompactionKeepRecentTurns: 1,
+    })
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'large_context_step',
+        description: 'Run a large context step',
+        inputSchema: { type: 'object', properties: { step: { type: 'integer' } }, required: ['step'] },
+        serverId: 'context-server',
+        serverName: 'Context Server',
+      },
+    ])
+    let executionCount = 0
+    vi.spyOn(mcpManager, 'executeTool').mockImplementation(async () => {
+      executionCount += 1
+      const fill = String.fromCharCode(96 + executionCount)
+      return {
+        result: `TURN_${executionCount}-${fill.repeat(90_000)}`,
+        isError: false,
+        serverName: 'Context Server',
+      }
+    })
+    const requestBodies: Array<Record<string, unknown>> = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (fetchCount <= 3) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: `call-context-${fetchCount}`, function: { name: 'large_context_step', arguments: `{"step":${fetchCount}}` } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Context work complete.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    try {
+      await gateway.stream(
+        'req-context-compaction',
+        {
+          conversationId: 'conversation-context-compaction',
+          modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+          messages: [
+            {
+              id: 'user-context-compaction',
+              role: 'user',
+              content: 'Use large_context_step three times.',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+          agentMode: true,
+          reasoningEnabled: false,
+        },
+        () => {},
+      )
+    } finally {
+      await repo.updateSettings({ agentContextCompactionEnabled: false })
+    }
+
+    expect(fetchCount).toBe(4)
+    const finalBody = JSON.stringify(requestBodies[3])
+    expect(finalBody).toContain('[AgentBox compacted earlier complete Agent tool turns]')
+    expect(finalBody).toContain('call-context-1')
+    expect(finalBody).toContain('call-context-2')
+    expect(finalBody).toContain('call-context-3')
+    expect(finalBody).not.toContain('a'.repeat(1_000))
+    expect(finalBody).not.toContain('b'.repeat(1_000))
+    expect(finalBody).toContain('c'.repeat(1_000))
+  })
+
+  it('preserves full model-visible results and the legacy tool set when P1 switches are disabled', async () => {
+    await repo.updateSettings({
+      agentToolResultCompactionEnabled: false,
+      agentDynamicToolExposureEnabled: false,
+      agentLazySkillResourcesEnabled: false,
+      agentContextCompactionEnabled: false,
+    })
+    const completeResult = `DISABLED_HEAD-${'z'.repeat(3_000)}-DISABLED_TAIL`
+    vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([
+      {
+        name: 'legacy_result_tool',
+        description: 'Return a complete legacy result',
+        inputSchema: { type: 'object', properties: {} },
+        serverId: 'legacy-server',
+        serverName: 'Legacy Server',
+      },
+    ])
+    vi.spyOn(mcpManager, 'executeTool').mockResolvedValue({
+      result: completeResult,
+      isError: false,
+      serverName: 'Legacy Server',
+    })
+    const requestBodies: Array<Record<string, unknown>> = []
+    let fetchCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      fetchCount += 1
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      if (fetchCount === 1) {
+        return makeSseResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-legacy-result', function: { name: 'legacy_result_tool', arguments: '{}' } }] }, finish_reason: 'tool_calls' }] })}\n\n`,
+          'data: [DONE]\n\n',
+        ])
+      }
+      return makeSseResponse([
+        `data: ${JSON.stringify({ choices: [{ delta: { content: 'Done.' }, finish_reason: 'stop' }] })}\n\n`,
+        'data: [DONE]\n\n',
+      ])
+    })
+
+    await gateway.stream(
+      'req-disabled-token-optimization',
+      {
+        conversationId: 'conversation-disabled-token-optimization',
+        modelId: repo.listModels().find((item) => item.remoteId === 'test/auto-model')!.id,
+        messages: [
+          {
+            id: 'user-disabled-token-optimization',
+            role: 'user',
+            content: 'Use legacy_result_tool.',
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        agentMode: true,
+        reasoningEnabled: false,
+      },
+      () => {},
+    )
+
+    expect(JSON.stringify(requestBodies[0])).not.toContain('agentbox_read_tool_result')
+    expect(JSON.stringify(requestBodies[0])).not.toContain('agentbox_search_tools')
+    expect(JSON.stringify(requestBodies[0])).not.toContain('agentbox_read_skill_resource')
+    expect(JSON.stringify(requestBodies[1])).toContain(completeResult)
+  })
+
   it('lets the model load a skill on demand without executing MCP', async () => {
     vi.spyOn(mcpManager, 'listAllTools').mockResolvedValue([])
     const execute = vi.spyOn(mcpManager, 'executeTool')

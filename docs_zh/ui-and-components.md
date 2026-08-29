@@ -18,6 +18,8 @@ AgentBox 的渲染层基于 React 19 与 TypeScript，负责界面展示、临�
 
 Settings 外壳统一持有 `preferences`、模型、供应商和 API Key 的暂存改动，并由“保存更改”一次提交；各 section 按需维护自己的选择项、搜索、测试和弹窗等局部状态。Skills 与 MCP server 的变更仍通过各自的即时持久化 API 完成。
 
+「设置 → 通用 → Agent token 优化」提供四个互相独立的 P1 开关和一个 P2 服务方上下文复用选择器。四个开关分别用于压缩模型可见工具结果、动态限制初始工具集、按需加载 Skill 参考资料与脚本，以及压缩长时间 Agent 执行中的较早轮次；选择器可使用关闭、自动服务方感知复用、前缀缓存或 Responses 原生续接。数值控件只在对应优化开启后显示，关闭开关不会丢失已经暂存或保存的合法参数值。自动和原生模式文案会提示服务方侧响应状态可能被保留，所有复用模式都说明兼容性自动降级行为。
+
 主题通过 `document.documentElement.dataset.theme` 在 `system`、`light` 和 `dark` 之间切换；系统主题使用 `prefers-color-scheme`。宽度不超过 860px 时侧栏改为抽屉，680px 以下进一步压缩顶部栏与输入区；`prefers-reduced-motion` 会关闭非必要动画。
 
 ## 本地用户资料
@@ -39,6 +41,8 @@ Settings 外壳统一持有 `preferences`、模型、供应商和 API Key 的暂
 - **删除消息**：删除目标节点及其全部后代；若存在兄弟版本则切换到相邻版本，否则回退到父节点下可用的最深叶节点。
 
 Agent 回复因取消、限流、网络/API 错误、输出上限或工具轮次上限而中断时，会保存 `interruption`、已完成的工具结果和 `agentTrace`。只有当前分支最后一条中断回复可“从中断处继续”；系统会创建新的 user/assistant 分支并把前一条回复作为 checkpoint。选择“重新生成”则从原父级用户消息创建全新回答版本。
+
+完成或中断的 Assistant 消息会同时显示汇总后的 total、input、output、reasoning、cached-input、cache-write token 用量和模型请求次数。因此，多轮 Agent 回复呈现的是全部请求成本，而不是只有最后一次模型调用；供应商未报告的计数显示为不可用，不会推断成零。供应商返回空响应时，用量仍保持可见。
 
 ## Markdown、代码与数学公式
 

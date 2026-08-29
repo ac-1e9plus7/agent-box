@@ -11,6 +11,7 @@ import type {
   ModelConfig,
   ModelInput,
   ProviderInput,
+  ProviderContinuation,
   ProviderRouting,
   ProviderView,
   Skill,
@@ -20,11 +21,23 @@ import type {
   SkillInput,
   ToolCallExecution,
 } from '../../shared/types'
+import { isValidProviderContinuation } from '../../shared/provider-context'
 import { EncryptedStore } from './encrypted-store'
 import { CheckpointRepositoryError, EncryptedCheckpointRepository } from './checkpoint-repository'
 import { AgentBoxCheckpointSaver } from './agentbox-checkpoint-saver'
 import { agentCheckpointThreadId } from './checkpoint-identity'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import {
+  DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  DEFAULT_AGENT_DYNAMIC_TOOL_EXPOSURE_ENABLED,
+  DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  DEFAULT_AGENT_LAZY_SKILL_RESOURCES_ENABLED,
+  DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
+  DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
+  DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+} from '../../shared/agent-token-optimization'
 import { createOpenRouterAutoModel } from './default-models'
 import { DEFAULT_SKILLS, localizedDefaultSkills } from './default-skills'
 import { defaultDeveloperRuntimeSettings, normalizeAppSettings } from './settings-schema'
@@ -77,6 +90,15 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultReasoningEffort: 'medium',
   defaultAgentMode: false,
   agentToolTurnLimit: DEFAULT_AGENT_TOOL_TURN_LIMIT,
+  agentToolResultCompactionEnabled: DEFAULT_AGENT_TOOL_RESULT_COMPACTION_ENABLED,
+  agentToolResultMaxCharacters: DEFAULT_AGENT_TOOL_RESULT_MAX_CHARACTERS,
+  agentDynamicToolExposureEnabled: DEFAULT_AGENT_DYNAMIC_TOOL_EXPOSURE_ENABLED,
+  agentDynamicToolLimit: DEFAULT_AGENT_DYNAMIC_TOOL_LIMIT,
+  agentLazySkillResourcesEnabled: DEFAULT_AGENT_LAZY_SKILL_RESOURCES_ENABLED,
+  agentContextCompactionEnabled: DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
+  agentContextCompactionThresholdPercent: DEFAULT_AGENT_CONTEXT_COMPACTION_THRESHOLD_PERCENT,
+  agentContextCompactionKeepRecentTurns: DEFAULT_AGENT_CONTEXT_COMPACTION_KEEP_RECENT_TURNS,
+  agentProviderContextOptimizationMode: DEFAULT_AGENT_PROVIDER_CONTEXT_OPTIMIZATION_MODE,
   mcpEnabled: true,
   mcpToolRetrievalMode: 'auto',
   mcpToolApprovalPolicy: 'sensitive',
@@ -152,6 +174,33 @@ export class AppRepository {
       }
       if (patch.agentToolTurnLimit !== undefined) {
         next.agentToolTurnLimit = patch.agentToolTurnLimit
+      }
+      if (patch.agentToolResultCompactionEnabled !== undefined) {
+        next.agentToolResultCompactionEnabled = patch.agentToolResultCompactionEnabled
+      }
+      if (patch.agentToolResultMaxCharacters !== undefined) {
+        next.agentToolResultMaxCharacters = patch.agentToolResultMaxCharacters
+      }
+      if (patch.agentDynamicToolExposureEnabled !== undefined) {
+        next.agentDynamicToolExposureEnabled = patch.agentDynamicToolExposureEnabled
+      }
+      if (patch.agentDynamicToolLimit !== undefined) {
+        next.agentDynamicToolLimit = patch.agentDynamicToolLimit
+      }
+      if (patch.agentLazySkillResourcesEnabled !== undefined) {
+        next.agentLazySkillResourcesEnabled = patch.agentLazySkillResourcesEnabled
+      }
+      if (patch.agentContextCompactionEnabled !== undefined) {
+        next.agentContextCompactionEnabled = patch.agentContextCompactionEnabled
+      }
+      if (patch.agentContextCompactionThresholdPercent !== undefined) {
+        next.agentContextCompactionThresholdPercent = patch.agentContextCompactionThresholdPercent
+      }
+      if (patch.agentContextCompactionKeepRecentTurns !== undefined) {
+        next.agentContextCompactionKeepRecentTurns = patch.agentContextCompactionKeepRecentTurns
+      }
+      if (patch.agentProviderContextOptimizationMode !== undefined) {
+        next.agentProviderContextOptimizationMode = patch.agentProviderContextOptimizationMode
       }
       if (patch.mcpEnabled !== undefined) next.mcpEnabled = patch.mcpEnabled
       if (patch.mcpToolRetrievalMode !== undefined) {
@@ -1102,6 +1151,16 @@ function parseStoredAgentInterruption(value: unknown): AgentInterruption | undef
   }
 }
 
+function parseStoredProviderContinuation(value: unknown): ProviderContinuation | undefined {
+  if (value === undefined) return undefined
+  if (!isValidProviderContinuation(value)) throw new Error('Invalid provider continuation')
+  return {
+    format: value.format,
+    responseId: value.responseId,
+    turn: value.turn,
+  }
+}
+
 function parseStoredToolResultContent(value: unknown): import('../../shared/types').McpToolResultContent[] | undefined {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value) || value.length > 100) throw new Error('Invalid tool result content')
@@ -1194,7 +1253,11 @@ function validateConversation(value: unknown): Conversation {
     const skillActivations = parseStoredSkillActivations(message.skillActivations)
     const toolExecutions = parseStoredToolExecutions(message.toolExecutions)
     const agentTrace = parseStoredAgentTrace(message.agentTrace)
+    const providerContinuation = parseStoredProviderContinuation(message.providerContinuation)
     const interruption = parseStoredAgentInterruption(message.interruption)
+    if (providerContinuation && message.role !== 'assistant') {
+      throw new Error('Only assistant messages can store provider continuations')
+    }
     if (interruption && message.role !== 'assistant')
       throw new Error('Only assistant messages can store Agent interruptions')
     const parentMessageId =
@@ -1216,6 +1279,7 @@ function validateConversation(value: unknown): Conversation {
       skillActivations,
       toolExecutions,
       agentTrace,
+      providerContinuation,
       interruption,
       createdAt: message.createdAt,
     } as Conversation['messages'][number]
@@ -1227,8 +1291,10 @@ function validateConversation(value: unknown): Conversation {
       (message.reasoning?.length ?? 0) +
       citationCharacterCount(message.citations) +
       attachmentCharacterCount(message.attachments) +
+      JSON.stringify(message.usage ?? {}).length +
       JSON.stringify(message.skillActivations ?? []).length +
       JSON.stringify(message.agentTrace ?? []).length +
+      (message.providerContinuation?.responseId.length ?? 0) +
       (message.interruption?.message.length ?? 0) +
       (message.agentTrace?.length ? 0 : JSON.stringify(message.toolExecutions ?? []).length),
     0,

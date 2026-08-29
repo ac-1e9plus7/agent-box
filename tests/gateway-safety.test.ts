@@ -121,6 +121,41 @@ describe('Gateway chat request validation (validateChatRequest)', () => {
     ).toThrow('消息格式无效。')
   })
 
+  it('validates provider continuation handles and preserves assistant model provenance', () => {
+    const result = validateChatRequest({
+      ...validRequest,
+      messages: [
+        {
+          id: 'assistant-continuation',
+          role: 'assistant',
+          content: 'answer',
+          modelId: 'model-abc',
+          providerContinuation: { format: 'openai-responses', responseId: 'resp_valid_1', turn: 1 },
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(result[0]).toMatchObject({
+      modelId: 'model-abc',
+      providerContinuation: { format: 'openai-responses', responseId: 'resp_valid_1', turn: 1 },
+    })
+
+    expect(() =>
+      validateChatRequest({
+        ...validRequest,
+        messages: [
+          {
+            id: 'assistant-continuation',
+            role: 'assistant',
+            content: 'answer',
+            providerContinuation: { format: 'openai-responses', responseId: 'bad response id', turn: 1 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    ).toThrow('服务方续接状态无效。')
+  })
+
   it('rejects invalid temperature, maxOutputTokens, reasoningEffort, and webSearchMode', () => {
     expect(() => validateChatRequest({ ...validRequest, temperature: -0.1 })).toThrow(
       'temperature 必须在 0 到 2 之间。',

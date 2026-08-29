@@ -79,6 +79,27 @@ sequenceDiagram
 
 ---
 
+## 📊 Token 用量归一化
+
+供应商用量统一归一为 input、output、reasoning、cached-input、cache-write、web-search 和 total 计数。Chat Completions 读取 cached prompt details，Responses 读取 `input_tokens_details`；在这两种 OpenAI 格式中，cached input 已经是 input 的子集。Anthropic 的 `input_tokens` 则是不含缓存的基数，因此其归一化 input 会加上 `cache_read_input_tokens` 与 `cache_creation_input_tokens`，同时继续分别保留两个缓存明细。
+
+一次供应商请求的用量可能分多个事件到达，例如 Anthropic 在 `message_start` 报告 input/cache，稍后才报告 output。每个标准化 usage 事件都携带从 1 开始的模型轮次；renderer 会合并同轮的不同字段，在 `TokenUsage.modelRequests` 中保留每次请求的明细，并重新计算整条消息跨全部 Agent 模型请求的总计。cached-input 和 cache-write 始终是独立的可观测计数，不会再次累加进 `totalTokens`；供应商未返回 total 时，客户端只按 input 加 output 推导。
+
+---
+
+## ♻️ 服务方上下文复用与降级
+
+**设置 → 通用 → Agent Token 优化 → 服务方上下文复用**默认关闭，支持 `off`、`auto`、`prefix-cache` 和 `native-continuation` 四种模式。
+
+- 前缀缓存为 OpenAI Chat Completions 或 Responses 请求发送确定性的 SHA-256 缓存键；Anthropic 格式则在稳定的系统指令块上标记临时 `cache_control`。本地会话、服务方和模型 ID 会先散列，不会作为缓存键明文发送。
+- 原生续接用于 Responses 格式。第一次响应通过 `store: true` 选择服务方侧状态；后续模型轮次发送 `previous_response_id`、当前指令/工具，以及该响应之后新增的用户项或函数调用结果。通过校验的不透明响应句柄会保存在加密会话消息中，供下一次用户轮次继续链路。
+- `auto` 只对直连 OpenAI Responses 优先使用原生续接；已知 OpenAI、Anthropic、OpenRouter 路径使用前缀缓存；未知 custom/CLIProxyAPI 能力保持无状态。显式模式可在自定义端点上乐观尝试相应线上结构。
+- 当服务方以策略相关的 HTTP 兼容性错误（`400`、`404`、`409`、`422`）拒绝时，本次 Agent 请求会停用该策略，并在执行任何本地工具之前重试。固定降级顺序为：原生续接 → 前缀缓存 → 现有无状态完整重放。限流、认证失败、服务端错误和无关校验错误不会被降级逻辑掩盖。
+
+原生续接可能按服务方账户和数据保留政策保存服务方侧应用状态。由于 `previous_response_id` 不会继承之前的指令，AgentBox 每轮都会重发当前指令。Zero Data Retention 可能强制关闭 `store`，此时兼容性响应会进入相同的安全降级链。
+
+---
+
 ## 🔍 OpenRouter Web Search
 
 Web Search 只对 OpenRouter 连接开放，并可用于三种 API 格式。请求适配器加入 `openrouter:web_search` server tool：
@@ -112,6 +133,10 @@ Web Search 只对 OpenRouter 连接开放，并可用于三种 API 格式。请�
 模型返回的参数必须是 JSON 对象，并通过工具的 JSON Schema（AJV）校验。除本地只读 Skill loader 外，审批策略由工具 annotations 和内置工具风险定义共同决定：`always` 对每个适用调用询问，`sensitive` 只自动放行明确声明为只读、非破坏且不访问开放环境的工具，`full-access` 不弹出审批。审批等待时间可选择 5 分钟或直到用户决定/取消。
 
 每次工具结果会转换回当前供应商协议并进入下一模型轮，同时记录 `toolExecutions` 和 `agentTrace`。工具轮次默认上限为 30，可配置范围为 1–100；超过上限后不会执行新增调用。上下文预算会先扣除工具定义的估算 token，再按手动或自动模式处理完整会话轮次；自动模式绝不删除 system message 和最新用户轮次。
+
+Agent 提供四项可独立开启的 token 优化，为了兼容性均默认关闭。工具结果压缩会在 renderer 事件和本地会话中保留完整结果，但将模型回放内容替换为确定性的首尾预览（默认 16,000 字符，可配置为 2,000–100,000），标记中保留 `call_id`；只读工具 `agentbox_read_tool_result` 可分段取回完整文本。动态工具挂载会在已授权的内置/MCP 联合目录上排序，初始默认最多挂载 4 个工具（可配置为 1–16），并始终保留 `agentbox_search_tools`，以便在下一模型轮次挂载匹配的已授权工具。Skill 资源懒加载与单次运行内上下文压缩详见对应模块文档。
+
+单次运行内上下文压缩会在可配置的软阈值触发（默认 70%，范围 50–95%）。它只移除当前用户消息之后产生的、完整且较早的工具轮次消息，将其替换为确定性摘要，并默认保留最近 3 个工具轮次（可配置为 1–10）。未完成调用和近期协议 call/result 对绝不会被拆分。
 
 `model -> tools -> model -> terminal` 转换由请求级 LangGraph `StateGraph` 执行。Provider 请求、SSE 解析、审批、工具执行和 `StreamEvent` 发送仍位于 Gateway 回调中，因此图无法绕过现有协议或安全边界。带 response message ID 的 Agent 请求使用加密 `BaseCheckpointSaver` sidecar；安全 provider-node 失败从该 graph thread 恢复，缺失、过期、取消、工具上限和副作用不确定状态则回退到 `agentTrace`。应用不会创建明文图数据库。
 

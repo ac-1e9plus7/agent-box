@@ -69,9 +69,11 @@ Skill 只在 **Agent 模式**下参与路由。流程如下：
 1. Gateway 读取全部 `enabled: true` 的 Skill，并把名称、ID 和描述组成轻量目录。
 2. 会话固定的 `skillIds` 优先；否则先识别 `$id`、`@id`、独立出现的完整 ID 或完整 Skill 名称。
 3. 没有显式命中时，检索最近 3 条用户消息。文本附件最多贡献前 2,000 字符，二进制附件只贡献文件名和 MIME type；最多自动激活 2 个达到阈值的 Skill。
-4. 只有激活 Skill 的入口文档、Markdown 参考资料及 Python/Shell 参考源码会加入 System Instructions，避免一次加载全部 Skill。
+4. 默认情况下，已激活 Skill 的入口文档、Markdown 参考资料及 Python/Shell 参考源码会加入 System Instructions。开启可选的资源懒加载后，只注入各 Skill 的入口文档和包含路径/类型/字符数的清单。
 5. 如果初始路由不足，模型可调用只读的 `agentbox_load_skill`，按目录中的 `skill_id` 加载另一个已启用 Skill。该工具不会执行脚本，也不要求工具审批。
 6. 自动、显式和模型按需激活都会发送 `skill-activated` 事件，Renderer 会记录激活来源。
+
+在资源懒加载模式中，始终可用的只读工具 `agentbox_read_skill_resource` 只能从当前已激活 Skill 中读取清单里的精确路径。Markdown、Python 和 Shell 资源会按有界字符片段返回；Python 和 Shell 内容仍只是参考源码，绝不会被执行。兼容性默认仍是一次性完整注入。
 
 检索实现见 [`src/electron/api/skill-retriever.ts`](../src/electron/api/skill-retriever.ts)，提示词装配和按需加载见 [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts)。
 

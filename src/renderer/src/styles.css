@@ -1573,6 +1573,7 @@ select:disabled {
 }
 
 .message-tools:has(.message-pagination),
+.message-tools:has(.message-usage-summary),
 .user-message-tools:has(.user-pagination) {
   opacity: 0.85;
 }
@@ -1581,10 +1582,46 @@ select:disabled {
   margin-left: auto;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 5px;
   padding: 5px 7px;
   color: var(--text-tertiary);
   font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.message-model-name,
+.message-usage-summary,
+.message-usage-summary > span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.message-model-name {
+  gap: 5px;
+}
+
+.message-usage-summary {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px 5px;
+}
+
+.message-usage-summary > span {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.message-usage-summary i {
+  color: var(--border-strong);
+  font-style: normal;
+}
+
+.message-error-usage {
+  display: flex;
+  margin-top: 6px;
+  opacity: 0.85;
 }
 
 .user-message {
@@ -3050,7 +3087,7 @@ select:disabled {
   min-width: 112px;
 }
 
-.agent-turn-limit-control {
+.settings-number-control {
   display: inline-flex;
   height: 34px;
   flex: 0 0 auto;
@@ -3061,12 +3098,12 @@ select:disabled {
   background: var(--surface-soft);
 }
 
-.agent-turn-limit-control:focus-within {
+.settings-number-control:focus-within {
   border-color: color-mix(in srgb, var(--accent), transparent 40%);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent), transparent 89%);
 }
 
-.agent-turn-limit-control input {
+.settings-number-control input {
   width: 68px;
   height: 32px;
   padding: 0 5px 0 10px;
@@ -3077,7 +3114,7 @@ select:disabled {
   text-align: right;
 }
 
-.agent-turn-limit-control span {
+.settings-number-control span {
   padding: 0 10px 0 4px;
   color: var(--text-tertiary);
   font-size: 10px;
@@ -3144,6 +3181,11 @@ select:disabled {
 
 .settings-toggle input:checked + span {
   background: var(--accent);
+}
+
+.settings-toggle input:focus-visible + span {
+  outline: 2px solid color-mix(in srgb, var(--accent), transparent 20%);
+  outline-offset: 2px;
 }
 
 .settings-toggle input:checked + span i {

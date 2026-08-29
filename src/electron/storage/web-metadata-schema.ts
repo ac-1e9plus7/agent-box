@@ -1,4 +1,6 @@
-import type { TokenUsage, WebCitation, WebSearchMode } from '../../shared/types'
+import type { ModelRequestUsage, TokenUsage, TokenUsageDetails, WebCitation, WebSearchMode } from '../../shared/types'
+import { MAX_AGENT_TOOL_TURN_LIMIT } from '../../shared/agent-limits'
+import { aggregateModelRequestUsage } from '../../shared/token-usage'
 
 export const MAX_CITATIONS_PER_MESSAGE = 100
 export const MAX_CITATION_VARIANTS_PER_STREAM = 300
@@ -61,14 +63,42 @@ export function normalizeCitationUrl(value: unknown): string {
 export function parseStoredTokenUsage(value: unknown): TokenUsage | undefined {
   if (value === undefined) return undefined
   if (!isRecord(value)) throw new Error('Invalid message usage')
-  const usage = removeUndefined({
+  if (value.modelRequests === undefined) {
+    const usage = parseStoredUsageDetails(value)
+    return Object.keys(usage).length ? usage : undefined
+  }
+  if (!Array.isArray(value.modelRequests) || value.modelRequests.length < 1) {
+    throw new Error('Invalid model request usage')
+  }
+  if (value.modelRequests.length > MAX_AGENT_TOOL_TURN_LIMIT + 1) {
+    throw new Error('Invalid model request usage')
+  }
+  const turns = new Set<number>()
+  const modelRequests = value.modelRequests.map((request): ModelRequestUsage => {
+    if (!isRecord(request)) throw new Error('Invalid model request usage')
+    const turn = optionalUsageInteger(request.turn, 'model request turn')
+    if (turn === undefined || turn < 1 || turn > MAX_AGENT_TOOL_TURN_LIMIT + 1 || turns.has(turn)) {
+      throw new Error('Invalid model request turn')
+    }
+    turns.add(turn)
+    const details = parseStoredUsageDetails(request)
+    if (Object.keys(details).length === 0) throw new Error('Invalid model request usage')
+    return { turn, ...details }
+  })
+  modelRequests.sort((left, right) => left.turn - right.turn)
+  return aggregateModelRequestUsage(modelRequests)
+}
+
+function parseStoredUsageDetails(value: Record<string, unknown>): TokenUsageDetails {
+  return removeUndefined({
     inputTokens: optionalUsageInteger(value.inputTokens, 'input token usage'),
     outputTokens: optionalUsageInteger(value.outputTokens, 'output token usage'),
     reasoningTokens: optionalUsageInteger(value.reasoningTokens, 'reasoning token usage'),
+    cachedInputTokens: optionalUsageInteger(value.cachedInputTokens, 'cached input token usage'),
+    cacheWriteTokens: optionalUsageInteger(value.cacheWriteTokens, 'cache write token usage'),
     webSearchRequests: optionalUsageInteger(value.webSearchRequests, 'web search request usage'),
     totalTokens: optionalUsageInteger(value.totalTokens, 'total token usage'),
-  }) as TokenUsage
-  return Object.keys(usage).length ? usage : undefined
+  })
 }
 
 export function isValidTokenUsageValue(value: unknown): value is number {

@@ -18,6 +18,8 @@ AgentBox's renderer is built with React 19 and TypeScript. It owns presentation 
 
 The Settings shell owns the staged `preferences`, model, provider, and API-key changes that are committed together by **Save changes**. Each Settings section owns its local selection, search, test, and modal state where applicable. Skills and MCP server mutations continue to use their dedicated immediate-persistence APIs.
 
+**Settings → General → Agent token optimization** exposes four independent P1 switches plus a P2 provider-context-reuse selector. The switches compact model-visible tool results, dynamically limit the initially exposed tool set, load Skill references and scripts only when needed, and compact older turns within a long-running Agent execution. The provider selector chooses off, automatic provider-aware reuse, prefix caching, or Responses native continuation. Numeric controls appear only when their corresponding optimization is enabled, while their last valid value remains staged and persisted when the switch is off. Automatic and native modes warn that provider-side response state may be retained, and every reuse mode documents automatic compatibility fallback.
+
 The renderer sets `document.documentElement.dataset.theme` to `system`, `light`, or `dark`; system mode follows `prefers-color-scheme`. At widths up to 860px, the sidebar becomes a drawer, and below 680px the top bar and composer are further condensed. The stylesheet also honors `prefers-reduced-motion`.
 
 ## Local user profile
@@ -39,6 +41,8 @@ Messages form a tree through `id` and `parentMessageId`, while `Conversation.cur
 - **Delete a message:** The selected node and all descendants are removed. Selection moves to an adjacent sibling version when possible, otherwise to the deepest available leaf below the parent.
 
 When an Agent response is interrupted by cancellation, rate limiting, a network/API error, an output limit, or the tool-turn limit, AgentBox retains `interruption`, completed tool results, and `agentTrace`. Only the final interrupted response on the active branch can be resumed. **Resume from checkpoint** creates a new user/assistant branch and uses the preceding response as the checkpoint; **Regenerate** creates a clean answer version from the original parent user message.
+
+Completed or interrupted Assistant messages show aggregate total, input, output, reasoning, cached-input, and cache-write token usage together with the number of model requests. Multi-turn Agent replies therefore expose the complete request cost rather than only the final model turn; unavailable provider counters are shown as unavailable instead of being inferred as zero. Usage remains visible for an empty provider response.
 
 ## Markdown, code, and math
 

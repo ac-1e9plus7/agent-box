@@ -127,6 +127,33 @@ export function AgentTurnLimitInput({
   onChange: (value: number) => void
   value: number
 }): JSX.Element {
+  return (
+    <BoundedNumberInput
+      ariaLabel={t('Agent tool-call limit')}
+      maximum={MAX_AGENT_TOOL_TURN_LIMIT}
+      minimum={MIN_AGENT_TOOL_TURN_LIMIT}
+      onChange={onChange}
+      suffix={t(value === 1 ? 'turn' : 'turns')}
+      value={value}
+    />
+  )
+}
+
+export function BoundedNumberInput({
+  ariaLabel,
+  maximum,
+  minimum,
+  onChange,
+  suffix,
+  value,
+}: {
+  ariaLabel: string
+  maximum: number
+  minimum: number
+  onChange: (value: number) => void
+  suffix: string
+  value: number
+}): JSX.Element {
   const [inputValue, setInputValue] = useState(String(value))
 
   useEffect(() => {
@@ -139,17 +166,17 @@ export function AgentTurnLimitInput({
       setInputValue(String(value))
       return
     }
-    const normalized = Math.min(MAX_AGENT_TOOL_TURN_LIMIT, Math.max(MIN_AGENT_TOOL_TURN_LIMIT, parsed))
+    const normalized = Math.min(maximum, Math.max(minimum, parsed))
     setInputValue(String(normalized))
     onChange(normalized)
   }
 
   return (
-    <label className="agent-turn-limit-control">
+    <label className="settings-number-control">
       <input
-        aria-label={t('Agent tool-call limit')}
-        max={MAX_AGENT_TOOL_TURN_LIMIT}
-        min={MIN_AGENT_TOOL_TURN_LIMIT}
+        aria-label={ariaLabel}
+        max={maximum}
+        min={minimum}
         onBlur={commit}
         onChange={(event) => setInputValue(event.target.value)}
         onKeyDown={(event) => {
@@ -162,7 +189,7 @@ export function AgentTurnLimitInput({
         type="number"
         value={inputValue}
       />
-      <span>{t(value === 1 ? 'turn' : 'turns')}</span>
+      <span>{suffix}</span>
     </label>
   )
 }

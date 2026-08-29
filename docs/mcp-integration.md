@@ -52,7 +52,8 @@ The transport implementation is in [`src/electron/mcp/mcp-client.ts`](../src/ele
 
 - **Automatic retrieval (`auto`)**: the Gateway uses the latest user message as the query and exposes up to 8 MCP tools scoring at least 0.75. Exact tool-name and name-fragment matches receive extra weight. It does not pad an empty or short result with unrelated tools.
 - **Expose all (`all`)**: exposes every MCP tool allowed for the conversation without relevance filtering.
-- Retrieval applies only to external MCP tools. Built-in Agent tools such as `agentbox_load_skill`, the code runner, workspace file tools, and the integrated terminal are appended when available and do not participate in BM25 ranking.
+- With dynamic Agent tool exposure disabled (the compatibility default), retrieval applies only to external MCP tools. Built-in Agent tools such as `agentbox_load_skill`, the code runner, workspace file tools, and the integrated terminal are appended when available and do not participate in BM25 ranking.
+- With dynamic exposure enabled, the same ranking is applied to the complete request-authorized built-in/MCP catalog and the configured initial limit defaults to four tools. The always-mounted, read-only `agentbox_search_tools` fallback searches only that authorized catalog and mounts its matches for the next model turn; it does not execute them. A snapshot of the tools exposed at model invocation prevents a search call from authorizing a second call in the same model response.
 
 Each conversation establishes a server allowlist through `mcpServerIds`:
 
@@ -104,12 +105,13 @@ Every tool call is parsed as JSON and checked against the tool's input JSON Sche
 | Setting                                                 | Effective behavior                                                                                                                                                                  |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Confirm sensitive operations (`sensitive`, default)** | A tool runs automatically only if it declares all three conditions: `readOnlyHint: true`, `destructiveHint: false`, and `openWorldHint: false`. Every other tool requires approval. |
-| **Always confirm (`always`)**                           | Every code, terminal, workspace, and MCP tool call requires approval, except `agentbox_load_skill`, which only loads local instructions.                                            |
+| **Always confirm (`always`)**                           | Every code, terminal, workspace, and MCP tool call requires approval. Local catalog/result/Skill-resource readers do not create side effects and run without approval.              |
 | **Full Access (`full-access`)**                         | Skips approval for the code runner, terminal, workspace file tools, and external MCP tools. It does not relax path, schema, timeout, or result-size checks.                         |
 
 Built-in tools add these fixed rules:
 
 - `agentbox_load_skill` loads local documents from an enabled skill and never executes its scripts, so it completes without an approval prompt.
+- `agentbox_search_tools`, `agentbox_read_tool_result`, and `agentbox_read_skill_resource` inspect request-authorized in-memory or local data only. They never execute a searched tool or Skill script and do not prompt for approval.
 - `agentbox_run_code` and `agentbox_run_terminal` are always classified as sensitive. They require approval under every mode except Full Access.
 - `agentbox_read_file` carries a complete read-only, non-destructive, closed-world declaration and may run automatically under the default policy. `agentbox_write_file` is a destructive write and requires approval.
 - `ToolAnnotations` on an external MCP tool are claims made by its server. If any part of the complete low-risk declaration is missing, the default policy treats the tool as sensitive.

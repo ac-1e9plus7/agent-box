@@ -4,6 +4,7 @@ import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SettingsDialog } from '../src/renderer/src/components/SettingsDialog'
+import { t } from '../src/shared/i18n'
 import { rendererModel, rendererProvider, rendererSettings } from './renderer-test-fixtures'
 
 describe('SettingsDialog renderer integration', () => {
@@ -81,5 +82,73 @@ describe('SettingsDialog renderer integration', () => {
 
     expect(onSave).not.toHaveBeenCalled()
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('stages independent Agent token optimizations and reveals only enabled numeric controls', async () => {
+    const onSave = vi.fn(async () => undefined)
+
+    render(
+      <SettingsDialog
+        initialSection="general"
+        models={[rendererModel]}
+        mcpServers={[]}
+        open
+        preferences={rendererSettings}
+        providers={[rendererProvider]}
+        skills={[]}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    )
+
+    const toolResultCharacters = t('Maximum model-visible tool-result characters')
+    const dynamicToolLimit = t('Initial dynamic tool limit')
+    const compactionThreshold = t('Context compaction threshold')
+    const recentTurns = t('Recent Agent turns to keep')
+
+    expect(screen.queryByLabelText(toolResultCharacters)).toBeNull()
+    expect(screen.queryByLabelText(dynamicToolLimit)).toBeNull()
+    expect(screen.queryByLabelText(compactionThreshold)).toBeNull()
+    expect(screen.queryByLabelText(recentTurns)).toBeNull()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: t('Compact tool results sent to the model') }))
+    fireEvent.click(screen.getByRole('checkbox', { name: t('Expose a smaller tool set dynamically') }))
+    fireEvent.click(screen.getByRole('checkbox', { name: t('Load Skill resources only when needed') }))
+    fireEvent.click(screen.getByRole('checkbox', { name: t('Compact long-running Agent context') }))
+
+    const toolResultInput = screen.getByLabelText(toolResultCharacters)
+    fireEvent.change(toolResultInput, { target: { value: '24000' } })
+    fireEvent.blur(toolResultInput)
+    const dynamicToolInput = screen.getByLabelText(dynamicToolLimit)
+    fireEvent.change(dynamicToolInput, { target: { value: '8' } })
+    fireEvent.blur(dynamicToolInput)
+    const thresholdInput = screen.getByLabelText(compactionThreshold)
+    fireEvent.change(thresholdInput, { target: { value: '80' } })
+    fireEvent.blur(thresholdInput)
+    const recentTurnsInput = screen.getByLabelText(recentTurns)
+    fireEvent.change(recentTurnsInput, { target: { value: '5' } })
+    fireEvent.blur(recentTurnsInput)
+    fireEvent.change(screen.getByLabelText(t('Provider context reuse')), {
+      target: { value: 'native-continuation' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: t('Save changes') }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledOnce())
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preferences: expect.objectContaining({
+          agentToolResultCompactionEnabled: true,
+          agentToolResultMaxCharacters: 24_000,
+          agentDynamicToolExposureEnabled: true,
+          agentDynamicToolLimit: 8,
+          agentLazySkillResourcesEnabled: true,
+          agentContextCompactionEnabled: true,
+          agentContextCompactionThresholdPercent: 80,
+          agentContextCompactionKeepRecentTurns: 5,
+          agentProviderContextOptimizationMode: 'native-continuation',
+        }),
+      }),
+    )
   })
 })

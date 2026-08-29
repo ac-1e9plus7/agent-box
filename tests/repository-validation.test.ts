@@ -138,6 +138,31 @@ describe('AppRepository business constraints and relational integrity', () => {
     expect(repo.getSettings()).toMatchObject({ userNickname: '', userAvatar: '' })
   })
 
+  it('persists every Agent token-optimization preference through a settings patch', async () => {
+    const updated = await repo.updateSettings({
+      agentToolResultCompactionEnabled: true,
+      agentToolResultMaxCharacters: 24_000,
+      agentDynamicToolExposureEnabled: true,
+      agentDynamicToolLimit: 8,
+      agentLazySkillResourcesEnabled: true,
+      agentContextCompactionEnabled: true,
+      agentContextCompactionThresholdPercent: 80,
+      agentContextCompactionKeepRecentTurns: 5,
+    })
+
+    expect(updated).toMatchObject({
+      agentToolResultCompactionEnabled: true,
+      agentToolResultMaxCharacters: 24_000,
+      agentDynamicToolExposureEnabled: true,
+      agentDynamicToolLimit: 8,
+      agentLazySkillResourcesEnabled: true,
+      agentContextCompactionEnabled: true,
+      agentContextCompactionThresholdPercent: 80,
+      agentContextCompactionKeepRecentTurns: 5,
+    })
+    expect(repo.getSettings()).toMatchObject(updated)
+  })
+
   it('prevents removing a provider if it is still referenced by models', async () => {
     const provider = await repo.upsertProvider({
       name: 'Custom Provider',
@@ -377,6 +402,52 @@ describe('AppRepository business constraints and relational integrity', () => {
       retryAfterSeconds: 5,
       finishReason: undefined,
     })
+  })
+
+  it('persists bounded provider continuation handles only on assistant messages', async () => {
+    const baseConversation = {
+      id: 'provider-continuation',
+      title: 'Provider continuation',
+      modelId: 'openrouter-auto',
+      messages: [
+        {
+          id: 'assistant-provider-continuation',
+          role: 'assistant' as const,
+          content: 'done',
+          modelId: 'openrouter-auto',
+          providerContinuation: { format: 'openai-responses' as const, responseId: 'resp_valid_1', turn: 2 },
+          createdAt: timestamp,
+        },
+      ],
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }
+    const saved = await repo.saveConversation(baseConversation)
+    expect(saved.messages[0]?.providerContinuation).toEqual({
+      format: 'openai-responses',
+      responseId: 'resp_valid_1',
+      turn: 2,
+    })
+
+    await expect(
+      repo.saveConversation({
+        ...baseConversation,
+        id: 'invalid-provider-continuation-role',
+        messages: [{ ...baseConversation.messages[0]!, role: 'user' }],
+      }),
+    ).rejects.toThrow('Only assistant messages can store provider continuations')
+    await expect(
+      repo.saveConversation({
+        ...baseConversation,
+        id: 'invalid-provider-continuation-id',
+        messages: [
+          {
+            ...baseConversation.messages[0]!,
+            providerContinuation: { format: 'openai-responses', responseId: 'bad response id', turn: 2 },
+          },
+        ],
+      }),
+    ).rejects.toThrow('Invalid provider continuation')
   })
 
   it('stores only a workspace path reference and never encrypts project files', async () => {

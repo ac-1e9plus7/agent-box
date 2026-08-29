@@ -81,6 +81,8 @@ describe('web-search storage schema', () => {
         inputTokens: 12,
         outputTokens: 5,
         reasoningTokens: 2,
+        cachedInputTokens: 8,
+        cacheWriteTokens: 3,
         webSearchRequests: 1,
         totalTokens: 17,
         unknown: 999,
@@ -89,6 +91,8 @@ describe('web-search storage schema', () => {
       inputTokens: 12,
       outputTokens: 5,
       reasoningTokens: 2,
+      cachedInputTokens: 8,
+      cacheWriteTokens: 3,
       webSearchRequests: 1,
       totalTokens: 17,
     })
@@ -97,6 +101,48 @@ describe('web-search storage schema', () => {
     expect(() => parseStoredTokenUsage({ webSearchRequests: 1_000_000_000_001 })).toThrow(
       'Invalid web search request usage',
     )
+  })
+
+  it('validates per-request usage and derives canonical multi-turn totals', () => {
+    expect(
+      parseStoredTokenUsage({
+        inputTokens: 999,
+        modelRequests: [
+          { turn: 2, inputTokens: 8, outputTokens: 3, cacheWriteTokens: 2 },
+          { turn: 1, inputTokens: 12, outputTokens: 5, cachedInputTokens: 10, totalTokens: 17 },
+        ],
+      }),
+    ).toEqual({
+      inputTokens: 20,
+      outputTokens: 8,
+      cachedInputTokens: 10,
+      cacheWriteTokens: 2,
+      totalTokens: 28,
+      modelRequests: [
+        { turn: 1, inputTokens: 12, outputTokens: 5, cachedInputTokens: 10, totalTokens: 17 },
+        { turn: 2, inputTokens: 8, outputTokens: 3, cacheWriteTokens: 2 },
+      ],
+    })
+    expect(() =>
+      parseStoredTokenUsage({
+        modelRequests: [
+          { turn: 1, inputTokens: 1 },
+          { turn: 1, outputTokens: 1 },
+        ],
+      }),
+    ).toThrow('Invalid model request turn')
+    expect(() => parseStoredTokenUsage({ modelRequests: [{ turn: 1, cachedInputTokens: -1 }] })).toThrow(
+      'Invalid cached input token usage',
+    )
+
+    const largeAggregate = parseStoredTokenUsage({
+      modelRequests: [
+        { turn: 1, inputTokens: 600_000_000_000 },
+        { turn: 2, inputTokens: 600_000_000_000 },
+      ],
+    })
+    expect(largeAggregate?.inputTokens).toBe(1_200_000_000_000)
+    expect(parseStoredTokenUsage(largeAggregate)).toEqual(largeAggregate)
   })
 
   it('deduplicates stream citations by normalized URL and drops unsafe values', () => {

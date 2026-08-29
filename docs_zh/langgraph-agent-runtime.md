@@ -50,9 +50,13 @@ START -> model -> tools -> model -> ... -> terminal -> END
 
 图递归上限根据配置的 tool-turn 上限计算。当前产品范围是 1–100，默认 30。
 
+开启可选的单次运行内上下文压缩后，当模型可见输入越过软阈值时，Gateway 会把最新用户消息之后较早且已完成的整个工具轮次消息替换为确定性的普通 Assistant 摘要。配置要保留的近期轮次与所有未完成调用保持原样，因此协议适配器绝不会收到孤立的工具调用或结果。进入下一图状态和 checkpoint 的是优化后消息，而不是 renderer 事件 payload。
+
 ## Streaming 与取消
 
 Provider streaming 仍位于 `ChatGateway`。在 model node 运行期间，文本、reasoning、引用、用量、provider item 和工具参数 delta 会立即发送；LangGraph 只在图边界保存 checkpoint。
+
+每个 usage 事件都会标注当前模型轮次。Renderer 会合并同轮的分段事件并保留逐请求明细，因此可以对完整 `model -> tools -> model` 运行的消息级用量求和。
 
 同一请求级 `AbortSignal` 传给图和所有回调，用于取消 provider fetch、MCP、代码、终端、工作区和审批等待。120 秒网络停滞定时器只在等待 provider 数据时运行，工具处理期间暂停。
 

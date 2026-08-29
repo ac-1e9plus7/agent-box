@@ -9,7 +9,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![Electron](https://img.shields.io/badge/Electron-35-47848F.svg)](https://www.electronjs.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 ## Highlights
 
@@ -22,7 +22,7 @@
 - **Conversation-scoped development environments:** every conversation has a working directory. Configure JDK, Go, PHP, and Python runtimes; Python supports project `.venv`/`venv`, system interpreters, virtual environments, Conda environments, and custom interpreters.
 - **Multi-file Agent Skills:** Skills can include Markdown instructions, reference documents, and non-automatic Python or shell reference scripts. Pin Skills to a conversation, invoke `$skill-id`, use automatic retrieval, or let the model load a relevant Skill on demand. ZIP skill archives can be imported and exported.
 - **Rich chat interface:** Markdown, GFM, syntax-highlighted code, KaTeX math, multimodal attachments, image optimization and preview, editable conversation trees, regenerated branches, and version navigation.
-- **Reasoning and web search:** normalize reasoning output and usage across supported providers. OpenRouter web search uses the `openrouter:web_search` server tool with automatic or provider-native search modes and structured citations.
+- **Reasoning, usage, context reuse, and web search:** normalize reasoning output and per-model-request token usage—including cached-input and cache-write counters—across supported providers. Optional Agent context reuse supports stable-prefix caching and Responses native continuation with compatibility fallback. OpenRouter web search uses the `openrouter:web_search` server tool with automatic or provider-native search modes and structured citations.
 - **English and Simplified Chinese UI:** language resources are shared by the renderer and Electron main process. On first launch, Chinese system locales default to Simplified Chinese; all other locales default to English. The selection is persisted in encrypted settings.
 
 ## Technical documentation
@@ -88,4 +88,4 @@ Electron Builder produces an NSIS installer and portable executable on Windows, 
 
 ## License
 
-AgentBox is available under the [MIT License](./LICENSE).
+AgentBox is available under the [Apache License 2.0](./LICENSE).

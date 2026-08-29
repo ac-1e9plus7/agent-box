@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-> Synchronization contract: This file and [`AGENTS.md`](./AGENTS.md) define the same repository instructions. Any change to either file must update the other in the same change. Apart from the filename heading and reciprocal link, keep their rules semantically identical.
+> Synchronization contract: This file and [`CLAUDE.md`](./CLAUDE.md) define the same repository instructions. Any change to either file must update the other in the same change. Apart from the filename heading and reciprocal link, keep their rules semantically identical.
 
 This file defines repository-level instructions for coding agents working on AgentBox. Read it before making changes. The user's current request always takes precedence over this file.
 
@@ -356,3 +356,4 @@ Before handing off a completed change:
 7. Run `pnpm package` and launch the unpacked app for packaging, preload, entry-point, or runtime-dependency changes.
 8. Validate Markdown links, paired filenames, code fences, and trailing whitespace for documentation changes.
 9. Confirm no log, fixture, screenshot, error, or generated file contains credentials or sensitive Vault data.
+

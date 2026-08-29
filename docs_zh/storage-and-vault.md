@@ -79,6 +79,12 @@ LangGraph checkpoint sidecar 刻意不是 `VaultState` 字段，superstep 写入
 
 `AppSettings.userNickname` 和 `userAvatar` 仅用于本地展示，不会进入模型提示词。昵称最多 50 个字符；头像接受 PNG/JPEG/WebP Base64 Data URL，最多 3,000,000 个字符，renderer 裁剪时将边长限制为 1,000 像素。首次缺少 `language` 的 Vault 会使用启动时传入的系统语言回退值。
 
+Assistant 的 `usage` 同时保存聚合 token 计数和可选的 `modelRequests` 明细，后者按从 1 开始的 Agent 模型轮次标识。每条明细只允许有界非负整数计数，最多保存 101 次请求（100 个工具轮次加终态模型请求）。加载有效明细时会重新计算聚合总计；旧消息只有聚合 usage 时仍可原样读取。
+
+Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和旧版 Vault 均默认关闭全部优化。功能关闭时仍保留参数值：工具结果压缩使用 `agentToolResultMaxCharacters: 16000`（2,000–100,000），动态工具暴露使用 `agentDynamicToolLimit: 4`（1–16），Agent 单次运行上下文压缩默认在 70%（50%–95%）触发并保留最近 3 轮（1–10）。`agentProviderContextOptimizationMode` 接受 `off`、`auto`、`prefix-cache` 或 `native-continuation`，默认使用 `off`。设置规范化会拒绝未知模式、非布尔开关、非整数及越界参数，不会静默强制转换。
+
+启用原生续接时，助手消息可以保存经过校验的 `providerContinuation`，其中包含 OpenAI Responses 句柄和从 1 开始的模型轮次。句柄最多 200 个安全标识符字符，只能属于助手消息，并保留在加密 Vault 中；会话备份也会把它作为消息 JSON 的一部分导出。它是不透明的服务方侧状态引用，不是 API 凭据；删除本地会话数据会移除本地引用，但不会覆盖服务方自己的数据保留政策。
+
 ---
 
 ## 📏 资源配额与校验

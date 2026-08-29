@@ -50,6 +50,81 @@ const reviewedZh = {
   '{value0}: {value1}': '{value0}：{value1}',
   invalid: '无效',
   'Unable to update encrypted Agent recovery state ({value0}).': '无法更新加密的 Agent 恢复状态（{value0}）。',
+  'Read a chunk of a complete tool result that was shortened in model-visible history. Use the call_id from the compaction marker and advance offset until has_more is false.':
+    '读取在模型可见历史中被缩短的完整工具结果片段。请使用压缩标记中的 call_id，并递增 offset，直到 has_more 为 false。',
+  'Tool call ID from a compacted result marker.': '压缩结果标记中的工具调用 ID。',
+  'Zero-based character offset; defaults to 0.': '从 0 开始的字符偏移量；默认为 0。',
+  'Maximum number of result characters to return; defaults to 8,000.': '返回的结果字符数上限；默认为 8,000。',
+  'Read complete tool result': '读取完整工具结果',
+  'Search the authorized built-in and MCP tool catalog and expose matching tools on the next model turn. Use this when the initially exposed tools are insufficient. Searching does not execute a matched tool.':
+    '搜索本次请求已授权的内置和 MCP 工具目录，并在下一次模型轮次中挂载匹配的工具。当初始工具不足时使用。搜索本身不会执行匹配的工具。',
+  'Describe the capability or tool name needed for the next step.': '描述下一步所需的能力或工具名称。',
+  'Maximum matching tools to expose on the next turn.': '下一轮最多挂载的匹配工具数。',
+  'Search and expose tools': '搜索并挂载工具',
+  'Read a chunk of an active Skill reference document or reference script by its exact manifest path. This read-only tool never executes scripts.':
+    '通过清单中的精确路径，分段读取已激活 Skill 的参考文档或参考脚本。此只读工具绝不会执行脚本。',
+  'Active Skill ID shown in the Skill header.': 'Skill 标题中显示的已激活 Skill ID。',
+  'Exact markdown, Python, or shell resource path from the active Skill manifest.':
+    '已激活 Skill 资源清单中的精确 Markdown、Python 或 Shell 资源路径。',
+  'Maximum number of resource characters to return; defaults to 8,000.': '返回的资源字符数上限；默认为 8,000。',
+  'Read Skill resource': '读取 Skill 资源',
+  'No complete tool result is available for call ID {value0}.': '没有可用的完整工具结果，调用 ID 为 {value0}。',
+  'Read a previously completed local tool result without executing the tool again.':
+    '读取之前已完成的本地工具结果，不重新执行该工具。',
+  'The following authorized tools are now exposed for the next model turn:\n{value0}':
+    '以下已授权工具现已挂载，供下一次模型轮次使用：\n{value0}',
+  'No additional authorized tools matched this search.': '没有其他已授权工具匹配此搜索。',
+  'Search the request-authorized local tool catalog without executing a matched tool.':
+    '搜索本次请求已授权的本地工具目录，不执行匹配的工具。',
+  'The requested active Skill resource was not found or is not readable.':
+    '找不到请求的已激活 Skill 资源，或该资源不可读。',
+  'Read a local active Skill reference resource without executing scripts.':
+    '读取本地已激活 Skill 的参考资源，不执行脚本。',
+  'Skill "{value0}" entry instructions and resource manifest have been loaded. Follow the entry instructions and read listed resources only when needed.':
+    '已加载 Skill“{value0}”的入口指令和资源清单。请遵循入口指令，并仅在需要时读取清单中的资源。',
+  '## Available Skill Resources (load only when needed):\n{value0}\nUse `{value1}` with this Skill ID and an exact path to read a resource in chunks. Python and shell resources are reference source and are never executed by this reader.':
+    '## 可用 Skill 资源（仅在需要时加载）：\n{value0}\n使用 `{value1}` 并传入此 Skill ID 和精确路径，即可分段读取资源。Python 和 Shell 资源只是参考源码，此读取器绝不会执行它们。',
+  'Agent token optimization': 'Agent Token 优化',
+  'Compact tool results sent to the model': '压缩发送给模型的工具结果',
+  'Keep complete tool output locally while limiting the text replayed to later model turns.':
+    '本地保留完整工具输出，同时限制后续模型轮次中重放的文本长度。',
+  'Maximum model-visible tool-result characters': '模型可见工具结果字符数上限',
+  'Range: {minimum}–{maximum}. Default: {defaultValue}.': '范围：{minimum}–{maximum}。默认值：{defaultValue}。',
+  characters: '字符',
+  'Expose a smaller tool set dynamically': '动态挂载较小的工具集',
+  'Start Agent runs with a limited tool set and make additional tools available on demand.':
+    'Agent 运行开始时仅挂载有限工具，并按需提供其他工具。',
+  'Initial dynamic tool limit': '初始动态工具上限',
+  tools: '个工具',
+  'Load Skill resources only when needed': '仅在需要时加载 Skill 资源',
+  'Inject Skill entry instructions first, then load references and scripts on demand.':
+    '先注入 Skill 入口指令，再按需加载参考资料和脚本。',
+  'Compact long-running Agent context': '压缩长时间运行的 Agent 上下文',
+  'Summarize older in-progress tool turns before the Agent fills the context window.':
+    '在 Agent 填满上下文窗口前，汇总较早的执行中工具轮次。',
+  'Context compaction threshold': '上下文压缩阈值',
+  'Range: {minimum}%–{maximum}%. Default: {defaultValue}%.': '范围：{minimum}%–{maximum}%。默认值：{defaultValue}%。',
+  'Recent Agent turns to keep': '保留的最近 Agent 轮次',
+  'All Agent token optimizations are disabled by default and can be enabled independently.':
+    '所有 Agent Token 优化默认关闭，可分别启用。',
+  'Model requests: {value0}': '模型请求：{value0}',
+  'Input {value0} tokens': '输入 {value0} tokens',
+  'Output {value0} tokens': '输出 {value0} tokens',
+  'Cached input {value0} tokens': '缓存命中输入 {value0} tokens',
+  'Cache write {value0} tokens': '缓存写入 {value0} tokens',
+  'Total token usage across all model requests': '所有模型请求的 Token 总用量',
+  'Provider context reuse': '服务方上下文复用',
+  'Reuse stable prefixes or provider-native response state. Unsupported modes automatically fall back to prefix caching and then stateless replay.':
+    '复用稳定前缀或服务方原生响应状态。不支持的模式会自动降级为前缀缓存，再降级为无状态完整重放。',
+  'Native continuation may retain provider-side response state according to the provider’s data policy.':
+    '原生续接可能会按照服务方的数据政策保留服务方侧响应状态。',
+  'Off (stateless replay)': '关闭（无状态重放）',
+  'Automatic fallback': '自动选择并降级',
+  'Prefix caching': '前缀缓存',
+  'Native continuation': '原生续接',
+  'The provider rejected every context reuse strategy.': '服务方拒绝了所有上下文复用策略。',
+  'Only assistant messages can contain provider continuation state.': '只有助手消息可以包含服务方续接状态。',
+  'Provider continuation state is invalid.': '服务方续接状态无效。',
 }
 
 // --- source file sets --------------------------------------------------------------
