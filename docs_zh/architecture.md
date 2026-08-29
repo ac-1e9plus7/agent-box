@@ -130,6 +130,7 @@ graph TB
 - [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts)：IPC 注册、输入入口与可信发送方校验
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts)：请求编排、流处理和 Agent 工具循环
 - [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts)：provider-neutral 的 LangGraph model/tool/终态转换状态机
+- [`src/electron/browser/browser-manager.ts`](../src/electron/browser/browser-manager.ts)：隔离浏览器 session、标签/View 生命周期、导航策略与 Cookie 快照
 - [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts)：加密 `BaseCheckpointSaver` 适配器与消息 snapshot/delta 重建
 - [`src/electron/storage/checkpoint-repository.ts`](../src/electron/storage/checkpoint-repository.ts)：checkpoint 配额、manifest、生命周期删除与恢复
 - [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts)：Vault 领域仓库与 Schema 校验

@@ -113,6 +113,9 @@ Agent token 优化以相互独立的 `AppSettings` 偏好持久化；新建和�
 | 单个 Skill 文件数 / 单文件内容                | 50 / 500,000 字符 |
 | 单个 MCP server 参数数 / 环境变量数           |          50 / 100 |
 | 单项 MCP 参数或环境变量值                     |        8,192 字符 |
+| 单个浏览器 Profile 的 Cookie 数               |             2,000 |
+| 浏览器 Cookie Profile 数                      |            10,000 |
+| 浏览器 Cookie Profile 序列化数据              |   10,000,000 字符 |
 | 加密 checkpoint thread / 单 thread checkpoint |         256 / 512 |
 | 单 thread / 完整 namespace checkpoint 数据    |  64 MiB / 256 MiB |
 

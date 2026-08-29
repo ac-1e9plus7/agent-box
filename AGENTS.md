@@ -138,6 +138,7 @@ src/electron/api/context-window.ts  Complete-turn context trimming using shared 
 src/electron/api/code-executor.ts   Restricted JavaScript/Python code execution
 src/electron/api/terminal-shell.ts  Integrated terminal resolution and execution
 src/electron/api/workspace-files.ts Workspace-scoped file operations
+src/electron/browser/               Built-in browser lifecycle, policy/driver isolation, semantic snapshots, and Agent tool execution
 src/electron/mcp/                   MCP clients, transports, manager, approval policy, BM25 retrieval
 src/electron/storage/               Encrypted Vault, schemas, repository CRUD, quotas, built-in Skills
 src/electron/storage/agentbox-checkpoint-saver.ts Encrypted LangGraph BaseCheckpointSaver adapter
@@ -146,6 +147,7 @@ src/electron/backup/                Conversation and workspace ZIP backup export
 src/renderer/src/App.tsx            Renderer bootstrap, settings persistence, coordination, top-level composition
 src/renderer/src/hooks/              Conversation state and normalized chat-stream orchestration
 src/renderer/src/components/        React components, dialogs, and the Settings shell
+src/renderer/src/components/browser/BrowserPanel.tsx Browser panel controls and native WebContentsView bounds coordination
 src/renderer/src/components/settings/ Settings sections and shared Settings controls
 src/renderer/src/                   Testable renderer helpers for context, titles, files, Markdown, and input
 scripts/                            Icon generation and localization extraction/review pipeline
@@ -177,6 +179,7 @@ Do not move provider protocol logic, credentials, or persistence into React comp
 - IPC must validate the target `WebContents`, require the top-level main frame, and accept only the trusted production file path or configured development origin and pathname.
 - Production CSP belongs in `src/renderer/index.html`; a response header cannot protect a `file://` renderer.
 - Deny renderer-created windows. Only credential-free `http:` and `https:` URLs revalidated by the main process may be passed to `shell.openExternal`.
+- Keep remote built-in-browser pages in sandboxed `WebContentsView` instances backed by conversation-scoped, non-persistent sessions. Never attach a preload, Node.js integration, AgentBox IPC, or granted web permissions to those pages.
 
 ### Provider network and proxy behavior
 
@@ -195,6 +198,9 @@ Do not move provider protocol logic, credentials, or persistence into React comp
 - The JavaScript/Python code runner is restricted and resource-bounded, but it is not a complete OS security boundary. Code and terminal tools require approval unless Full Access is enabled.
 - MCP `ToolAnnotations` are untrusted hints. Treat a tool as explicitly low risk only when it declares read-only, non-destructive, closed-world behavior; otherwise classify it as sensitive.
 - Validate every tool argument against JSON and the advertised input JSON Schema. Never execute unknown, unexposed, malformed, or unauthorized tools.
+- Browser tool approval is derived from the validated operation and arguments. Origin-scoped grants authorize read-oriented navigation, snapshot, screenshot, and scroll behavior only for the current in-memory browser session; they never authorize click, type, upload, or download operations.
+- Navigation and interaction invalidate browser element references. Password, payment-card, one-time-code, hidden, and file fields recognized by input type or autocomplete remain hard-blocked for Agent click/type operations even under Full Access.
+- Optional browser Cookie persistence stores only accepted Cookie snapshots in encrypted `browserProfiles`; never return profiles or Cookie values through IPC. Cache, local storage, history, DOM state, origin grants, and element references remain in memory. Agent uploads and downloads use workspace-relative paths and workspace path checks; manual browser downloads go to the system Downloads directory outside that Agent-only boundary.
 - Skill instructions affect System Instructions and therefore cross a trust boundary. Import and enable only trusted Skills. Reference scripts do not execute automatically.
 
 ## Vault compatibility and destructive operations
@@ -253,6 +259,7 @@ Do not add claims that a model has native web search without explicit capability
 - Automatic BM25 retrieval scores the last user message and injects at most 8 tools with a default minimum score of 0.75. `all` mode exposes all allowed tools. Keep retrieval constants, UI copy, documentation, and tests synchronized.
 - Provider-safe aliases must remain stable and collision-safe. Never expose a model tool name that cannot be mapped back to the original server/tool pair.
 - Approval policies are `always`, `sensitive`, and `full-access`; legacy `never` migrates to Full Access. Approval timeout is five minutes or no timeout.
+- The built-in `agentbox_browser_*` family is an internal tool service, not an external MCP server process. Expose it only when both browser opt-ins are enabled; screenshot, upload, and download tools also require their own settings, and upload/download exposure requires a working directory. Direct exposure adds browser tools beside retrieved MCP tools, while dynamic exposure ranks the combined authorized built-in/MCP catalog.
 - The Agent tool-call loop defaults to 30 rounds and accepts 1 through 100. Reaching the limit must produce a checkpoint rather than silently continuing.
 - Preserve `toolExecutions` and `agentTrace` in protocol-neutral form. Only the last interrupted Assistant message on the active branch may be resumed.
 - Natural commands such as `continue`, `resume`, or supported Chinese equivalents are resume signals only when that checkpoint exists and no attachment or substantive new requirement replaces the task.
@@ -358,4 +365,3 @@ Before handing off a completed change:
 7. Run `pnpm package` and launch the unpacked app for packaging, preload, entry-point, or runtime-dependency changes.
 8. Validate Markdown links, paired filenames, code fences, and trailing whitespace for documentation changes.
 9. Confirm no log, fixture, screenshot, error, or generated file contains credentials or sensitive Vault data.
-

@@ -113,6 +113,9 @@ The main limits are enforced by [`app-repository.ts`](../src/electron/storage/ap
 | Files per skill / content per skill file              |   50 / 500,000 characters |
 | Arguments / environment variables per MCP server      |                  50 / 100 |
 | Each MCP argument or environment-variable value       |          8,192 characters |
+| Cookies per browser profile                           |                     2,000 |
+| Browser Cookie profiles                               |                    10,000 |
+| Serialized browser Cookie profile data                |     10,000,000 characters |
 | Encrypted checkpoint threads / checkpoints per thread |                 256 / 512 |
 | Checkpoint data per thread / complete namespace       |          64 MiB / 256 MiB |
 

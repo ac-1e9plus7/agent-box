@@ -92,6 +92,7 @@ Renderer 创建的 Agent 请求带 `responseMessageId`。Gateway 从 conversatio
 
 - [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts)：图状态与转换路由
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts)：请求回调、checkpoint 选择和事件发送
+- [`src/electron/browser/browser-tool-executor.ts`](../src/electron/browser/browser-tool-executor.ts)：在 graph tool node 调用的 Gateway 工具回调中完成浏览器审批与分发
 - [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts)：LangGraph Saver 适配器
 - [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts)：事件投影与 `agentTrace` 构造
 - [`src/renderer/src/agent-continuation.ts`](../src/renderer/src/agent-continuation.ts)：中断分类与自然恢复指令

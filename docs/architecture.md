@@ -130,6 +130,7 @@ Channel constants are centralized in [`src/shared/ipc.ts`](../src/shared/ipc.ts)
 - [`src/electron/ipc/register-ipc.ts`](../src/electron/ipc/register-ipc.ts): IPC registration, input boundaries, and trusted-sender checks
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts): request orchestration, stream handling, and the Agent tool loop
 - [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts): provider-neutral LangGraph state machine for model, tool, and terminal turns
+- [`src/electron/browser/browser-manager.ts`](../src/electron/browser/browser-manager.ts): isolated browser sessions, tab/view lifecycle, navigation policy, and Cookie snapshots
 - [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts): encrypted `BaseCheckpointSaver` adapter and message snapshot/delta reconstruction
 - [`src/electron/storage/checkpoint-repository.ts`](../src/electron/storage/checkpoint-repository.ts): checkpoint quotas, manifests, lifecycle deletion, and recovery
 - [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts): Vault domain repository and schema validation

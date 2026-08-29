@@ -92,6 +92,7 @@ See [Encrypted LangGraph Checkpoints](./langgraph-checkpoints.md) for storage, q
 
 - [`src/electron/api/agent-runtime.ts`](../src/electron/api/agent-runtime.ts): graph state and transition routing
 - [`src/electron/api/gateway.ts`](../src/electron/api/gateway.ts): request-scoped callbacks, checkpoint selection, and event emission
+- [`src/electron/browser/browser-tool-executor.ts`](../src/electron/browser/browser-tool-executor.ts): browser approval and dispatch inside the Gateway tool callback invoked by the graph's tool node
 - [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts): LangGraph saver adapter
 - [`src/renderer/src/hooks/useChatStream.ts`](../src/renderer/src/hooks/useChatStream.ts): event projection and `agentTrace` construction
 - [`src/renderer/src/agent-continuation.ts`](../src/renderer/src/agent-continuation.ts): interruption classification and natural resume commands
