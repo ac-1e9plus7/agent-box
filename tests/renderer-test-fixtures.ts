@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 import type {
   AgentboxAPI,
   AppSettings,
+  BrowserEvent,
   Conversation,
   McpServerConfig,
   McpToolDefinition,
@@ -120,6 +121,7 @@ export const rendererConversation: Conversation = {
 export interface RendererApiMock {
   api: AgentboxAPI
   emit: (event: StreamEvent) => void
+  emitBrowser: (event: BrowserEvent) => void
   mocks: {
     conversationSave: ReturnType<typeof vi.fn>
     stream: ReturnType<typeof vi.fn>
@@ -144,6 +146,7 @@ export function createRendererApiMock({
   skills?: Skill[]
 } = {}): RendererApiMock {
   let listener: ((event: StreamEvent) => void) | undefined
+  let browserListener: ((event: BrowserEvent) => void) | undefined
   const conversationSave = vi.fn(async (conversation: Conversation) => conversation)
   const stream = vi.fn(async () => ({ requestId: 'request-1' }))
 
@@ -235,12 +238,21 @@ export function createRendererApiMock({
       command: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
       newTab: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
       switchTab: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
-      closeTab: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
+      closeTab: vi.fn(async (conversationId: string) => ({
+        status: 'tab-closed' as const,
+        state: browserState(conversationId, true),
+      })),
       setViewState: vi.fn(async (input: { conversationId: string; visible: boolean }) =>
         browserState(input.conversationId, input.visible),
       ),
-      close: vi.fn(async () => undefined),
-      onEvent: vi.fn(() => () => undefined),
+      close: vi.fn(async () => ({ status: 'session-closed' as const })),
+      cancelPendingClose: vi.fn(async (conversationId: string) => browserState(conversationId, true)),
+      onEvent: vi.fn((nextListener: (event: BrowserEvent) => void) => {
+        browserListener = nextListener
+        return () => {
+          if (browserListener === nextListener) browserListener = undefined
+        }
+      }),
     },
     app: {
       getInfo: vi.fn(async () => ({ name: 'AgentBox', version: '0.1.0', platform: 'win32' })),
@@ -250,6 +262,7 @@ export function createRendererApiMock({
   return {
     api,
     emit: (event) => listener?.(event),
+    emitBrowser: (event) => browserListener?.(event),
     mocks: { conversationSave, stream },
   }
 }

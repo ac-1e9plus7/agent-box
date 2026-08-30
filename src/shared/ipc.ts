@@ -43,6 +43,7 @@ export const IPC_CHANNELS = {
   browserCloseTab: 'browser:close-tab',
   browserSetViewState: 'browser:set-view-state',
   browserClose: 'browser:close',
+  browserCancelPendingClose: 'browser:cancel-pending-close',
   browserEvent: 'browser:event',
   appGetInfo: 'app:get-info',
 } as const

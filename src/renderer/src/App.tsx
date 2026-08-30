@@ -197,8 +197,18 @@ export default function App(): JSX.Element {
     showToast,
   })
 
+  const activeConversationIdRef = useRef(activeConversationId)
+  activeConversationIdRef.current = activeConversationId
+
   const handleBrowserState = useCallback((state: BrowserState): void => {
-    setBrowserStates((current) => ({ ...current, [state.conversationId]: state }))
+    setBrowserStates((current) => {
+      if (state.phase !== 'closing') return { ...current, [state.conversationId]: state }
+      const existing = current[state.conversationId]
+      if (existing && existing.sessionId !== state.sessionId) return current
+      const next = { ...current }
+      delete next[state.conversationId]
+      return next
+    })
   }, [])
 
   useEffect(
@@ -213,15 +223,11 @@ export default function App(): JSX.Element {
           return
         }
         handleBrowserState(event.state)
-        if (
-          event.state.conversationId === activeConversationId &&
-          event.state.url &&
-          event.state.phase === 'navigating'
-        ) {
-          setBrowserPanelOpen(true)
+        if (event.state.conversationId === activeConversationIdRef.current && event.state.phase === 'closing') {
+          setBrowserPanelOpen(false)
         }
       }),
-    [activeConversationId, handleBrowserState, showToast],
+    [handleBrowserState, showToast],
   )
 
   useEffect(() => {
@@ -600,7 +606,6 @@ export default function App(): JSX.Element {
         current.map((item) => (item.id === nextConversation.id ? nextConversation : item)),
       )
       void persistConversation(nextConversation)
-      if (browserToolEnabled) setBrowserPanelOpen(true)
     },
     [activeConversation, persistConversation, replaceConversations, settings.builtInBrowserEnabled],
   )
@@ -1546,6 +1551,7 @@ export default function App(): JSX.Element {
           </div>
           {browserPanelOpen && activeConversation && settings.builtInBrowserEnabled && (
             <BrowserPanel
+              key={activeConversation.id}
               conversationId={activeConversation.id}
               onClosePanel={() => setBrowserPanelOpen(false)}
               onError={showToast}

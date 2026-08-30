@@ -148,6 +148,28 @@ describe('built-in browser tool executor', () => {
     })
   })
 
+  it('reports that closing the final tab closes the browser session', async () => {
+    const manager = managerMock()
+    manager.closeTab.mockResolvedValue(undefined)
+    const executor = new BrowserToolExecutor(manager as unknown as BrowserManager)
+    const tabs = createBrowserTools().find((tool) => tool.name === 'tabs')!
+
+    const result = await executor.execute(
+      'conversation-1',
+      tabs,
+      { action: 'close', tab_id: 'tab-1' },
+      new AbortController().signal,
+    )
+
+    expect(manager.closeTab).toHaveBeenCalledWith('conversation-1', 'tab-1')
+    expect(result.structuredResult).toEqual({
+      action: 'close',
+      active_tab_id: null,
+      tabs: [],
+      session_closed: true,
+    })
+  })
+
   it('dispatches optional screenshot, upload, and download tools with tab and workspace scope', async () => {
     const manager = managerMock()
     manager.screenshot.mockResolvedValue({

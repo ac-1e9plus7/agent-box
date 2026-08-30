@@ -41,6 +41,15 @@ export interface BrowserState {
   activeTabId: string
   tabs: BrowserTabState[]
   error?: string
+  /** True while one or more Agent requests hold a lease on this conversation's browser. */
+  agentActive?: boolean
+  /** True after the user requests a deferred session close during Agent execution. */
+  closePending?: boolean
+}
+
+export interface BrowserCloseResult {
+  status: 'tab-closed' | 'session-closed' | 'deferred' | 'blocked'
+  state?: BrowserState
 }
 
 export interface BrowserDownloadEvent {
@@ -781,9 +790,10 @@ export interface AgentboxAPI {
     command(conversationId: string, command: BrowserCommand, tabId?: string): Promise<BrowserState>
     newTab(conversationId: string, url?: string): Promise<BrowserState>
     switchTab(conversationId: string, tabId: string): Promise<BrowserState>
-    closeTab(conversationId: string, tabId: string): Promise<BrowserState>
+    closeTab(conversationId: string, tabId: string): Promise<BrowserCloseResult>
     setViewState(input: { conversationId: string; visible: boolean; bounds: BrowserViewBounds }): Promise<BrowserState>
-    close(conversationId: string): Promise<void>
+    close(conversationId: string): Promise<BrowserCloseResult>
+    cancelPendingClose(conversationId: string): Promise<BrowserState | undefined>
     onEvent(listener: (event: BrowserEvent) => void): () => void
   }
   app: {

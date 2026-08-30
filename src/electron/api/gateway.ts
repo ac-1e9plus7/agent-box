@@ -190,6 +190,7 @@ export class ChatGateway {
     const controller = new AbortController()
     let requestSecret: string | undefined
     let activeCheckpoint: { saver: AgentBoxCheckpointSaver; threadId: string; hasTraceFallback: boolean } | undefined
+    let browserLeaseActive = false
     const citationState = createCitationEmissionState()
     this.controllers.set(requestId, controller)
     emit({ type: 'start', requestId })
@@ -234,6 +235,15 @@ export class ChatGateway {
       const format = model.apiFormat ?? provider.apiFormat
       const maxOutputTokens = Math.min(request.maxOutputTokens ?? model.maxOutputTokens, model.maxOutputTokens)
       const isAgentMode = Boolean(request.agentMode)
+      const browserToolsEnabled =
+        isAgentMode &&
+        request.browserToolEnabled === true &&
+        settings.builtInBrowserEnabled &&
+        Boolean(this.browserToolExecutor)
+      if (browserToolsEnabled) {
+        this.browserToolExecutor!.beginRequest(request.conversationId, requestId)
+        browserLeaseActive = true
+      }
       const providerContextMode = isAgentMode ? settings.agentProviderContextOptimizationMode : 'off'
       const providerPromptCacheKey = buildProviderPromptCacheKey(request.conversationId, provider.id, model.remoteId)
       const disabledProviderContextStrategies = new Set<ProviderContextStrategy>()
@@ -292,7 +302,7 @@ export class ChatGateway {
           createTerminalRunnerTool(),
           ...(toolResultCompactionEnabled ? [createToolResultReaderTool()] : []),
           ...(lazySkillResourcesEnabled ? [createSkillResourceReaderTool()] : []),
-          ...(request.browserToolEnabled === true && settings.builtInBrowserEnabled && this.browserToolExecutor
+          ...(browserToolsEnabled && this.browserToolExecutor
             ? createBrowserTools({
                 screenshotsEnabled: settings.browserAgentScreenshotsEnabled,
                 uploadsEnabled: settings.browserFileUploadsEnabled && Boolean(workingDirectory),
@@ -1485,6 +1495,11 @@ export class ChatGateway {
     } finally {
       clearTimeout(stallTimer)
       this.resolvePendingApprovals(requestId)
+      if (browserLeaseActive && this.browserToolExecutor) {
+        await this.browserToolExecutor.endRequest(request.conversationId, requestId).catch(() => {
+          console.warn('Unable to release the Agent browser lease cleanly.')
+        })
+      }
       this.controllers.delete(requestId)
     }
   }

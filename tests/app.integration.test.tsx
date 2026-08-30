@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from '../src/renderer/src/App'
 import { createRendererApiMock, rendererConversation, rendererSettings } from './renderer-test-fixtures'
@@ -15,7 +15,7 @@ describe('App renderer integration', () => {
   })
 
   afterEach(() => {
-    document.body.innerHTML = ''
+    cleanup()
     vi.restoreAllMocks()
   })
 
@@ -45,7 +45,7 @@ describe('App renderer integration', () => {
 
     render(<App />)
     await screen.findByLabelText('消息输入框')
-    fireEvent.keyDown(window, { key: 'n', ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: /^新建对话/ }))
 
     const useDefault = await screen.findByRole('button', { name: /使用默认工作目录/ })
     expect(useDefault.getAttribute('aria-label')).toContain('.default-agent-box-workspace')
@@ -58,7 +58,7 @@ describe('App renderer integration', () => {
     })
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '新建对话' })).toBeNull())
 
-    fireEvent.keyDown(window, { key: 'n', ctrlKey: true })
+    fireEvent.click(screen.getByRole('button', { name: /^新建对话/ }))
     expect(await screen.findByRole('dialog', { name: '新建对话' })).toBeTruthy()
   })
 
@@ -157,11 +157,12 @@ describe('App renderer integration', () => {
     expect(document.querySelector('.assistant-message .message-body br')).not.toBeNull()
   })
 
-  it('persists the per-conversation browser tool opt-in independently of manual browsing', async () => {
+  it('keeps the browser tool opt-in in the background until the top-bar Browser button is used', async () => {
     const bridge = createRendererApiMock({
       conversations: [{ ...rendererConversation, agentMode: true }],
       settings: { ...rendererSettings, builtInBrowserEnabled: true },
     })
+    const browserEnsure = vi.spyOn(bridge.api.browser, 'ensure')
     Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
 
     render(<App />)
@@ -170,5 +171,77 @@ describe('App renderer integration', () => {
     await waitFor(() => {
       expect(bridge.mocks.conversationSave).toHaveBeenCalledWith(expect.objectContaining({ browserToolEnabled: true }))
     })
+
+    expect(screen.queryByRole('complementary', { name: '内置浏览器' })).toBeNull()
+    expect(browserEnsure).not.toHaveBeenCalled()
+
+    await act(async () => {
+      bridge.emitBrowser({
+        type: 'state',
+        state: {
+          conversationId: rendererConversation.id,
+          sessionId: 'background-browser',
+          phase: 'navigating',
+          url: 'https://example.com/',
+          title: 'Background page',
+          loading: true,
+          visible: false,
+          canGoBack: false,
+          canGoForward: false,
+          activeTabId: 'background-tab',
+          tabs: [
+            {
+              id: 'background-tab',
+              url: 'https://example.com/',
+              title: 'Background page',
+              loading: true,
+              canGoBack: false,
+              canGoForward: false,
+            },
+          ],
+        },
+      })
+    })
+
+    expect(screen.queryByRole('complementary', { name: '内置浏览器' })).toBeNull()
+    expect(browserEnsure).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: '浏览器' }))
+    expect(await screen.findByRole('complementary', { name: '内置浏览器' })).toBeTruthy()
+    await waitFor(() => expect(browserEnsure).toHaveBeenCalledWith(rendererConversation.id))
+
+    await act(async () => {
+      bridge.emitBrowser({
+        type: 'state',
+        state: {
+          conversationId: rendererConversation.id,
+          sessionId: 'background-browser',
+          phase: 'closing',
+          url: 'https://example.com/',
+          title: 'Background page',
+          loading: false,
+          visible: false,
+          canGoBack: false,
+          canGoForward: false,
+          activeTabId: 'background-tab',
+          tabs: [
+            {
+              id: 'background-tab',
+              url: 'https://example.com/',
+              title: 'Background page',
+              loading: false,
+              canGoBack: false,
+              canGoForward: false,
+            },
+          ],
+        },
+      })
+    })
+
+    expect(screen.queryByRole('complementary', { name: '内置浏览器' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '浏览器' }))
+    expect(await screen.findByRole('complementary', { name: '内置浏览器' })).toBeTruthy()
+    expect(screen.queryByText('Background page')).toBeNull()
   })
 })

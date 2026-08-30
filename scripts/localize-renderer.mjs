@@ -71,6 +71,13 @@ const reviewedZh = {
   'Allow this site for this session': '本次会话允许此站点',
   'Browser tools on': '浏览器工具已开启',
   'Browser tools off': '浏览器工具已关闭',
+  'Browser will close when the Agent finishes': 'Agent 执行结束后将关闭浏览器',
+  'The current browser session remains available to the active Agent until then.':
+    '在此之前，当前浏览器会话仍可供正在运行的 Agent 使用。',
+  'Keep browser open': '保持浏览器打开',
+  'Tabs cannot be closed while the Agent is running.': 'Agent 运行期间不能关闭单独的浏览器标签页。',
+  'The Agent is using this browser. Wait for the run to finish before closing individual tabs.':
+    'Agent 正在使用此浏览器，请等待本次执行结束后再关闭单独的标签页。',
   'Browser tabs': '浏览器标签页',
   'New browser tab': '新建浏览器标签页',
   'Close browser tab': '关闭浏览器标签页',

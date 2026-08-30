@@ -307,7 +307,7 @@ export function registerIpcHandlers(
   register(IPC_CHANNELS.browserCloseTab, (_event, conversationId: string, tabId: string) => {
     assertId(conversationId)
     assertId(tabId)
-    return browserManager.closeTab(conversationId, tabId)
+    return browserManager.requestCloseTab(conversationId, tabId)
   })
   register(IPC_CHANNELS.browserSetViewState, (_event, input: unknown) => {
     assertRecord(input, t('Browser view state'))
@@ -333,7 +333,11 @@ export function registerIpcHandlers(
   })
   register(IPC_CHANNELS.browserClose, (_event, conversationId: string) => {
     assertId(conversationId)
-    return browserManager.close(conversationId)
+    return browserManager.requestClose(conversationId)
+  })
+  register(IPC_CHANNELS.browserCancelPendingClose, (_event, conversationId: string) => {
+    assertId(conversationId)
+    return browserManager.cancelPendingClose(conversationId)
   })
 
   register(IPC_CHANNELS.appGetInfo, () => ({

@@ -1,5 +1,6 @@
 import type {
   BrowserApprovalScope,
+  BrowserState,
   McpToolResultContent,
   McpToolApprovalPolicy,
   McpToolDefinition,
@@ -40,6 +41,14 @@ export interface BrowserToolExecutionResult {
 
 export class BrowserToolExecutor {
   constructor(private readonly manager: BrowserManager) {}
+
+  beginRequest(conversationId: string, requestId: string): void {
+    this.manager.beginAgentUse(conversationId, requestId)
+  }
+
+  endRequest(conversationId: string, requestId: string): Promise<void> {
+    return this.manager.endAgentUse(conversationId, requestId)
+  }
 
   canHandle(tool: McpToolDefinition): boolean {
     return tool.serverId === BROWSER_SERVER_ID
@@ -177,7 +186,7 @@ export class BrowserToolExecutor {
     const tabId = typeof args.tab_id === 'string' ? args.tab_id : undefined
     if (tool.name === BROWSER_TABS_TOOL_NAME) {
       const action = String(args.action || 'list')
-      let state
+      let state: BrowserState | undefined
       if (action === 'new') {
         state = await this.manager.newTab(conversationId, typeof args.url === 'string' ? args.url : undefined)
       } else if (action === 'switch') {
@@ -189,8 +198,10 @@ export class BrowserToolExecutor {
       }
       const result = {
         action,
-        active_tab_id: state.activeTabId,
-        tabs: state.tabs.map((tab) => ({ tab_id: tab.id, title: tab.title, url: tab.url, loading: tab.loading })),
+        active_tab_id: state?.activeTabId ?? null,
+        tabs:
+          state?.tabs.map((tab) => ({ tab_id: tab.id, title: tab.title, url: tab.url, loading: tab.loading })) ?? [],
+        ...(action === 'close' ? { session_closed: state === undefined } : {}),
       }
       return { result: JSON.stringify(result), structuredResult: result }
     }

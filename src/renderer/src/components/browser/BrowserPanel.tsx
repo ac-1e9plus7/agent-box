@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, JSX } from 'react'
-import type { BrowserCommand, BrowserState } from '../../../../shared/types'
+import type { BrowserCloseResult, BrowserCommand, BrowserState } from '../../../../shared/types'
 import { t } from '../../../../shared/i18n'
 import { Icon } from '../Icon'
 
@@ -22,8 +22,18 @@ export function BrowserPanel({
   onError,
 }: BrowserPanelProps): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null)
+  const currentConversationRef = useRef(conversationId)
   const [address, setAddress] = useState(state?.url ?? '')
   const [editingAddress, setEditingAddress] = useState(false)
+
+  useEffect(() => {
+    currentConversationRef.current = conversationId
+    return () => {
+      if (currentConversationRef.current === conversationId) currentConversationRef.current = ''
+    }
+  }, [conversationId])
+
+  const isCurrentConversation = (): boolean => currentConversationRef.current === conversationId
 
   useEffect(() => {
     if (!editingAddress) setAddress(state?.url ?? '')
@@ -36,7 +46,9 @@ export function BrowserPanel({
       .then((next) => {
         if (!disposed) onState(next)
       })
-      .catch((error) => onError(error instanceof Error ? error.message : String(error)))
+      .catch((error) => {
+        if (!disposed) onError(error instanceof Error ? error.message : String(error))
+      })
     return () => {
       disposed = true
     }
@@ -45,6 +57,7 @@ export function BrowserPanel({
   useEffect(() => {
     const viewport = viewportRef.current
     if (!viewport) return
+    let disposed = false
     let frame: number | undefined
     const syncBounds = (): void => {
       if (frame !== undefined) window.cancelAnimationFrame(frame)
@@ -56,8 +69,12 @@ export function BrowserPanel({
             visible: viewVisible && rect.width > 0 && rect.height > 0,
             bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
           })
-          .then(onState)
-          .catch((error) => onError(error instanceof Error ? error.message : String(error)))
+          .then((next) => {
+            if (!disposed) onState(next)
+          })
+          .catch((error) => {
+            if (!disposed) onError(error instanceof Error ? error.message : String(error))
+          })
       })
     }
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(syncBounds)
@@ -65,6 +82,7 @@ export function BrowserPanel({
     window.addEventListener('resize', syncBounds)
     syncBounds()
     return () => {
+      disposed = true
       observer?.disconnect()
       window.removeEventListener('resize', syncBounds)
       if (frame !== undefined) window.cancelAnimationFrame(frame)
@@ -89,18 +107,48 @@ export function BrowserPanel({
         /^[a-z][a-z0-9+.-]*:/i.test(target) ? target : `https://${target}`,
         state?.activeTabId,
       )
-      onState(next)
-      setEditingAddress(false)
+      if (isCurrentConversation()) {
+        onState(next)
+        setEditingAddress(false)
+      }
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error))
+      if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
     }
   }
 
   const command = async (value: BrowserCommand): Promise<void> => {
     try {
-      onState(await window.agentbox.browser.command(conversationId, value, state?.activeTabId))
+      const next = await window.agentbox.browser.command(conversationId, value, state?.activeTabId)
+      if (isCurrentConversation()) onState(next)
     } catch (error) {
-      onError(error instanceof Error ? error.message : String(error))
+      if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const applyCloseResult = (result: BrowserCloseResult): void => {
+    if (!isCurrentConversation()) return
+    if (result.state) onState(result.state)
+    if (result.status === 'session-closed') onClosePanel()
+    if (result.status === 'blocked') {
+      onError(t('The Agent is using this browser. Wait for the run to finish before closing individual tabs.'))
+    }
+  }
+
+  const closeSession = async (): Promise<void> => {
+    try {
+      applyCloseResult(await window.agentbox.browser.close(conversationId))
+    } catch (error) {
+      if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const cancelPendingClose = async (): Promise<void> => {
+    try {
+      const next = await window.agentbox.browser.cancelPendingClose(conversationId)
+      if (next) onState(next)
+      else onClosePanel()
+    } catch (error) {
+      if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -110,30 +158,46 @@ export function BrowserPanel({
         {state?.tabs.map((tab) => (
           <div className={`browser-tab ${tab.id === state.activeTabId ? 'is-active' : ''}`} key={tab.id}>
             <button
+              aria-busy={tab.loading || undefined}
               aria-selected={tab.id === state.activeTabId}
+              className="browser-tab-main"
               onClick={() => {
                 void window.agentbox.browser
                   .switchTab(conversationId, tab.id)
-                  .then(onState)
+                  .then((next) => {
+                    if (isCurrentConversation()) onState(next)
+                  })
                   .catch((error) => {
-                    onError(error instanceof Error ? error.message : String(error))
+                    if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
                   })
               }}
               role="tab"
+              title={tab.title || tab.url || t('New tab')}
               type="button"
             >
-              <span>{tab.title || tab.url || t('New tab')}</span>
+              <span className="browser-tab-site-icon">
+                <Icon name="globe" size={11} />
+              </span>
+              <span className="browser-tab-title">{tab.title || tab.url || t('New tab')}</span>
+              {tab.loading && <span aria-hidden="true" className="browser-tab-loading" />}
             </button>
             <button
               aria-label={t('Close browser tab')}
+              className="browser-tab-close"
+              disabled={Boolean(state?.agentActive && state.tabs.length > 1)}
               onClick={() => {
                 void window.agentbox.browser
                   .closeTab(conversationId, tab.id)
-                  .then(onState)
+                  .then(applyCloseResult)
                   .catch((error) => {
-                    onError(error instanceof Error ? error.message : String(error))
+                    if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
                   })
               }}
+              title={
+                state?.agentActive && state.tabs.length > 1
+                  ? t('Tabs cannot be closed while the Agent is running.')
+                  : t('Close browser tab')
+              }
               type="button"
             >
               <Icon name="close" size={11} />
@@ -146,9 +210,11 @@ export function BrowserPanel({
           onClick={() => {
             void window.agentbox.browser
               .newTab(conversationId)
-              .then(onState)
+              .then((next) => {
+                if (isCurrentConversation()) onState(next)
+              })
               .catch((error) => {
-                onError(error instanceof Error ? error.message : String(error))
+                if (isCurrentConversation()) onError(error instanceof Error ? error.message : String(error))
               })
           }}
           type="button"
@@ -198,10 +264,7 @@ export function BrowserPanel({
         <button
           aria-label={t('Close browser session')}
           className="icon-button"
-          onClick={() => {
-            void window.agentbox.browser.close(conversationId).catch(() => undefined)
-            onClosePanel()
-          }}
+          onClick={() => void closeSession()}
           type="button"
         >
           <Icon name="trash" size={15} />
@@ -210,6 +273,18 @@ export function BrowserPanel({
           <Icon name="close" size={16} />
         </button>
       </div>
+      {state?.closePending && (
+        <div className="browser-close-pending" role="status">
+          <Icon name="shield" size={15} />
+          <span>
+            <strong>{t('Browser will close when the Agent finishes')}</strong>
+            <small>{t('The current browser session remains available to the active Agent until then.')}</small>
+          </span>
+          <button onClick={() => void cancelPendingClose()} type="button">
+            {t('Keep browser open')}
+          </button>
+        </div>
+      )}
       <div className="browser-status-line">
         <span>{state?.title || t('Temporary isolated browser session')}</span>
         {state?.error && <em>{state.error}</em>}

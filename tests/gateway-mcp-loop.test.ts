@@ -673,7 +673,11 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       result: '{"action":"navigate","url":"https://example.com/"}',
       structuredResult: { action: 'navigate', url: 'https://example.com/' },
     }))
+    const beginBrowserRequest = vi.fn()
+    const endBrowserRequest = vi.fn(async () => undefined)
     const browserExecutor = {
+      beginRequest: beginBrowserRequest,
+      endRequest: endBrowserRequest,
       canHandle: (tool: { serverId: string }) => tool.serverId === 'agentbox-browser',
       sanitizeArguments: (_tool: unknown, args: Record<string, unknown>) => args,
       approvalFor: () => ({ required: false, riskLevel: 'sensitive' as const, reason: 'Full Access' }),
@@ -715,6 +719,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
     )
 
     expect(JSON.stringify(requestBodies[0])).toContain('agentbox_browser_navigate')
+    expect(beginBrowserRequest).toHaveBeenCalledWith('conversation-browser', 'req-browser')
     expect(executeBrowser).toHaveBeenCalledWith(
       'conversation-browser',
       expect.objectContaining({ serverId: 'agentbox-browser', name: 'navigate' }),
@@ -723,6 +728,7 @@ describe('ChatGateway Multi-turn MCP Tool Loop', () => {
       undefined,
     )
     expect(events).toContainEqual(expect.objectContaining({ type: 'done' }))
+    expect(endBrowserRequest).toHaveBeenCalledWith('conversation-browser', 'req-browser')
   })
 
   it('executes approved built-in JavaScript and returns the real result to the model', async () => {

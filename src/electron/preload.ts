@@ -116,6 +116,8 @@ const agentboxApi: AgentboxAPI = {
       ipcRenderer.invoke(IPC_CHANNELS.browserCloseTab, conversationId, tabId),
     setViewState: (input) => ipcRenderer.invoke(IPC_CHANNELS.browserSetViewState, input),
     close: (conversationId: string) => ipcRenderer.invoke(IPC_CHANNELS.browserClose, conversationId),
+    cancelPendingClose: (conversationId: string) =>
+      ipcRenderer.invoke(IPC_CHANNELS.browserCancelPendingClose, conversationId),
     onEvent: (listener: (event: BrowserEvent) => void) => {
       browserListeners.add(listener)
       return () => browserListeners.delete(listener)
