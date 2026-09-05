@@ -26,6 +26,28 @@
 - **推理、用量、上下文复用与联网搜索：** 归一化支持服务方的推理输出和逐模型请求 token 用量，包括 cached-input 与 cache-write 计数。可选的 Agent 上下文复用支持稳定前缀缓存、Responses 原生续接和兼容性降级。OpenRouter 联网搜索使用 `openrouter:web_search` 服务器工具，支持自动或服务方原生搜索和结构化引用。
 - **英文与简体中文 UI：** Renderer 和 Electron 主进程共用语言资源。首次启动时，中文系统 locale 默认使用简体中文，其他 locale 默认使用英文；用户选择会保存在加密设置中。
 
+## 功能演示
+
+以下截图来自实际运行的 Electron 应用，使用简体中文界面。
+
+### Agent 模式与内置浏览器
+
+Agent 打开 Electron 官网、读取页面快照并总结内容。分栏界面同时展示实时网页、已完成的 `navigate` 和 `snapshot` 工具调用、激活的 Skills，以及 token 用量。
+
+![Agent 模式下完成浏览器导航和页面快照，右侧显示 Electron 官网](./pics/agent-browser.jpg)
+
+### Agent Skills
+
+浏览内置技能、查看技能文件，并管理 ZIP 导入与导出。
+
+![Agent Skills 管理界面：内置技能卡片与文件概览](./pics/agent-skills.jpg)
+
+### 模型配置
+
+选择服务商与 API 格式，并为各模型配置客户端上下文和输出预算。
+
+![模型设置界面：服务商选择、API 格式和 token 预算](./pics/model-settings.jpg)
+
 ## 技术文档
 
 中文文档位于 [`docs_zh/`](./docs_zh/README.md)，对应的英文文档位于 [`docs/`](./docs/README.md)。
