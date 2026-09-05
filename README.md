@@ -28,25 +28,25 @@
 
 ## Screenshots
 
-Captured from the running Electron application with the Simplified Chinese UI.
+Captured from the running Electron application with the English UI.
 
 ### Agent mode with the built-in browser
 
 The Agent opens the Electron website, reads a page snapshot, and summarizes its findings. The split view shows the live page alongside completed `navigate` and `snapshot` tool calls, activated Skills, and token usage.
 
-![Agent mode with completed browser navigation and snapshot tools beside the Electron website](./pics/agent-browser.jpg)
+![Agent mode with completed browser navigation and snapshot tools beside the Electron website](./pics/agent-browser-en.jpg)
 
 ### Agent Skills
 
 Browse built-in Skills, inspect their files, and manage ZIP imports and exports.
 
-![Agent Skills management with built-in skill cards and file summaries](./pics/agent-skills.jpg)
+![Agent Skills management with built-in skill cards and file summaries](./pics/agent-skills-en.jpg)
 
 ### Model configuration
 
 Select a provider and API format, and configure each model's client-side context and output budgets.
 
-![Model settings with provider selection, API format, and token budgets](./pics/model-settings.jpg)
+![Model settings with provider selection, API format, and token budgets](./pics/model-settings-en.jpg)
 
 ## Technical documentation
 
