@@ -171,3 +171,7 @@ workspaces/workspace-0001/            # 仅深备份存在
 ```
 
 当前清单标识为 `format: "agentbox-backup"`、`formatVersion: 1`；其 `encryption.method` 明确记录 `none` 或 `WinZip AES-256 (AE-2)`。
+
+## data-plat
+
+Vault 新增只返回遮罩的 dataPlat 登录配置和有界 dataPlatOperations 恢复日志。日志只含执行引用，派发前写入，随会话清理；派生消息保留 governedData 标记。详见 [data-plat 集成](data-plat-integration.md)。

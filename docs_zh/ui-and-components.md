@@ -83,3 +83,7 @@ Agent 回复因取消、限流、网络/API 错误、输出上限或工具轮次
 | “按 Enter 发送”关闭 | `Ctrl/Cmd + Enter` | `Enter` 或 `Shift + Enter`                             |
 
 输入框工具栏还承载 Agent 模式、Skills 路由、可用 MCP server、reasoning、web search 与上下文预算状态。上下文超限时，发送会被阻止，或在允许的情况下提供“本次裁剪并发送”。应用级 `Ctrl/Cmd + N` 打开新对话面板。
+
+## data-plat
+
+DataPlatFields 在 Remote HTTP MCP 设置中提供 API 地址、Agent ID 和密码字段；data-plat-context 事件为派生消息保存 governedData 标记。审批卡显示实际服务端计划和有效参数。详见 [data-plat 集成](data-plat-integration.md)。

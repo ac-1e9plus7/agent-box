@@ -182,3 +182,7 @@ Repository 初始化时：
 - `tests/checkpoint-lifecycle.test.ts`：分支、会话和清除全部删除
 - `tests/gateway-mcp-loop.test.ts`：durable provider 失败恢复和过期 digest 回退
 - `tests/langgraph-agent-runtime.test.ts`：图行为与环境 tracing 隔离
+
+## data-plat
+
+data-plat 受治理请求不写入或恢复带旧数据的图 checkpoint；已有本地历史仍可显示，后续模型输入重新构造。详见 [data-plat 集成](data-plat-integration.md)。

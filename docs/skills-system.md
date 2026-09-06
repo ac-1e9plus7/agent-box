@@ -104,3 +104,7 @@ The Gateway exposes the built-in code runner whenever at least one enabled Skill
 - The terminal starts in the conversation directory, but it is not directory-sandboxed. Prefer the boundary-enforced workspace file tools when creating source code or multiline text.
 
 See [Conversation Working Directories and Developer Runtimes](workspaces-and-runtimes.md) for runtime and path rules, and [MCP Integration and Intelligent Tool Retrieval](mcp-integration.md) for the shared approval policy.
+
+## data-plat
+
+The companion data skills package ships stable-ID JSON bundles and individual ZIPs. Its planning report entry excludes execution. Skills alone do not grant platform authentication or confirmation. See [data-plat integration](data-plat-integration.md).

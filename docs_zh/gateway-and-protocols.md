@@ -169,3 +169,7 @@ Agent 提供四项可独立开启的 token 优化，为了兼容性均默认关�
 - 单个 SSE event 或未换行数据行最多 5,242,880 个字符。超过限制会终止解析，避免不受信任的供应商响应无限占用内存。
 
 关键安全逻辑见 [`provider-policy.ts`](../src/electron/api/provider-policy.ts)、[`sse.ts`](../src/electron/api/sse.ts)、[`tool-policy.ts`](../src/electron/mcp/tool-policy.ts) 和 [`context-window.ts`](../src/electron/api/context-window.ts)。
+
+## data-plat
+
+受治理数据会话从用户消息和重新授权的执行引用重建模型输入，排除旧 assistant 派生内容、图 checkpoint 和 provider continuation。Full Access 仍要求精确执行确认。详见 [data-plat 集成](data-plat-integration.md)。

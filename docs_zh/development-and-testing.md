@@ -77,3 +77,11 @@ pnpm build
 每个发布 job 安装 pnpm 11.24.0、Node.js 24 和冻结锁文件依赖，运行 `pnpm check` 与 `pnpm build`，再执行 `electron-builder --publish never`，最后把 `release/*.exe`、`release/*.dmg` 和 `release/*.AppImage` 上传为 GitHub Actions artifact。矩阵已禁用 fail-fast，因此一个平台失败时不会掩盖其他平台的执行结果。
 
 版本 tag 推送的所有平台构建成功后，publish job 会下载构建 artifact，为文件名补充平台和架构后缀以避免冲突，并创建或更新对应的 GitHub Release、上传打包产物。手动 `workflow_dispatch` 只生成构建 artifact，不发布 Release。
+
+## data-plat
+
+data-plat-* 测试覆盖 Schema 方言、加密配置、精确确认、执行恢复、UI 标记及实际 SDK 的本地 HTTP 链路，纳入 pnpm check。配套技能包和平台隔离测试另行运行。详见 [data-plat 集成](data-plat-integration.md)。
+
+## 显式 Python 运行时验证
+
+将 `AGENTBOX_TEST_PYTHON` 设置为真实 Python 3 解释器路径，运行 `pnpm exec vitest run tests/python-runtime-live.test.ts`。验证结构化 `input_data` 计算、文件/模块访问拒绝及超时终止。未设置变量时跳过这三个可选真实运行用例；CI 可以指定其已安装 Python。Windows 运行器等待进程及标准流关闭后才删除临时目录，并对短暂文件锁做有界重试。

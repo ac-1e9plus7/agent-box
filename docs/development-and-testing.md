@@ -77,3 +77,11 @@ The [quality workflow](../.github/workflows/quality.yml) runs `pnpm check` for b
 Each release job installs pnpm 11.24.0 and Node.js 24, installs dependencies with the frozen lockfile, runs `pnpm check` and `pnpm build`, invokes `electron-builder --publish never`, and uploads `release/*.exe`, `release/*.dmg`, and `release/*.AppImage` as GitHub Actions artifacts. Matrix fail-fast is disabled so one platform failure does not hide results from the others.
 
 After every platform succeeds for a pushed version tag, the publish job downloads the build artifacts, adds platform and architecture suffixes to avoid filename collisions, and creates or updates the matching GitHub Release with the packaged assets. Manual `workflow_dispatch` runs build artifacts only and do not publish a Release.
+
+## data-plat
+
+The data-plat-* suites cover schema dialects, encrypted configuration, exact approval, operation recovery, UI markers, and actual SDK HTTP transport against a local fixture. Run them as part of pnpm check. Companion package/platform integration tests remain separate. See [data-plat integration](data-plat-integration.md).
+
+## Explicit Python runtime verification
+
+Set `AGENTBOX_TEST_PYTHON` to a real Python 3 executable and run `pnpm exec vitest run tests/python-runtime-live.test.ts`. It verifies structured `input_data` calculations, blocked file/module access, and timeout termination. Without this variable the three optional live cases are skipped; CI can set it to its installed Python path. On Windows the runner waits for process/stdio closure before deleting its temporary directory, with bounded retries for transient file locks.

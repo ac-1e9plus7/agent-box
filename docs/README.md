@@ -27,3 +27,5 @@ This documentation set describes AgentBox's current design, boundaries, and main
 3. **Protect local data:** The Vault uses AES-256-GCM and wraps its data key with OS secure storage. Never fall back to plaintext when secure storage is unavailable.
 4. **Enforce workspace boundaries:** Agent file and execution tools operate only under a conversation's absolute working directory and reject symbolic-link escapes.
 5. **Keep both languages synchronized:** The root READMEs, both documentation indexes, and all module documents have language counterparts. Product-copy changes also require synchronized resource bundles and localization tests.
+
+- [data-plat integration](data-plat-integration.md): governed authentication, exact execution confirmation, and data history.

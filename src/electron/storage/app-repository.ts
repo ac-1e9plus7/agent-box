@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { parseDataPlatOperations, type DataPlatOperation } from '../mcp/data-plat-state'
 import { isAbsolute, normalize } from 'node:path'
 import type {
   AgentInterruption,
@@ -66,6 +67,7 @@ export interface VaultState {
   conversations: Conversation[]
   skills?: Skill[]
   mcpServers?: McpServerConfig[]
+  dataPlatOperations?: DataPlatOperation[]
   browserProfiles?: BrowserCookieProfile[]
 }
 
@@ -471,6 +473,23 @@ export class AppRepository {
     })
   }
 
+  listDataPlatOperations(conversationId: string): DataPlatOperation[] {
+    return structuredClone(
+      (this.store.read().dataPlatOperations ?? []).filter((op) => op.conversationId === conversationId),
+    )
+  }
+
+  async recordDataPlatOperation(operation: DataPlatOperation): Promise<void> {
+    const [validated] = parseDataPlatOperations([operation])
+    if (!validated) throw new Error('Invalid data-plat operation')
+    await this.store.mutate((draft) => {
+      const current = (draft.dataPlatOperations ?? []).filter((op) => Date.parse(op.createdAt) > Date.now() - 86400000)
+      if (current.some((op) => op.key === validated.key)) throw new Error('Data-plat operation already recorded')
+      if (current.length >= 1000) throw new Error('Data-plat operation journal is full')
+      draft.dataPlatOperations = [...current, validated]
+    })
+  }
+
   listMcpServers(): McpServerConfig[] {
     return (this.store.read().mcpServers ?? []).map((s) => structuredClone(s))
   }
@@ -504,6 +523,7 @@ export class AppRepository {
         env: resolvedInput.env,
         url: resolvedInput.url?.trim() || undefined,
         headers: resolvedInput.headers,
+        dataPlat: resolvedInput.dataPlat ?? undefined,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
       }
@@ -557,6 +577,9 @@ export class AppRepository {
     const validated = validateConversation(structuredClone(conversation))
     const existingConversation = this.getConversation(validated.id)
     const previousById = new Map(existingConversation?.messages.map((message) => [message.id, message]))
+    for (const message of validated.messages) {
+      if (previousById.get(message.id)?.governedData) message.governedData = true
+    }
     if (existingConversation) {
       const nextMessageIds = new Set(validated.messages.map((message) => message.id))
       const removedAssistantIds = existingConversation.messages
@@ -613,6 +636,7 @@ export class AppRepository {
       })
     return this.store.mutate((draft) => {
       draft.conversations = draft.conversations.filter((conversation) => conversation.id !== id)
+      draft.dataPlatOperations = (draft.dataPlatOperations ?? []).filter((operation) => operation.conversationId !== id)
       draft.browserProfiles = (draft.browserProfiles ?? []).filter((profile) => profile.conversationId !== id)
     })
   }
@@ -631,6 +655,7 @@ export class AppRepository {
       })
     return this.store.mutate((draft) => {
       draft.conversations = []
+      draft.dataPlatOperations = []
       draft.browserProfiles = []
     })
   }
@@ -760,6 +785,7 @@ function validateVault(value: unknown, fallbackLanguage: AppLanguage): VaultStat
     conversations,
     skills,
     mcpServers,
+    dataPlatOperations: parseDataPlatOperations(value.dataPlatOperations),
     browserProfiles,
   }
 }
@@ -1034,6 +1060,29 @@ function validateMcpServer(value: unknown): McpServerConfig {
     }
   }
 
+  let dataPlat: McpServerConfig['dataPlat']
+  if (value.dataPlat !== undefined && value.dataPlat !== null) {
+    if (transport !== 'http' || !isRecord(value.dataPlat)) throw new Error('Data-plat requires HTTP transport')
+    requireNonEmptyString(value.dataPlat.apiBaseUrl, 'data-plat API base URL', 2000)
+    requireNonEmptyString(value.dataPlat.agentId, 'data-plat Agent ID', 128)
+    requireNonEmptyString(value.dataPlat.loginToken, 'data-plat login token', 16384)
+    const api = new URL(value.dataPlat.apiBaseUrl)
+    if (
+      api.username ||
+      api.password ||
+      api.search ||
+      api.hash ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value.dataPlat.agentId) ||
+      /[\r\n]/.test(value.dataPlat.loginToken)
+    )
+      throw new Error('Invalid data-plat configuration')
+    dataPlat = {
+      apiBaseUrl: normalizeBaseUrl(value.dataPlat.apiBaseUrl),
+      agentId: value.dataPlat.agentId.toLowerCase(),
+      loginToken: value.dataPlat.loginToken,
+    }
+  }
+
   requireIsoDate(value.createdAt, 'mcp server createdAt')
   requireIsoDate(value.updatedAt, 'mcp server updatedAt')
 
@@ -1048,6 +1097,7 @@ function validateMcpServer(value: unknown): McpServerConfig {
     env,
     url,
     headers,
+    dataPlat,
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
   }
@@ -1476,6 +1526,7 @@ function validateConversation(value: unknown): Conversation {
     return {
       id: message.id,
       role: message.role,
+      governedData: message.governedData === true || undefined,
       content: message.content,
       parentMessageId,
       reasoning: message.reasoning,
@@ -1667,6 +1718,18 @@ function resolveMcpInputSecrets(input: McpServerInput, existing?: McpServerConfi
   }
   return {
     ...input,
+    dataPlat:
+      input.dataPlat === null
+        ? null
+        : input.dataPlat === undefined
+          ? existing?.dataPlat
+          : {
+              ...input.dataPlat,
+              loginToken:
+                input.dataPlat.loginToken === MCP_SECRET_MASK
+                  ? (existing?.dataPlat?.loginToken ?? '')
+                  : input.dataPlat.loginToken,
+            },
     env: mergeMasked(input.env, existing?.env, input.clearEnv),
     headers: mergeMasked(input.headers, existing?.headers, input.clearHeaders),
   }
@@ -1677,6 +1740,7 @@ function maskMcpServerSecrets(server: McpServerConfig): McpServerConfig {
     value ? Object.fromEntries(Object.keys(value).map((key) => [key, MCP_SECRET_MASK])) : undefined
   return {
     ...structuredClone(server),
+    dataPlat: server.dataPlat ? { ...server.dataPlat, loginToken: MCP_SECRET_MASK } : undefined,
     env: mask(server.env),
     headers: mask(server.headers),
   }

@@ -169,3 +169,7 @@ Under **Settings → General → Network proxy**, `off` connects directly. In `c
 - A single SSE event or an unterminated data line is limited to 5,242,880 characters. Exceeding the limit stops parsing so an untrusted provider response cannot consume memory without bound.
 
 The main security paths are implemented in [`provider-policy.ts`](../src/electron/api/provider-policy.ts), [`sse.ts`](../src/electron/api/sse.ts), [`tool-policy.ts`](../src/electron/mcp/tool-policy.ts), and [`context-window.ts`](../src/electron/api/context-window.ts).
+
+## data-plat
+
+Governed data conversations rebuild provider input from user messages and freshly reauthorized execution references. Previous assistant derivatives, graph checkpoints, and provider continuation handles are excluded. Exact data execution remains confirmed under Full Access. See [data-plat integration](data-plat-integration.md).

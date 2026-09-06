@@ -3,6 +3,7 @@ import type { McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefin
 import { AppRepository } from '../storage/app-repository'
 import { McpClient, type McpToolExecutionResult } from './mcp-client'
 import { t } from '../../shared/i18n'
+import { DataPlatSession, dataPlatToken } from './data-plat-session'
 
 const MCP_SERVER_CONCURRENCY = 8
 
@@ -12,6 +13,64 @@ export class McpManager {
   private proxyUrl: string | undefined
 
   constructor(private readonly repository: AppRepository) {}
+
+  dataPlatServerIds(serverIds?: string[]): string[] {
+    return this.repository
+      .listMcpServers()
+      .filter(
+        (server) => server.dataPlat && server.enabled && (serverIds === undefined || serverIds.includes(server.id)),
+      )
+      .map((server) => server.id)
+  }
+
+  createDataPlatSession(conversationId: string, signal: AbortSignal): DataPlatSession {
+    return new DataPlatSession(
+      this.repository,
+      {
+        fetch: (input, init) => this.fetchWithProxy(input, init),
+        call: async (server, token, tool, args, callSignal) => {
+          if (this.repository.getSettings().mcpEnabled === false)
+            throw new Error(t('MCP is disabled in global settings.'))
+          const client = this.dataPlatClient(server, token, callSignal)
+          try {
+            const result = await client.callTool(tool, args, callSignal)
+            return result.isError && !result.structuredContent
+              ? {
+                  result: t(
+                    'Data platform request failed. Restore the connection and check the execution status before retrying.',
+                  ),
+                  isError: true,
+                }
+              : result
+          } finally {
+            await client.close().catch(() => undefined)
+          }
+        },
+      },
+      conversationId,
+      signal,
+    )
+  }
+
+  private dataPlatClient(server: McpServerConfig, token: string, signal: AbortSignal): McpClient {
+    const headers = Object.fromEntries(
+      Object.entries(server.headers ?? {}).filter(([key]) => key.toLowerCase() !== 'authorization'),
+    )
+    return new McpClient({ ...server, headers: { ...headers, Authorization: `Bearer ${token}` } }, (input, init) =>
+      this.fetchWithProxy(input, { ...init, signal: AbortSignal.any([signal, AbortSignal.timeout(60000)]) }),
+    )
+  }
+
+  private async listDataPlatTools(server: McpServerConfig): Promise<McpToolDefinition[]> {
+    const signal = AbortSignal.timeout(60000)
+    const token = await dataPlatToken({ fetch: (input, init) => this.fetchWithProxy(input, init) }, server, signal)
+    const client = this.dataPlatClient(server, token, signal)
+    try {
+      return await client.listTools()
+    } finally {
+      await client.close().catch(() => undefined)
+    }
+  }
 
   private getOrCreateClient(config: McpServerConfig): McpClient {
     const existing = this.clients.get(config.id)
@@ -47,7 +106,7 @@ export class McpManager {
       serverIds === undefined ? allServers : allServers.filter((server) => serverIds.includes(server.id))
     const results = await mapWithConcurrency(targetServers, MCP_SERVER_CONCURRENCY, async (server) => {
       try {
-        return await this.getOrCreateClient(server).listTools()
+        return server.dataPlat ? await this.listDataPlatTools(server) : await this.getOrCreateClient(server).listTools()
       } catch (error) {
         console.warn(`Failed to list tools for MCP server ${server.name} (${server.id}):`, error)
         return []
@@ -74,6 +133,7 @@ export class McpManager {
       }
     }
     try {
+      if (server.dataPlat) throw new Error(t('Data platform execution requires the governed Agent session.'))
       const result = await this.getOrCreateClient(server).callTool(toolName, args, signal)
       return { ...result, serverName: server.name }
     } catch (error) {
@@ -99,11 +159,22 @@ export class McpManager {
       env: input.env,
       url: input.url,
       headers: input.headers,
+      dataPlat: input.dataPlat ?? undefined,
       createdAt: timestamp,
       updatedAt: timestamp,
     }
     const client = new McpClient(tempConfig, (request, init) => this.fetchWithProxy(request, init))
     try {
+      if (tempConfig.dataPlat) {
+        const tools = await this.listDataPlatTools(tempConfig)
+        return {
+          ok: true,
+          latencyMs: Math.round(performance.now() - startTime),
+          toolsCount: tools.length,
+          message: t('Connection successful'),
+          tools,
+        }
+      }
       const connection = await client.connect()
       const tools = await client.listTools()
       const protocol = connection.protocolVersion

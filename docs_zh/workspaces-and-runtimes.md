@@ -120,3 +120,5 @@ Windows 可直接粘贴资源管理器复制的带外层双引号路径；[`src/
 `agentbox_run_code` 的 Python 分支复用同一 Python 解析结果，但不会继承完整的终端环境；它用所选解释器、`-I` 和最小环境运行受限包装器。JavaScript 分支在独立 Worker 中运行，不使用上述开发运行时。
 
 有关 Skill 脚本何时可以执行，见 [Agent 技能系统](skills-system.md)；有关统一工具审批，见 [MCP 外部工具协议与智能检索](mcp-integration.md)。
+
+Python 的结构化输入变量为 `input_data`（JavaScript 使用 `input`）。超时/取消后等待子进程关闭再清理临时目录，避免 Windows EBUSY 时序问题。

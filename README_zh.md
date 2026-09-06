@@ -114,3 +114,5 @@ Electron Builder 在 Windows 上生成 NSIS 安装包和 portable 可执行文�
 ## 开源许可证
 
 AgentBox 使用 [Apache License 2.0](./LICENSE)。
+
+数据平台 MCP 服务器支持精确确认和逐操作委托凭据。详见 [data-plat 集成](docs_zh/data-plat-integration.md)。

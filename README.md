@@ -114,3 +114,5 @@ Electron Builder produces an NSIS installer and portable executable on Windows, 
 ## License
 
 AgentBox is available under the [Apache License 2.0](./LICENSE).
+
+Data platform MCP servers support exact confirmation and per-operation delegated credentials. See [data-plat integration](docs/data-plat-integration.md).

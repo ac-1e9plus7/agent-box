@@ -251,7 +251,7 @@ async function executePython(
       workingDirectory || tempDirectory,
     )
   } finally {
-    await rm(tempDirectory, { recursive: true, force: true })
+    await rm(tempDirectory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })
   }
 }
 
@@ -304,6 +304,7 @@ function runProcess(
     let settled = false
     let output = ''
     let truncated = false
+    let terminationResult: CodeExecutionResult | undefined
     const append = (chunk: Buffer) => {
       if (output.length >= MAX_OUTPUT_CHARACTERS) {
         truncated = true
@@ -322,12 +323,13 @@ function runProcess(
       resolve(result)
     }
     const onAbort = () => {
+      if (terminationResult) return
+      terminationResult = { result: t('Code execution canceled.'), isError: true }
       child.kill()
-      finish({ result: t('Code execution canceled.'), isError: true })
     }
     const timer = setTimeout(() => {
-      child.kill()
-      finish({
+      if (terminationResult) return
+      terminationResult = {
         result: t('Code execution exceeded {value0} seconds and terminated.\n{value1}{value2}', {
           value0: (timeoutMs / 1_000).toFixed(1),
           value1: output,
@@ -335,19 +337,23 @@ function runProcess(
         }).trim(),
         isError: true,
         truncated,
-      })
+      }
+      child.kill()
     }, timeoutMs)
     child.stdout?.on('data', append)
     child.stderr?.on('data', append)
     child.once('error', (error) => finish({ result: error.message, isError: true }))
     child.once('close', (code) =>
-      finish({
-        result: output.trim()
-          ? `${output.trim()}${truncated ? `\n${t('[Output truncated]')}` : ''}`
-          : t('(Process exited with code {value0}; no output)', { value0: code ?? 'unknown' }),
-        isError: code !== 0,
-        truncated,
-      }),
+      // Wait for process/stdio closure before the caller removes the Windows working directory.
+      finish(
+        terminationResult ?? {
+          result: output.trim()
+            ? `${output.trim()}${truncated ? `\n${t('[Output truncated]')}` : ''}`
+            : t('(Process exited with code {value0}; no output)', { value0: code ?? 'unknown' }),
+          isError: code !== 0,
+          truncated,
+        },
+      ),
     )
     if (signal?.aborted) onAbort()
     else signal?.addEventListener('abort', onAbort, { once: true })

@@ -106,3 +106,7 @@ Renderer 创建的 Agent 请求带 `responseMessageId`。Gateway 从 conversatio
 - `tests/gateway-mcp-loop.test.ts`：provider/工具循环、durable provider 恢复、过期 checkpoint 回退、审批、Skills 和内置工具
 - `tests/agent-runtime.test.ts`：provider trace 回放与工具安全契约
 - `tests/agent-continuation.test.ts`：中断分类和恢复命令规则
+
+## data-plat
+
+受治理数据会话禁用持久图恢复与 provider 原生续传，通过重新读取当前授权执行结果恢复。详见 [data-plat 集成](data-plat-integration.md)。

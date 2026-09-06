@@ -171,3 +171,7 @@ workspaces/workspace-0001/            # Deep backups only
 ```
 
 The current manifest uses `format: "agentbox-backup"` and `formatVersion: 1`. Its `encryption.method` explicitly records either `none` or `WinZip AES-256 (AE-2)`.
+
+## data-plat
+
+The Vault also stores masked-view dataPlat login configuration and a bounded dataPlatOperations recovery journal. The journal contains only execution references, is written before dispatch, and is cleaned with conversations. Derived messages retain a sticky governedData marker. See [data-plat integration](data-plat-integration.md).

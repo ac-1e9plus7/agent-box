@@ -222,6 +222,13 @@ export interface AppSettings {
   developerRuntimes: DeveloperRuntimeSettings
 }
 
+export interface DataPlatConfig {
+  apiBaseUrl: string
+  agentId: string
+  /** Write-only outside the main process; views return a mask. */
+  loginToken: string
+}
+
 export interface McpServerConfig {
   id: string
   name: string
@@ -233,6 +240,7 @@ export interface McpServerConfig {
   env?: Record<string, string>
   url?: string
   headers?: Record<string, string>
+  dataPlat?: DataPlatConfig
   createdAt: string
   updatedAt: string
 }
@@ -250,6 +258,7 @@ export interface McpServerInput {
   url?: string
   headers?: Record<string, string>
   clearHeaders?: boolean
+  dataPlat?: DataPlatConfig | null
 }
 
 export interface McpToolParameterSchema {
@@ -506,6 +515,8 @@ export interface ProviderContinuation {
 
 export interface Message {
   id: string
+  /** Sticky marker: derived data must not re-enter provider history without fresh authorization. */
+  governedData?: boolean
   role: MessageRole
   content: string
   parentMessageId?: string | null
@@ -609,6 +620,7 @@ export interface ChatError {
 
 export type StreamEvent =
   | { type: 'start'; requestId: string }
+  | { type: 'data-plat-context'; requestId: string }
   | { type: 'skill-activated'; requestId: string; skill: SkillActivation }
   | { type: 'text-delta'; requestId: string; delta: string; turn?: number }
   | {

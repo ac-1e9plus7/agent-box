@@ -213,6 +213,8 @@ export function applyStreamEvent(
     messages: conversation.messages.map((message) => {
       if (message.id !== activeStream.assistantMessageId) return message
 
+      if (event.type === 'data-plat-context') return { ...message, governedData: true }
+
       if (event.type === 'skill-activated') {
         const currentActivations = message.skillActivations ?? []
         const existingIndex = currentActivations.findIndex((item) => item.id === event.skill.id)

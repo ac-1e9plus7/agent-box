@@ -1,8 +1,10 @@
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv'
+import Ajv2020 from 'ajv/dist/2020'
 import type { McpToolApprovalPolicy, McpToolDefinition } from '../../shared/types'
 import { t } from '../../shared/i18n'
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true })
+const ajv2020 = new Ajv2020({ allErrors: true, strict: false, allowUnionTypes: true })
 const validatorCache = new Map<string, ValidateFunction>()
 
 export function validateToolArguments(
@@ -15,7 +17,16 @@ export function validateToolArguments(
     let validator = validatorCache.get(key)
     if (!validator) {
       if (validatorCache.size > 500) validatorCache.clear()
-      validator = ajv.compile(tool.inputSchema)
+      const dialect = tool.inputSchema.$schema
+      if (
+        dialect !== undefined &&
+        dialect !== 'https://json-schema.org/draft/2020-12/schema' &&
+        dialect !== 'http://json-schema.org/draft-07/schema#' &&
+        dialect !== 'http://json-schema.org/draft-07/schema'
+      )
+        throw new Error('Unsupported JSON Schema dialect')
+      const compiler = dialect === 'https://json-schema.org/draft/2020-12/schema' ? ajv2020 : ajv
+      validator = compiler.compile(structuredClone(tool.inputSchema))
       validatorCache.set(key, validator)
     }
     if (validator(args)) return { ok: true, args }

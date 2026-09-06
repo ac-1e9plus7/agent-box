@@ -106,3 +106,7 @@ See [Encrypted LangGraph Checkpoints](./langgraph-checkpoints.md) for storage, q
 - `tests/gateway-mcp-loop.test.ts`: provider/tool loops, durable provider failure resume, stale checkpoint fallback, approvals, Skills, and built-in tools
 - `tests/agent-runtime.test.ts`: provider trace replay and tool security contracts
 - `tests/agent-continuation.test.ts`: interruption classification and resume-command rules
+
+## data-plat
+
+Governed data conversations deliberately disable durable graph resume and native provider continuation; recovery rereads current authorized execution results. See [data-plat integration](data-plat-integration.md).

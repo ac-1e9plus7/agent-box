@@ -120,3 +120,5 @@ Before each terminal command, AgentBox retrieves the cached resolution for all f
 The Python branch of `agentbox_run_code` reuses the same Python resolution result but does not inherit the complete terminal environment. It invokes the selected interpreter with `-I`, a minimal environment, and the constrained wrapper. The JavaScript branch runs in an independent Worker and does not use these developer runtimes.
 
 See [Agent Skills System](skills-system.md) for when Skill scripts can be executed, and [MCP Integration and Intelligent Tool Retrieval](mcp-integration.md) for the shared tool-approval rules.
+
+Python structured input is exposed as `input_data` (JavaScript uses `input`). Timeout/cancellation waits for subprocess closure before temporary-directory cleanup, avoiding Windows EBUSY races.

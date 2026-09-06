@@ -1,0 +1,710 @@
+[
+  {
+    "name": "catalog_search",
+    "description": "Search semantic assets authorized for the current user.",
+    "operationId": "agentCatalogSearch",
+    "auditToolName": "catalog.search",
+    "scope": "agent.catalog.read",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "assetTypes": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["DATASET", "METRIC", "DIMENSION", "REPORT"]
+          }
+        },
+        "datasetIds": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "dataset_get_context",
+    "description": "Get the governed semantic context for an authorized dataset.",
+    "operationId": "agentDatasetContext",
+    "auditToolName": "dataset.get_context",
+    "scope": "agent.catalog.read",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["datasetId"],
+      "properties": {
+        "datasetId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "metric_explain",
+    "description": "Explain an authorized published metric in a dataset context.",
+    "operationId": "agentMetricExplain",
+    "auditToolName": "metric.explain",
+    "scope": "agent.catalog.read",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["datasetId", "metricId"],
+      "properties": {
+        "datasetId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "metricId": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "access_explain",
+    "description": "Explain effective access for a governed dataset and optional semantic query.",
+    "operationId": "agentAccessExplain",
+    "auditToolName": "access.explain",
+    "scope": "agent.access.explain",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$defs": {
+        "query": {
+          "type": "object",
+          "required": ["datasetId", "select"],
+          "properties": {
+            "datasetId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "select": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 30,
+              "items": {
+                "$ref": "#/$defs/selectItem"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            },
+            "orderBy": {
+              "type": "array",
+              "maxItems": 5,
+              "items": {
+                "$ref": "#/$defs/orderBy"
+              }
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "periodComparison": {
+              "$ref": "#/$defs/periodComparison"
+            }
+          },
+          "additionalProperties": false
+        },
+        "selectItem": {
+          "type": "object",
+          "required": ["type", "id"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["METRIC", "DIMENSION"]
+            },
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "alias": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "additionalProperties": false
+        },
+        "filter": {
+          "type": "object",
+          "required": ["dimensionId", "operator", "values"],
+          "properties": {
+            "dimensionId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "operator": {
+              "type": "string",
+              "enum": ["EQ", "NEQ", "IN", "NOT_IN", "BETWEEN", "GT", "GTE", "LT", "LTE", "LIKE"]
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "orderBy": {
+          "type": "object",
+          "required": ["metricId", "direction"],
+          "properties": {
+            "metricId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["ASC", "DESC"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "periodComparison": {
+          "type": "object",
+          "required": ["type", "metricIds"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["YOY", "WOW", "MOM"]
+            },
+            "metricIds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "type": "object",
+      "required": ["resource"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["QUERY_EXECUTE"]
+        },
+        "resource": {
+          "type": "object",
+          "required": ["type", "id"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["DATASET"]
+            },
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        "query": {
+          "$ref": "#/$defs/query"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "query_plan",
+    "description": "Validate and plan a governed semantic query. Raw SQL and forceModelId are not accepted.",
+    "operationId": "agentQueryPlan",
+    "auditToolName": "query.plan",
+    "scope": "agent.query.plan",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$defs": {
+        "selectItem": {
+          "type": "object",
+          "required": ["type", "id"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["METRIC", "DIMENSION"]
+            },
+            "id": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "alias": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          "additionalProperties": false
+        },
+        "filter": {
+          "type": "object",
+          "required": ["dimensionId", "operator", "values"],
+          "properties": {
+            "dimensionId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "operator": {
+              "type": "string",
+              "enum": ["EQ", "NEQ", "IN", "NOT_IN", "BETWEEN", "GT", "GTE", "LT", "LTE", "LIKE"]
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "items": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "orderBy": {
+          "type": "object",
+          "required": ["metricId", "direction"],
+          "properties": {
+            "metricId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "direction": {
+              "type": "string",
+              "enum": ["ASC", "DESC"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "periodComparison": {
+          "type": "object",
+          "required": ["type", "metricIds"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["YOY", "WOW", "MOM"]
+            },
+            "metricIds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 100,
+              "uniqueItems": true,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "query": {
+          "type": "object",
+          "required": ["datasetId", "select"],
+          "properties": {
+            "datasetId": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "select": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 30,
+              "items": {
+                "$ref": "#/$defs/selectItem"
+              }
+            },
+            "filters": {
+              "type": "array",
+              "maxItems": 20,
+              "items": {
+                "$ref": "#/$defs/filter"
+              }
+            },
+            "orderBy": {
+              "type": "array",
+              "maxItems": 5,
+              "items": {
+                "$ref": "#/$defs/orderBy"
+              }
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "periodComparison": {
+              "$ref": "#/$defs/periodComparison"
+            }
+          },
+          "additionalProperties": false
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "requestedTimeoutMs": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 30000
+            },
+            "requestedMaxRows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "executionMode": {
+              "type": "string",
+              "enum": ["INLINE"]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "query": {
+          "$ref": "#/$defs/query"
+        },
+        "options": {
+          "$ref": "#/$defs/options"
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "query_run",
+    "description": "Execute a previously bound governed query plan. Requires execution enablement and approval outside MCP.",
+    "operationId": "agentQueryRun",
+    "auditToolName": "query.run",
+    "scope": "agent.query.execute",
+    "execution": true,
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["planId", "planHash"],
+      "properties": {
+        "planId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "planHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "executionMode": {
+          "type": "string",
+          "enum": ["INLINE"]
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "query_cancel",
+    "description": "Cancel an active governed Agent query execution.",
+    "operationId": "agentQueryCancel",
+    "auditToolName": "query.cancel",
+    "scope": "agent.query.execute",
+    "execution": true,
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": true,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["executionId"],
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "pattern": "^qry_[A-Za-z0-9_-]{8,60}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "report_list",
+    "description": "List reports authorized for the current user.",
+    "operationId": "agentReportList",
+    "auditToolName": "report.list",
+    "scope": "agent.report.read",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "datasetId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": ["ACTIVE", "INACTIVE"]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "report_explain",
+    "description": "Explain an authorized report and its governed semantic query.",
+    "operationId": "agentReportExplain",
+    "auditToolName": "report.explain",
+    "scope": "agent.report.read",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["reportId"],
+      "properties": {
+        "reportId": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "report_plan",
+    "description": "Validate and plan execution of an authorized active report.",
+    "operationId": "agentReportPlan",
+    "auditToolName": "report.plan",
+    "scope": "agent.report.execute",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["reportId"],
+      "properties": {
+        "reportId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reportVersion": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "requestedTimeoutMs": {
+              "type": "integer",
+              "minimum": 1000,
+              "maximum": 30000
+            },
+            "requestedMaxRows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000
+            },
+            "executionMode": {
+              "type": "string",
+              "enum": ["INLINE"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "report_run",
+    "description": "Execute a previously bound active report plan. Requires execution enablement and approval outside MCP.",
+    "operationId": "agentReportRun",
+    "auditToolName": "report.run",
+    "scope": "agent.report.execute",
+    "execution": true,
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "required": ["reportId", "planId", "planHash"],
+      "properties": {
+        "reportId": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "planId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "planHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "pageSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "query_status",
+    "description": "Read the current status and authorized short-lived result of an execution.",
+    "operationId": "agentQueryStatus",
+    "auditToolName": "query.status",
+    "scope": "agent.query.execute",
+    "execution": false,
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    },
+    "inputSchema": {
+      "type": "object",
+      "required": ["executionId"],
+      "properties": {
+        "executionId": {
+          "type": "string",
+          "pattern": "^qry_[A-Za-z0-9_-]{8,60}$"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+]

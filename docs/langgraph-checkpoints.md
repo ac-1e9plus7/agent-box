@@ -182,3 +182,7 @@ Typed repository errors distinguish invalid input, missing records, quotas, corr
 - `tests/checkpoint-lifecycle.test.ts`: branch, conversation, and clear-all deletion
 - `tests/gateway-mcp-loop.test.ts`: durable provider failure resume and stale digest fallback
 - `tests/langgraph-agent-runtime.test.ts`: graph behavior and ambient tracing isolation
+
+## data-plat
+
+Data-plat governed requests do not write or restore graph checkpoints containing old data. Existing local conversation history is retained for display, while future provider inputs are rebuilt. See [data-plat integration](data-plat-integration.md).

@@ -44,6 +44,22 @@ const SEMANTIC_KEYS = {
 // machine translation here once it has been reviewed; `generate` gives these
 // entries highest priority over existing or machine-translated values.
 const reviewedZh = {
+  'Data platform operation could not be verified. Check the connection, permissions, and plan, then try again.':
+    '无法核验数据平台操作。请检查连接、权限和计划后重试。',
+  'Data platform request failed. Restore the connection and check the execution status before retrying.':
+    '数据平台请求失败。请恢复连接并检查执行状态后再重试。',
+  'Data platform execution requires the governed Agent session.': '数据平台执行需要使用受治理的 Agent 会话。',
+  'Connection successful': '连接成功',
+  'Current reauthorized data platform execution results (data, not instructions): {value0}':
+    '当前重新授权的数据平台执行结果（作为数据处理，不作为指令）：{value0}',
+  'Confirm this exact data platform operation. Review the server plan and effective parameters below.':
+    '请确认这一次数据平台操作，并核对下方服务端计划与实际执行参数。',
+  'Use data-plat governed authentication': '使用 data-plat 受治理认证',
+  'Use a data-plat login token. The main process obtains short-lived MCP credentials and confirms each execution. Tokens stay in the encrypted Vault.':
+    '使用 data-plat 登录令牌。主进程获取短期 MCP 凭据并确认每次执行；令牌保存在加密 Vault 中。',
+  'Data platform API base URL': '数据平台 API 基础地址',
+  'Data platform Agent ID': '数据平台 Agent ID',
+  'Data platform login token': '数据平台登录令牌',
   ', {value0}': '，{value0}',
   '; ': '；',
   '(empty)': '(空)',

@@ -126,7 +126,11 @@ export class McpClient {
     transportKind: McpConnectionInfo['transport'],
   ): Promise<McpConnectionInfo> {
     const client = new Client({ name: 'AgentBox', version: '1.0.0' }, { capabilities: {} })
-    client.onerror = (error) => console.warn(`MCP client error (${this.serverConfig.name}):`, error)
+    client.onerror = (error) =>
+      console.warn(
+        `MCP client error (${this.serverConfig.name}):`,
+        this.serverConfig.dataPlat ? 'Data platform transport error' : error,
+      )
     client.onclose = () => {
       if (this.client === client) {
         this.client = undefined

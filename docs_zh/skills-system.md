@@ -104,3 +104,7 @@ Skill 只在 **Agent 模式**下参与路由。流程如下：
 - 终端以会话目录作为初始 `cwd`，但不是目录沙箱。需要创建源码或多行文本时应优先使用受边界约束的工作区文件工具。
 
 详细运行时和路径规则见[会话工作目录与开发运行时](workspaces-and-runtimes.md)，统一审批规则见 [MCP 外部工具协议与智能检索](mcp-integration.md)。
+
+## data-plat
+
+配套数据技能工程发布固定 ID 的 JSON 合集和单技能 ZIP；规划版报表入口不执行。技能本身不授予平台认证或确认权限。详见 [data-plat 集成](data-plat-integration.md)。

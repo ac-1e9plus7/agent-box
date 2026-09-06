@@ -143,3 +143,7 @@ Each resident conversation browser uses one non-persistent Electron session shar
 3. **Composer allowlist**: selects the MCP servers available to the current conversation.
 4. **Tool cards**: show awaiting approval, executing, completed, denied, or error states, along with arguments and truncated results.
 5. **Interruption recovery**: users can resume from a checkpoint or regenerate from the original user request. These options have different side-effect semantics.
+
+## data-plat
+
+Data platform servers can opt into exact execution confirmation, per-operation OBO credentials, and conservative history recovery. JSON Schema 2020-12 uses Ajv2020; absent/draft-07 declarations remain supported and unknown dialects are rejected. See [data-plat integration](data-plat-integration.md).

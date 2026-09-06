@@ -77,7 +77,7 @@ English is the default repository language for project documentation:
 
 - [`README.md`](./README.md) is the default English overview.
 - [`README_zh.md`](./README_zh.md) is the matching Simplified Chinese overview.
-- [`docs/`](./docs/README.md) contains the English technical index and eleven English module documents.
+- [`docs/`](./docs/README.md) contains the English technical index and English module documents.
 - [`docs_zh/`](./docs_zh/README.md) contains matching Chinese files with identical filenames.
 - `CLAUDE.md` and `AGENTS.md` must remain entirely in English.
 
@@ -365,3 +365,11 @@ Before handing off a completed change:
 7. Run `pnpm package` and launch the unpacked app for packaging, preload, entry-point, or runtime-dependency changes.
 8. Validate Markdown links, paired filenames, code fences, and trailing whitespace for documentation changes.
 9. Confirm no log, fixture, screenshot, error, or generated file contains credentials or sensitive Vault data.
+
+### data-plat governed sessions
+
+- Read `docs/data-plat-integration.md` before changing data platform integration.
+- Keep login/OBO/confirmation tokens in the main process; use independent operation clients, never shared approval headers.
+- Full Access does not bypass exact platform confirmation. Bind real plans, normalized arguments, TTL, and configuration fingerprints; journal stable execution IDs before dispatch.
+- Preserve the sticky governedData marker through persistence and backups. Rebuild provider history from user input and current authorized references; do not restore old data checkpoints or provider handles.
+- Run the data-plat schema/session/repository/UI/Gateway tests and the full check/build gates. Keep English and Chinese integration documentation synchronized.

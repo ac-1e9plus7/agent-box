@@ -12,6 +12,7 @@ import { createBuiltinAgentToolCatalog } from '../../../../shared/builtin-agent-
 import { t } from '../../../../shared/i18n'
 import { Icon } from '../Icon'
 import { SettingsToggle } from './SettingsControls'
+import { DataPlatFields } from './DataPlatFields'
 
 const BUILTIN_TOOL_FILTER = '__agentbox_builtin__'
 
@@ -98,6 +99,7 @@ export function McpTab({
         env: server.env || {},
         url: server.url || '',
         headers: server.headers || {},
+        dataPlat: server.dataPlat,
         enabled: server.enabled,
       })
       setEditingMcpArgsText((server.args || []).join('\n'))
@@ -591,6 +593,12 @@ export function McpTab({
                 </div>
               </div>
 
+              {editingMcpServer.transport === 'http' && (
+                <DataPlatFields
+                  value={editingMcpServer.dataPlat}
+                  onChange={(value) => setEditingMcpServer({ ...editingMcpServer, dataPlat: value })}
+                />
+              )}
               {editingMcpServer.transport === 'stdio' ? (
                 <>
                   <label className="skill-form-field">

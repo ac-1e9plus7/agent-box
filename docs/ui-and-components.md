@@ -83,3 +83,7 @@ New or edited user content is normalized to LF line endings but is never trimmed
 | **Press Enter to send** disabled | `Ctrl/Cmd + Enter` | `Enter` or `Shift + Enter`                                       |
 
 The composer toolbar also controls Agent mode, Skill routing, available MCP servers, reasoning, web search, and the context budget. When the projected context exceeds the input budget, sending is blocked or—when safe trimming is available—the UI offers a one-time **Trim and send** action. At application level, `Ctrl/Cmd + N` opens the New conversation dialog.
+
+## data-plat
+
+DataPlatFields adds API base URL, Agent ID, and a password input to Remote HTTP MCP settings. The data-plat-context stream event persists a governedData marker on derived messages. Approval cards display the actual server plan and effective arguments. See [data-plat integration](data-plat-integration.md).
