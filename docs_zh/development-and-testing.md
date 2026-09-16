@@ -90,4 +90,6 @@ data-plat-* 测试覆盖 Schema 方言、加密配置、精确确认、执行恢
 
 ## 显式 Python 运行时验证
 
+加密存储测试在每个主机上显式验证 Linux 与非 Linux 安全存储分支，使关键覆盖率基线不依赖 CI runner 的原生平台。
+
 将 `AGENTBOX_TEST_PYTHON` 设置为真实 Python 3 解释器路径，运行 `pnpm exec vitest run tests/python-runtime-live.test.ts`。验证结构化 `input_data` 计算、文件/模块访问拒绝及超时终止。未设置变量时跳过这三个可选真实运行用例；质量 CI 显式设置该路径。Windows 运行器等待进程及标准流关闭后才删除临时目录，并对短暂文件锁做有界重试。

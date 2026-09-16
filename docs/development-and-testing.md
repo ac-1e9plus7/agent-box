@@ -90,4 +90,6 @@ The data-plat-* suites cover schema dialects, encrypted configuration, exact app
 
 ## Explicit Python runtime verification
 
+The encrypted-store suite explicitly exercises Linux and non-Linux secure-storage branches on every host, so critical coverage baselines do not depend on the CI runner's native platform.
+
 Set `AGENTBOX_TEST_PYTHON` to a real Python 3 executable and run `pnpm exec vitest run tests/python-runtime-live.test.ts`. It verifies structured `input_data` calculations, blocked file/module access, and timeout termination. Without this variable the three optional live cases are skipped; the quality CI sets it explicitly. On Windows the runner waits for process/stdio closure before deleting its temporary directory, with bounded retries for transient file locks.

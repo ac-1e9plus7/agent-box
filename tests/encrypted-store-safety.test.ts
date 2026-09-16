@@ -36,6 +36,21 @@ const validateState = (value: unknown): TestState => {
 }
 
 describe('EncryptedStore safety and encryption integrity', () => {
+  it.each(['win32', 'darwin'] as const)('uses OS encryption without a Linux backend check on %s', async (platform) => {
+    const originalPlatform = process.platform
+    const directory = mkdtempSync(join(tmpdir(), 'agentbox-platform-store-'))
+    const store = new EncryptedStore(directory, defaultState, validateState)
+    try {
+      Object.defineProperty(process, 'platform', { value: platform })
+      mockStorageBackend = 'basic_text'
+      await store.initialize({ allowLegacyMigration: false })
+      expect(store.read()).toEqual(defaultState())
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform })
+      store.destroy()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
   it('drains queued mutations before zeroing the key on close', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'agentbox-close-test-'))
     const store = new EncryptedStore(directory, defaultState, validateState)
