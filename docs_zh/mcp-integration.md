@@ -138,6 +138,10 @@ sequenceDiagram
 
 ## UI 与诊断
 
+并发调用共享同一个 MCP 连接 Promise。30 秒初始化期限覆盖传输启动和协商；HTTP 回退 SSE 前清理失败尝试。关闭客户端会中止待连接传输并使迟到结果失效。工具发现/执行可取消等待共享连接，而不取消其他调用方。stdio stderr 会被消费但不记录。传输失败采用本地化通用诊断与白名单 OS 错误码；不保留可能回显凭据的原始上游消息和 cause。
+
+浏览器 URL 字面量与 DNS 结果使用同一个 IP 分类器。IPv4-mapped IPv6 先规范化再套用 IPv4 私网规则，包括十六进制和完整展开形式。环回开关只允许环回地址，不放行其他私网网段。
+
 1. **设置 → MCP 外部工具**：创建、启停和测试 stdio、Streamable HTTP 或旧式 HTTP+SSE 配置；测试结果会显示实际协商成功的 Transport、协议版本和工具数量。
 2. **Tool Explorer**：汇总已启用的 MCP 工具和 AgentBox 内置工具，可按来源筛选并查看 input Schema。工作区文件工具会出现在目录中，但只在具有工作目录的 Agent 会话中实际挂载。
 3. **Composer 白名单**：选择当前会话允许的 MCP Server。

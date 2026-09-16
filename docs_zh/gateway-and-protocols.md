@@ -163,6 +163,8 @@ Agent 提供四项可独立开启的 token 优化，为了兼容性均默认关�
 
 ### 限制与超时
 
+Provider SSE 消费独立在 `provider-stream.ts` 中。`ProviderStreamBudget` 覆盖一次请求内全部模型轮次：输入总量 64 MiB；正文、reasoning 和签名各 2,000,000 字符；工具参数合计 2,000,000 字符（单调用 200,000）；256 个工具调用；128 个 provider item，序列化合计 8,000,000 字符；128 个 Anthropic thinking block。转发超限增量前检查预算，不增加 Vault 加载配额。按需拉取的响应包装尊重下游消费速度。完成、取消和解析失败都会取消持有锁的同一个上游 reader；Responses/Anthropic 终态事件不等待 EOF。退出时先取消并等待 Gateway 请求收尾，再关闭网络 dispatcher 和加密存储。
+
 - 活动响应流连续 120 秒没有网络数据时会被中止；工具审批使用独立的 5 分钟/无限等待策略，不受该 watchdog 影响。
 - 内置浏览器导航使用覆盖代理刷新、公共 DNS 校验和 `loadURL` 的统一 3–30 秒期限（默认 20 秒）。停止和用户发起的关闭会立即中止导航，不再排在 Session 队列后等待。子资源主机校验会复用执行中的 DNS 工作，并在五秒后取消，而不会让 Chromium 请求无限等待。
 - 模型发现超时为 30 秒，响应体最大 32 MiB；错误响应最多读取 32 KiB。

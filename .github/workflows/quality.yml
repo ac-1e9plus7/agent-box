@@ -8,7 +8,11 @@ on:
 
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout Code
@@ -25,5 +29,45 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Set up real Python runtime tests
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Select Python interpreter
+        shell: bash
+        run: echo "AGENTBOX_TEST_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+
       - name: Run Quality Checks
         run: pnpm check
+
+      - name: Audit dependencies
+        if: runner.os == 'Linux'
+        run: pnpm audit:dependencies
+
+      - name: Package native application
+        run: pnpm package
+
+      - name: Install Linux secure-storage and display services
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y gnome-keyring dbus-x11 xvfb
+
+      - name: Smoke test Linux package with a real keyring
+        if: runner.os == 'Linux'
+        run: >-
+          dbus-run-session -- bash -c
+          'printf "test-keyring-password\n" | gnome-keyring-daemon --unlock --components=secrets;
+          xvfb-run -a pnpm test:smoke'
+
+      - name: Smoke test native package
+        if: runner.os != 'Linux'
+        run: pnpm test:smoke
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-${{ runner.os }}
+          path: |
+            coverage/
+            artifacts/smoke/

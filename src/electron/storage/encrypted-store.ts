@@ -21,10 +21,6 @@ interface EncryptedEnvelope {
   ciphertext: string
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 export class EncryptedStoreError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options)
@@ -52,6 +48,7 @@ export class EncryptedStore<T extends object> {
   private masterKey?: Buffer
   private state?: T
   private operationQueue: Promise<void> = Promise.resolve()
+  private closing = false
   private readonly recordNamespaces = new Map<string, EncryptedRecordNamespace>()
 
   constructor(
@@ -65,43 +62,31 @@ export class EncryptedStore<T extends object> {
     this.vaultPath = join(this.directory, 'user-data.v1.enc')
   }
 
-  async initialize(): Promise<void> {
+  async initialize({ allowLegacyMigration = true }: { allowLegacyMigration?: boolean } = {}): Promise<void> {
     this.assertSecureStorageAvailable()
     await mkdir(this.directory, { recursive: true, mode: 0o700 })
 
-    let existingState: T | undefined
-    let existingStateNeedsPersist = false
     const envelopeBuffer = await this.readIfPresent(this.vaultPath)
     if (envelopeBuffer) {
       try {
-        this.masterKey = await this.loadOrCreateMasterKey()
+        this.masterKey = await this.loadOrCreateMasterKey(false)
         const envelope = JSON.parse(envelopeBuffer.toString('utf8')) as EncryptedEnvelope
         const decryptedState = this.decrypt(envelope)
-        existingState = this.validateState(decryptedState)
-        existingStateNeedsPersist = JSON.stringify(decryptedState) !== JSON.stringify(existingState)
-      } catch {
-        // Will attempt legacy migration if available before throwing
+        this.state = this.validateState(decryptedState)
+        if (JSON.stringify(decryptedState) !== JSON.stringify(this.state)) await this.persist(this.state)
+        return
+      } catch (error) {
+        this.destroy()
+        throw new EncryptedStoreError(
+          t(
+            'Unable to decrypt local data. The system key may have changed, or the data file may have become corrupted.',
+          ),
+          { cause: error },
+        )
       }
     }
 
-    const isStateEmptyOrDefault = (state?: T): boolean => {
-      if (!state) return true
-      const s = state as Record<string, unknown>
-      const conversations = Array.isArray(s.conversations) ? s.conversations : []
-      const models = Array.isArray(s.models) ? s.models : []
-      const providers = Array.isArray(s.providers) ? s.providers : []
-      const hasCustomData =
-        conversations.length > 0 ||
-        models.length > 1 ||
-        providers.some(
-          (provider) =>
-            isRecord(provider) && Boolean(provider.apiKeyEncrypted || provider.apiKey || provider.id !== 'openrouter'),
-        ) ||
-        providers.length > 1
-      return !hasCustomData
-    }
-
-    if (isStateEmptyOrDefault(existingState)) {
+    if (allowLegacyMigration) {
       const migratedState = await this.tryMigrateFromLegacyDirectories()
       if (migratedState) {
         this.state = migratedState
@@ -113,18 +98,6 @@ export class EncryptedStore<T extends object> {
       }
     }
 
-    if (existingState) {
-      this.state = existingState
-      if (existingStateNeedsPersist) await this.persist(existingState)
-      return
-    }
-
-    if (envelopeBuffer && !this.state) {
-      throw new EncryptedStoreError(
-        t('Unable to decrypt local data. The system key may have changed, or the data file may have become corrupted.'),
-      )
-    }
-
     this.masterKey = await this.loadOrCreateMasterKey()
     this.state = this.createDefaultState()
     await this.persist(this.state)
@@ -134,7 +107,13 @@ export class EncryptedStore<T extends object> {
     return structuredClone(this.requireState())
   }
 
+  /** Copy only the requested field; callers never receive internal mutable state. */
+  readField<K extends keyof T>(key: K): T[K] {
+    return structuredClone(this.requireState()[key])
+  }
+
   async mutate<R>(mutator: (draft: T) => R): Promise<R> {
+    if (this.closing) throw new EncryptedStoreError(t('EncryptedStore has not been initialized.'))
     this.requireMasterKey()
     this.requireState()
 
@@ -177,6 +156,12 @@ export class EncryptedStore<T extends object> {
     this.state = undefined
   }
 
+  async close(): Promise<void> {
+    this.closing = true
+    await this.operationQueue
+    this.destroy()
+  }
+
   private assertSecureStorageAvailable(): void {
     if (!safeStorage.isEncryptionAvailable()) {
       throw new EncryptedStoreError(
@@ -199,7 +184,7 @@ export class EncryptedStore<T extends object> {
     }
   }
 
-  private async loadOrCreateMasterKey(): Promise<Buffer> {
+  private async loadOrCreateMasterKey(allowCreate = true): Promise<Buffer> {
     const wrappedKey = await this.readIfPresent(this.keyPath)
     if (wrappedKey) {
       try {
@@ -217,6 +202,7 @@ export class EncryptedStore<T extends object> {
       }
     }
 
+    if (!allowCreate) throw new EncryptedStoreError(t('Unable to use system secure storage to unlock local data key.'))
     const key = randomBytes(KEY_BYTES)
     const wrapped = safeStorage.encryptString(key.toString('base64'))
     await this.writeFileAtomic(this.keyPath, wrapped)

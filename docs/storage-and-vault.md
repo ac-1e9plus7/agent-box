@@ -36,7 +36,7 @@ Provider API keys, MCP environment variables and headers, and proxy credentials 
 - On first initialization, [`EncryptedStore`](../src/electron/storage/encrypted-store.ts) generates a random 32-byte key, encodes it as Base64, and passes it to Electron's `safeStorage.encryptString()`. The wrapped result is written to `master-key.bin`.
 - If `safeStorage.isEncryptionAvailable()` is false, the application refuses to load user data. On Linux, it also rejects the unencrypted `basic_text` backend rather than falling back to plaintext.
 - On application shutdown, the in-process key Buffer is overwritten and released. The key and decrypted state must still reside in the trusted main-process memory while the application is running.
-- Startup supports legacy ChatBox Lite user-data directories and the legacy AAD. Directory migration either copies or re-persists the old data; after a legacy-AAD envelope is read, the next Vault write uses the current `agentbox:vault:v1` AAD.
+- Startup supports legacy ChatBox Lite user-data directories and the legacy AAD. Automatic directory import occurs only when the current Vault file does not exist. An existing valid Vault always wins, including default-looking or cleared Vaults; a corrupt Vault fails closed without being replaced by legacy data. Explicit reset disables legacy import. After a legacy-AAD envelope is read, the next Vault write uses the current `agentbox:vault:v1` AAD.
 
 ### 2. Vault encryption and write semantics
 
@@ -59,7 +59,7 @@ The record format, saver contract, quotas, and lifecycle are documented in [Encr
 
 ## 📦 Vault schema
 
-The domain structure is defined in [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts), with shared entities in [`src/shared/types.ts`](../src/shared/types.ts):
+The domain structure and normalization are defined in [`vault-schema.ts`](../src/electron/storage/vault-schema.ts); [`app-repository.ts`](../src/electron/storage/app-repository.ts) owns mutations, with shared entities in [`src/shared/types.ts`](../src/shared/types.ts). Repository getters use `EncryptedStore.readField` to clone only the selected collection or settings object, never exposing internal mutable state. Mutations retain whole-Vault validation and atomic encrypted replacement. Shutdown drains pending writes before destroying the key.
 
 ```typescript
 interface VaultState {

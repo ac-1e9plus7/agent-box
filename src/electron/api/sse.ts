@@ -15,6 +15,7 @@ export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenera
   let eventName: string | undefined
   let dataLines: string[] = []
   let dataCharacters = 0
+  let exhausted = false
 
   const dispatch = (): SseMessage | undefined => {
     if (dataLines.length === 0) {
@@ -64,7 +65,10 @@ export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenera
         throw new Error(t('A streaming data line returned by the provider exceeds the size limit.'))
       }
 
-      if (done) break
+      if (done) {
+        exhausted = true
+        break
+      }
     }
 
     if (buffer) {
@@ -81,6 +85,7 @@ export async function* parseSse(stream: ReadableStream<Uint8Array>): AsyncGenera
     const finalMessage = dispatch()
     if (finalMessage) yield finalMessage
   } finally {
+    if (!exhausted) await reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
 }

@@ -1,7 +1,7 @@
 import { ProxyAgent } from 'undici'
 import type { McpServerConfig, McpServerInput, McpServerTestResult, McpToolDefinition } from '../../shared/types'
 import { AppRepository } from '../storage/app-repository'
-import { McpClient, type McpToolExecutionResult } from './mcp-client'
+import { McpClient, safeMcpError, type McpToolExecutionResult } from './mcp-client'
 import { t } from '../../shared/i18n'
 import { DataPlatSession, dataPlatToken } from './data-plat-session'
 
@@ -61,12 +61,14 @@ export class McpManager {
     )
   }
 
-  private async listDataPlatTools(server: McpServerConfig): Promise<McpToolDefinition[]> {
-    const signal = AbortSignal.timeout(60000)
+  private async listDataPlatTools(server: McpServerConfig, callerSignal?: AbortSignal): Promise<McpToolDefinition[]> {
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, AbortSignal.timeout(60000)])
+      : AbortSignal.timeout(60000)
     const token = await dataPlatToken({ fetch: (input, init) => this.fetchWithProxy(input, init) }, server, signal)
     const client = this.dataPlatClient(server, token, signal)
     try {
-      return await client.listTools()
+      return await client.listTools(signal)
     } finally {
       await client.close().catch(() => undefined)
     }
@@ -99,16 +101,20 @@ export class McpManager {
     return client
   }
 
-  async listAllTools(serverIds?: string[]): Promise<McpToolDefinition[]> {
+  async listAllTools(serverIds?: string[], signal?: AbortSignal): Promise<McpToolDefinition[]> {
+    signal?.throwIfAborted()
     if (this.repository.getSettings().mcpEnabled === false) return []
     const allServers = this.repository.listMcpServers().filter((server) => server.enabled)
     const targetServers =
       serverIds === undefined ? allServers : allServers.filter((server) => serverIds.includes(server.id))
     const results = await mapWithConcurrency(targetServers, MCP_SERVER_CONCURRENCY, async (server) => {
       try {
-        return server.dataPlat ? await this.listDataPlatTools(server) : await this.getOrCreateClient(server).listTools()
+        return server.dataPlat
+          ? await this.listDataPlatTools(server, signal)
+          : await this.getOrCreateClient(server).listTools(signal)
       } catch (error) {
-        console.warn(`Failed to list tools for MCP server ${server.name} (${server.id}):`, error)
+        if (signal?.aborted) throw signal.reason
+        console.warn('MCP tool discovery:', safeMcpError(error))
         return []
       }
     })
@@ -127,7 +133,7 @@ export class McpManager {
     const server = this.repository.getMcpServer(serverId)
     if (!server || !server.enabled) {
       return {
-        result: `MCP Server with id "${serverId}" is unavailable or disabled.`,
+        result: t('The MCP server is unavailable or disabled.'),
         isError: true,
         serverName: server?.name || 'Unknown',
       }
@@ -139,7 +145,7 @@ export class McpManager {
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error
       return {
-        result: `Failed to execute tool ${toolName}: ${error instanceof Error ? error.message : String(error)}`,
+        result: safeMcpError(error),
         isError: true,
         serverName: server.name,
       }
@@ -196,7 +202,7 @@ export class McpManager {
         ok: false,
         latencyMs: Math.round(performance.now() - startTime),
         toolsCount: 0,
-        message: error instanceof Error ? error.message : t('Connection failed'),
+        message: safeMcpError(error),
       }
     } finally {
       await client.close().catch(() => undefined)

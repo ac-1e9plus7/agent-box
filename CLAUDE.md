@@ -17,7 +17,7 @@ When requirements conflict, follow this order: the current user request, platfor
 
 ## Project snapshot
 
-AgentBox is a local-first desktop AI client and Agent application built with React 19, TypeScript 5.7, Electron 35, Vite 5.4, and electron-vite 3.
+AgentBox is a local-first desktop AI client and Agent application built with React 19, TypeScript 5.7, Electron 44, Vite 7, and electron-vite 5.
 
 The application separates:
 
@@ -62,14 +62,16 @@ pnpm dist
 - `pnpm lint` runs type-aware ESLint and fails on warnings; `pnpm lint:fix` applies safe automatic fixes.
 - `pnpm format` writes Prettier formatting; `pnpm format:check` verifies it without modifying files.
 - `pnpm test` runs the Vitest suite once.
-- `pnpm check` is the non-mutating quality gate: type checking, linting, formatting, localization validation, and the complete test suite.
+- `pnpm check` is the non-mutating quality gate: type checking, linting, formatting, localization and documentation validation, and the complete test suite with critical-module coverage baselines.
+- `pnpm test:smoke` launches the native unpacked application with a separate temporary profile and real secure storage; run `pnpm package` first.
+- `pnpm audit:dependencies` checks the official registry; `pnpm benchmark` records synthetic storage measurements without using real Vault data.
 - `pnpm build` runs type checking and creates production bundles; it does not run tests.
 - `pnpm package` creates an unpacked application directory.
 - `pnpm dist` creates distributable artifacts for the current platform.
 
 For ordinary code changes, run focused tests while iterating and finish with `pnpm check` and `pnpm build`. Packaging, preload, entry-point, dependency-externalization, or Electron lifecycle changes also require `pnpm package` and an actual unpacked-application smoke test.
 
-The GitHub quality workflow runs `pnpm check` for branch pushes and pull requests. The release workflow installs Node.js 24 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and publishes tagged builds to GitHub Releases (while manual `workflow_dispatch` uploads artifacts only).
+The GitHub quality workflow runs checks, real Python tests, native packaging, and isolated Electron smoke tests on Windows, macOS, and Linux for branch pushes and pull requests; Linux also audits dependencies. The release workflow installs Node.js 24 and pnpm 11.24.0, runs `pnpm check`, builds and packages a platform matrix, and publishes tagged builds to GitHub Releases (while manual `workflow_dispatch` uploads artifacts only).
 
 ## Documentation contract
 

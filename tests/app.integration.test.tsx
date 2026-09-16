@@ -92,10 +92,23 @@ describe('App renderer integration', () => {
     })
     await waitFor(() => {
       const lastSaved = bridge.mocks.conversationSave.mock.calls.at(-1)?.[0]
-      expect(lastSaved.messages).toEqual(
+      expect(lastSaved?.messages).toEqual(
         expect.arrayContaining([expect.objectContaining({ role: 'assistant', content: '流式回答' })]),
       )
     })
+  })
+
+  it('restores the draft and blocks provider invocation when the user-message save fails', async () => {
+    const bridge = createRendererApiMock()
+    bridge.mocks.conversationSave.mockRejectedValueOnce(new Error('fixture save failure'))
+    Object.defineProperty(window, 'agentbox', { configurable: true, value: bridge.api })
+    render(<App />)
+    await screen.findByLabelText('消息输入框')
+    fireEvent.change(screen.getByLabelText('消息输入框'), { target: { value: 'Unsaved question' } })
+    fireEvent.click(screen.getByRole('button', { name: '发送消息' }))
+    await waitFor(() => expect(bridge.mocks.conversationSave).toHaveBeenCalledOnce())
+    await waitFor(() => expect(screen.getByLabelText<HTMLTextAreaElement>('消息输入框').value).toBe('Unsaved question'))
+    expect(bridge.mocks.stream).not.toHaveBeenCalled()
   })
 
   it('preserves source whitespace when sending and editing user messages', async () => {
@@ -128,7 +141,9 @@ describe('App renderer integration', () => {
 
     await waitFor(() => {
       const lastSaved = bridge.mocks.conversationSave.mock.calls.at(-1)?.[0]
-      expect(lastSaved.messages.find((message: { id: string }) => message.id === 'user-1')?.content).toBe(editedContent)
+      expect(lastSaved?.messages.find((message: { id: string }) => message.id === 'user-1')?.content).toBe(
+        editedContent,
+      )
     })
   })
 

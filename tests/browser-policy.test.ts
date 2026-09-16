@@ -9,6 +9,33 @@ import {
 import type { Session } from 'electron'
 
 describe('built-in browser URL policy', () => {
+  it.each([
+    '::ffff:127.0.0.1',
+    '::ffff:7f00:1',
+    '0:0:0:0:0:ffff:7f00:1',
+    '::ffff:a00:1',
+    '::ffff:ac10:1',
+    '::ffff:c0a8:101',
+    '::ffff:a9fe:101',
+    '0:0:0:0:0:0:0:1',
+    'FE80:0:0:0:0:0:0:1',
+  ])('blocks canonical and expanded private address %s in URLs and DNS', async (address) => {
+    expect(isPrivateIpAddress(address)).toBe(true)
+    expect(() => normalizeBrowserUrl(`https://[${address}]/`, { allowHttpLoopback: false })).toThrow()
+    const session = { resolveHost: async () => ({ endpoints: [{ address, family: 'ipv6' }] }) } as unknown as Session
+    await expect(
+      assertPublicBrowserDestination(new URL('https://example.com'), session, { allowHttpLoopback: false }),
+    ).rejects.toThrow()
+  })
+
+  it('preserves public IPv6 and limits the opt-in to loopback addresses', () => {
+    for (const address of ['2606:4700:4700::1111', '::ffff:808:808']) {
+      expect(isPrivateIpAddress(address)).toBe(false)
+      expect(normalizeBrowserUrl(`https://[${address}]/`, { allowHttpLoopback: false })).toBeTruthy()
+    }
+    expect(normalizeBrowserUrl('http://[::ffff:127.0.0.1]:3000', { allowHttpLoopback: true }).port).toBe('3000')
+    expect(() => normalizeBrowserUrl('https://[::ffff:10.0.0.1]/', { allowHttpLoopback: true })).toThrow()
+  })
   it('allows public HTTPS and rejects credentials or unsupported schemes', () => {
     expect(normalizeBrowserUrl('https://example.com/path', { allowHttpLoopback: false }).hostname).toBe('example.com')
     expect(() => normalizeBrowserUrl('https://user:pass@example.com/', { allowHttpLoopback: false })).toThrow(

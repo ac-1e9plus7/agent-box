@@ -13,12 +13,19 @@ import { interruptionFromStreamEvent } from '../agent-continuation'
 import { t } from '../../../shared/i18n'
 import { mergeTokenUsage } from '../../../shared/token-usage'
 import type { ConversationUpdater, PersistConversation } from './useConversation'
+import { runStreamWithReplay } from '../stream-helper'
+import { createStreamEventBatcher } from '../stream-event-batcher'
 
 interface ActiveStream {
   requestId: string
   conversationId: string
   assistantMessageId: string
   agentMode: boolean
+  unsubscribe?: () => void
+  flush?: () => void
+  disposeBatch?: () => void
+  finished?: boolean
+  launched?: boolean
 }
 
 export interface StreamRegistration {
@@ -394,6 +401,9 @@ export function useChatStream({
   const activeStreamsRef = useRef<Map<string, ActiveStream>>(new Map())
 
   const discardStream = useCallback((conversationId: string): void => {
+    const stream = activeStreamsRef.current.get(conversationId)
+    stream?.unsubscribe?.()
+    stream?.disposeBatch?.()
     activeStreamsRef.current.delete(conversationId)
     setStreamingConversationIds((current) => {
       if (!current.has(conversationId)) return current
@@ -404,6 +414,7 @@ export function useChatStream({
   }, [])
 
   const prepareStream = useCallback((registration: StreamRegistration): void => {
+    if (activeStreamsRef.current.has(registration.conversationId)) return
     activeStreamsRef.current.set(registration.conversationId, {
       ...registration,
       requestId: '',
@@ -413,6 +424,9 @@ export function useChatStream({
 
   const finalizeStream = useCallback(
     (activeStream: ActiveStream, event: Extract<StreamEvent, { type: 'done' | 'error' }>): void => {
+      if (activeStreamsRef.current.get(activeStream.conversationId) !== activeStream) return
+      activeStream.flush?.()
+      activeStream.finished = true
       const targetConvId = activeStream.conversationId
       const targetAssistantId = activeStream.assistantMessageId
       const next = replaceConversations((current) =>
@@ -457,30 +471,43 @@ export function useChatStream({
     [discardStream, maybeGenerateTitle, persistConversation, replaceConversations, showToast],
   )
 
-  const finishStream = useCallback(
-    (event: Extract<StreamEvent, { type: 'done' | 'error' }>): void => {
-      for (const stream of activeStreamsRef.current.values()) {
-        if (stream.requestId === event.requestId) {
-          finalizeStream(stream, event)
-          return
-        }
-      }
-    },
-    [finalizeStream],
-  )
-
   const launchPreparedStream = useCallback(
     async (registration: StreamRegistration, request: ChatRequest): Promise<boolean> => {
+      const stream = activeStreamsRef.current.get(registration.conversationId)
+      if (!stream || stream.assistantMessageId !== registration.assistantMessageId || stream.launched) return false
+      stream.launched = true
+      const batch = createStreamEventBatcher((events) => {
+        if (activeStreamsRef.current.get(stream.conversationId) !== stream) return
+        replaceConversations((current) =>
+          current.map((conversation) =>
+            events.reduce((next, event) => applyStreamEvent(next, stream, event), conversation),
+          ),
+        )
+      })
+      stream.flush = batch.flush
+      stream.disposeBatch = batch.dispose
       try {
-        const { requestId } = await window.agentbox.chat.stream(request)
-        const stream = activeStreamsRef.current.get(registration.conversationId)
-        if (stream && stream.assistantMessageId === registration.assistantMessageId) {
-          stream.requestId = requestId
+        const result = await runStreamWithReplay(
+          (input) => window.agentbox.chat.stream(input),
+          (listener) => window.agentbox.chat.onEvent(listener),
+          request,
+          (event) => {
+            if (activeStreamsRef.current.get(stream.conversationId) !== stream) return
+            stream.requestId = event.requestId
+            if (event.type === 'done' || event.type === 'error') finalizeStream(stream, event)
+            else if (event.type !== 'start' && event.type !== 'tool-call-args') batch.push(event)
+          },
+        )
+        stream.requestId = result.requestId
+        stream.unsubscribe = result.unsubscribe
+        if (activeStreamsRef.current.get(stream.conversationId) !== stream) {
+          result.unsubscribe()
+          if (!stream.finished) await window.agentbox.chat.cancel(result.requestId).catch(() => undefined)
+          return stream.finished === true
         }
         return true
       } catch (error) {
-        const stream = activeStreamsRef.current.get(registration.conversationId)
-        if (stream && stream.assistantMessageId === registration.assistantMessageId) {
+        if (activeStreamsRef.current.get(stream.conversationId) === stream) {
           finalizeStream(stream, {
             type: 'error',
             requestId: stream.requestId,
@@ -490,35 +517,41 @@ export function useChatStream({
         return false
       }
     },
-    [finalizeStream],
+    [finalizeStream, replaceConversations],
   )
 
   const cancelConversationStream = useCallback(
     async (conversationId: string): Promise<void> => {
       const stream = activeStreamsRef.current.get(conversationId)
       if (!stream) return
-      if (stream.requestId) await window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
       discardStream(conversationId)
+      if (stream.requestId) await window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
     },
     [discardStream],
   )
 
   const cancelAllStreams = useCallback(async (): Promise<void> => {
     const streams = [...activeStreamsRef.current.values()]
+    for (const stream of streams) discardStream(stream.conversationId)
     await Promise.all(
       streams.map((stream) =>
         stream.requestId ? window.agentbox.chat.cancel(stream.requestId).catch(() => undefined) : Promise.resolve(),
       ),
     )
-    activeStreamsRef.current.clear()
-    setStreamingConversationIds(new Set())
-  }, [])
+  }, [discardStream])
 
   const stopStream = useCallback(
     async (conversationId: string): Promise<void> => {
       const stream = activeStreamsRef.current.get(conversationId)
-      if (!stream?.requestId) return
+      if (!stream) return
       try {
+        if (!stream.requestId) {
+          stream.flush?.()
+          finalizeStream(stream, { type: 'done', requestId: '', finishReason: 'cancelled' })
+          // A request still awaiting its IPC ID must be cancelled when that ID arrives.
+          stream.finished = false
+          return
+        }
         await window.agentbox.chat.cancel(stream.requestId)
         finalizeStream(stream, { type: 'done', requestId: stream.requestId, finishReason: 'cancelled' })
       } catch (error) {
@@ -544,39 +577,17 @@ export function useChatStream({
     [showToast],
   )
 
-  useEffect(
-    () =>
-      window.agentbox.chat.onEvent((event) => {
-        if (event.type === 'start') {
-          for (const stream of activeStreamsRef.current.values()) {
-            if (!stream.requestId) {
-              stream.requestId = event.requestId
-              break
-            }
-          }
-        }
-
-        let activeStream: ActiveStream | undefined
-        for (const stream of activeStreamsRef.current.values()) {
-          if (stream.requestId === event.requestId) {
-            activeStream = stream
-            break
-          }
-        }
-        if (!activeStream) return
-
-        if (event.type === 'done' || event.type === 'error') {
-          finishStream(event)
-          return
-        }
-        if (event.type === 'start' || event.type === 'tool-call-args') return
-
-        replaceConversations((current) =>
-          current.map((conversation) => applyStreamEvent(conversation, activeStream, event)),
-        )
-      }),
-    [finishStream, replaceConversations],
-  )
+  useEffect(() => {
+    const streams = activeStreamsRef.current
+    return () => {
+      for (const stream of streams.values()) {
+        stream.unsubscribe?.()
+        stream.disposeBatch?.()
+        if (stream.requestId) void window.agentbox.chat.cancel(stream.requestId).catch(() => undefined)
+      }
+      streams.clear()
+    }
+  }, [])
 
   return {
     cancelAllStreams,

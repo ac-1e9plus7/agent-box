@@ -114,10 +114,11 @@ export function isPrivateIpAddress(value: string): boolean {
     )
   }
   if (kind === 6) {
-    if (normalized === '::' || normalized === '::1') return true
-    if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('ff')) return true
-    if (/^fe[89ab]/.test(normalized)) return true
-    const mapped = /(?:^|:)ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(normalized)?.[1]
+    const canonical = canonicalIpv6(normalized)
+    if (canonical === '::' || canonical === '::1') return true
+    if (canonical.startsWith('fc') || canonical.startsWith('fd') || canonical.startsWith('ff')) return true
+    if (/^fe[89ab]/.test(canonical)) return true
+    const mapped = mappedIpv4(canonical)
     return mapped ? isPrivateIpAddress(mapped) : false
   }
   return true
@@ -125,9 +126,28 @@ export function isPrivateIpAddress(value: string): boolean {
 
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = stripIpv6Brackets(hostname).toLowerCase()
-  if (normalized === 'localhost' || normalized.endsWith('.localhost') || normalized === '::1') return true
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) return true
+  if (isIP(normalized) === 6) {
+    const canonical = canonicalIpv6(normalized)
+    const mapped = mappedIpv4(canonical)
+    return canonical === '::1' || (mapped !== undefined && isLoopbackHostname(mapped))
+  }
   if (isIP(normalized) !== 4) return false
   return Number(normalized.split('.')[0]) === 127
+}
+
+// WHATWG URL canonicalization handles expanded and dotted IPv6 representations.
+// Only call this after isIP has validated the literal as IPv6.
+function canonicalIpv6(value: string): string {
+  return stripIpv6Brackets(new URL(`http://[${value}]/`).hostname)
+}
+
+function mappedIpv4(canonical: string): string | undefined {
+  const mapped = /^::ffff:([\da-f]+):([\da-f]+)$/.exec(canonical)
+  if (!mapped) return undefined
+  const high = Number.parseInt(mapped[1]!, 16)
+  const low = Number.parseInt(mapped[2]!, 16)
+  return [high >>> 8, high & 255, low >>> 8, low & 255].join('.')
 }
 
 function isPrivateHostname(hostname: string): boolean {

@@ -36,7 +36,7 @@ AgentBox 将设置、供应商凭据、模型、会话、Skills 和 MCP server �
 - [`EncryptedStore`](../src/electron/storage/encrypted-store.ts) 在首次初始化时生成 32-byte 随机密钥，将其编码为 Base64 后交给 Electron `safeStorage.encryptString()`，封装结果写入 `master-key.bin`。
 - 如果 `safeStorage.isEncryptionAvailable()` 为 false，应用拒绝加载用户数据；Linux 若选中的后端是未加密的 `basic_text`，同样直接报错，不提供明文降级。
 - 应用退出时会覆写并释放进程内的密钥 Buffer。密钥和已解密状态在应用运行期间仍必须存在于可信主进程内存中。
-- 启动流程兼容旧 ChatBox Lite 用户目录和旧 AAD。目录迁移会复制或重新持久化旧数据；读取旧 AAD 后的下一次 Vault 写入使用当前 `agentbox:vault:v1` AAD。
+- 启动流程兼容旧 ChatBox Lite 用户目录和旧 AAD。只有当前 Vault 文件不存在时才自动导入旧目录。已有有效 Vault 始终优先，包括看似默认或已清空的 Vault；损坏的 Vault 会安全报错，不会被旧数据替换。显式重置禁用旧目录导入。读取旧 AAD 后的下一次 Vault 写入使用当前 `agentbox:vault:v1` AAD。
 
 ### 2. Vault 加密与写入语义
 
@@ -59,7 +59,7 @@ Record 格式、Saver 契约、配额与生命周期详见 [LangGraph 加密 Che
 
 ## 📦 Vault Schema
 
-领域结构定义于 [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts)，共享实体定义于 [`src/shared/types.ts`](../src/shared/types.ts)：
+领域结构和规范化定义于 [`vault-schema.ts`](../src/electron/storage/vault-schema.ts)；[`app-repository.ts`](../src/electron/storage/app-repository.ts) 负责变更，共享实体定义于 [`src/shared/types.ts`](../src/shared/types.ts)。Repository getter 使用 `EncryptedStore.readField`，只复制选中的集合或设置对象，不暴露内部可变状态。变更仍执行完整 Vault 校验与加密原子替换。退出时等待待写入操作完成，再销毁密钥。
 
 ```typescript
 interface VaultState {

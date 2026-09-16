@@ -44,6 +44,9 @@ const SEMANTIC_KEYS = {
 // machine translation here once it has been reviewed; `generate` gives these
 // entries highest priority over existing or machine-translated values.
 const reviewedZh = {
+  'The provider response exceeded the request size limit.': '服务商响应超过了本次请求的大小限制。',
+  'MCP request failed. Check the server configuration and connection.': 'MCP 请求失败。请检查服务器配置和连接。',
+  'The MCP server is unavailable or disabled.': 'MCP 服务不可用或已禁用。',
   'Data platform operation could not be verified. Check the connection, permissions, and plan, then try again.':
     '无法核验数据平台操作。请检查连接、权限和计划后重试。',
   'Data platform request failed. Restore the connection and check the execution status before retrying.':

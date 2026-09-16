@@ -123,8 +123,9 @@ export interface RendererApiMock {
   emit: (event: StreamEvent) => void
   emitBrowser: (event: BrowserEvent) => void
   mocks: {
-    conversationSave: ReturnType<typeof vi.fn>
-    stream: ReturnType<typeof vi.fn>
+    conversationSave: ReturnType<typeof vi.fn<AgentboxAPI['conversations']['save']>>
+    stream: ReturnType<typeof vi.fn<AgentboxAPI['chat']['stream']>>
+    cancel: ReturnType<typeof vi.fn<AgentboxAPI['chat']['cancel']>>
   }
 }
 
@@ -145,10 +146,11 @@ export function createRendererApiMock({
   settings?: AppSettings
   skills?: Skill[]
 } = {}): RendererApiMock {
-  let listener: ((event: StreamEvent) => void) | undefined
+  const listeners = new Set<(event: StreamEvent) => void>()
   let browserListener: ((event: BrowserEvent) => void) | undefined
   const conversationSave = vi.fn(async (conversation: Conversation) => conversation)
   const stream = vi.fn(async () => ({ requestId: 'request-1' }))
+  const cancel = vi.fn(async () => undefined)
 
   const api = {
     settings: {
@@ -219,12 +221,12 @@ export function createRendererApiMock({
     },
     chat: {
       stream,
-      cancel: vi.fn(async () => undefined),
+      cancel,
       resolveToolApproval: vi.fn(async () => undefined),
       onEvent: vi.fn((nextListener: (event: StreamEvent) => void) => {
-        listener = nextListener
+        listeners.add(nextListener)
         return () => {
-          if (listener === nextListener) listener = undefined
+          listeners.delete(nextListener)
         }
       }),
     },
@@ -261,9 +263,11 @@ export function createRendererApiMock({
 
   return {
     api,
-    emit: (event) => listener?.(event),
+    emit: (event) => {
+      for (const listener of listeners) listener(event)
+    },
     emitBrowser: (event) => browserListener?.(event),
-    mocks: { conversationSave, stream },
+    mocks: { conversationSave, stream, cancel },
   }
 }
 

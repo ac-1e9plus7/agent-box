@@ -4,11 +4,11 @@
 
 > **A private, powerful desktop client for multi-model AI agents**
 >
-> Built with React 19, TypeScript 5.7, and Electron 35, with native adapters for the OpenAI Chat Completions API, OpenAI Responses API, and Anthropic Messages API, plus Agent Skills and Model Context Protocol (MCP) servers.
+> Built with React 19, TypeScript 5.7, and Electron 44, with native adapters for the OpenAI Chat Completions API, OpenAI Responses API, and Anthropic Messages API, plus Agent Skills and Model Context Protocol (MCP) servers.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
-[![Electron](https://img.shields.io/badge/Electron-35-47848F.svg)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-44-47848F.svg)](https://www.electronjs.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 ## Highlights
@@ -109,7 +109,7 @@ Electron Builder produces an NSIS installer and portable executable on Windows, 
 1. **The renderer cannot read stored API keys.** It may submit a newly entered key, but persisted keys are write-only and are represented only by `hasApiKey` or masked fields; network requests and authentication stay in the main process.
 2. **There is no plaintext credential fallback.** If OS secure storage is unavailable, AgentBox refuses to load or persist protected local data.
 3. **OpenRouter routing is privacy-oriented by default.** New model configurations default to `data_collection: "deny"` and `zdr: true`.
-4. **Workspace operations are scoped.** File and terminal tools operate relative to the conversation working directory, reject traversal, and protect sensitive actions with approval policies.
+4. **Workspace file tools are scoped.** File tools reject traversal and symbolic-link escapes. The terminal starts in the conversation working directory but is not an OS sandbox; approved commands can access other paths and the network.
 
 ## License
 

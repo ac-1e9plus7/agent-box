@@ -39,6 +39,12 @@ Then launch the unpacked application for the current platform. On Windows, verif
 
 ## Vitest test system
 
+Vitest 4 and `@vitest/coverage-v8` provide the test and coverage runner. `pnpm test:coverage` runs the complete suite and checks each measured critical module against the committed `tests/coverage-baseline.json`; `pnpm check` uses this command and also runs `pnpm docs:check`. Baselines cover the listed security, storage, stream, and state-machine modules, not the whole application's coverage. Raise baselines after improving tests; do not lower them to hide regressions. `pnpm benchmark` records 1/10/50 MiB synthetic Vault reads and saves under `artifacts/quality-review/`; these measurements do not use user data and are not timing assertions in CI.
+
+`pnpm test:smoke` launches the packaged native executable through Playwright, using `AGENTBOX_SMOKE_USER_DATA` to isolate the profile and disable legacy-directory import. Normal safeStorage requirements remain enforced. `AGENTBOX_SMOKE_EXECUTABLE` can override the executable path. The fixture tests real preload/IPC, window and browser isolation, 160-message virtualization, multi-tab browsing, an actual local provider stream invoking snapshot/screenshot tools, encrypted Cookie restoration, and history clearing with provider retention. Screenshots/results go to `artifacts/smoke/`; temporary profiles contain synthetic data only. Browser screenshot capture is exercised with the panel visible. Linux requires a real Secret Service session and display, not a plaintext-storage fallback.
+
+`pnpm audit:dependencies` uses the official npm registry and fails on moderate or higher advisories. Compatible transitive security overrides live in `pnpm-workspace.yaml`; review and retire them when parent dependencies carry fixed versions. Dependabot proposes weekly dependency and Actions updates. Electron remains a shipped runtime even though its package is a development dependency.
+
 [`vitest.config.ts`](../vitest.config.ts) uses the Node environment by default and matches both `tests/**/*.test.ts` and `tests/**/*.test.tsx`. Pure renderer behavior remains isolated in testable functions where practical. Renderer integration tests opt into jsdom at the file level and render real React components with Testing Library; `app.integration` and `browser-panel.integration` install a typed in-memory `window.agentbox` preload-bridge mock, while `settings-dialog.integration` and `chat-content-usage` exercise component props/callbacks without crossing that bridge. They are not full Electron UI automation. `tsconfig.node.json` includes the complete renderer source tree because these tests import real component graphs, and both `.ts` and `.tsx` tests participate in TypeScript checking.
 
 | Area                                                    | Representative tests                                                                                                                                                                                                                                                                                                                                                                   |
@@ -68,7 +74,7 @@ pnpm build
 
 ## GitHub Actions
 
-The [quality workflow](../.github/workflows/quality.yml) runs `pnpm check` for branch pushes and pull requests. The [release workflow](../.github/workflows/release.yml) runs for tags matching `v*.*.*` and for manual `workflow_dispatch` events. Its build matrix is:
+The [quality workflow](../.github/workflows/quality.yml) runs `pnpm check`, real Python 3.13 tests, native packaging, and packaged smoke tests on Windows, macOS, and Ubuntu 22.04 for branch pushes and pull requests. Linux also audits dependencies and launches smoke tests under Xvfb/DBus with gnome-keyring. Coverage and smoke evidence are uploaded even on failure. This configuration does not imply that a local Windows run has verified the other platforms. The [release workflow](../.github/workflows/release.yml) runs for tags matching `v*.*.*` and for manual `workflow_dispatch` events. Its build matrix is:
 
 - Windows x64 and arm64;
 - macOS on the runner's native architecture;
@@ -84,4 +90,4 @@ The data-plat-* suites cover schema dialects, encrypted configuration, exact app
 
 ## Explicit Python runtime verification
 
-Set `AGENTBOX_TEST_PYTHON` to a real Python 3 executable and run `pnpm exec vitest run tests/python-runtime-live.test.ts`. It verifies structured `input_data` calculations, blocked file/module access, and timeout termination. Without this variable the three optional live cases are skipped; CI can set it to its installed Python path. On Windows the runner waits for process/stdio closure before deleting its temporary directory, with bounded retries for transient file locks.
+Set `AGENTBOX_TEST_PYTHON` to a real Python 3 executable and run `pnpm exec vitest run tests/python-runtime-live.test.ts`. It verifies structured `input_data` calculations, blocked file/module access, and timeout termination. Without this variable the three optional live cases are skipped; the quality CI sets it explicitly. On Windows the runner waits for process/stdio closure before deleting its temporary directory, with bounded retries for transient file locks.

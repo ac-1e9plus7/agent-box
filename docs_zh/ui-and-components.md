@@ -53,6 +53,10 @@ Agent 回复因取消、限流、网络/API 错误、输出上限或工具轮次
 
 ## Markdown、代码与数学公式
 
+聊天请求在调用前订阅，通过 `runStreamWithReplay` 只重放返回 request ID 对应的事件；全局 `start` 事件不会占用等待中的会话。保存期间取消会阻止启动，IPC 等待期间取消会在 ID 返回后中止请求。终态事件在持久化前刷新增量缓冲。文本和 reasoning 按 16 ms 批次提交，相邻文本增量合并；审批和状态转换立即刷新。`useConversationTitles` 管理标题取消、手动改名保护和 20 秒期限，也处理事件早于 IPC Promise 返回的情况。
+
+未变化的 Markdown 正文使用 memo 缓存。活动分支超过 80 条消息时使用按实际高度测量的 TanStack 虚拟列表，保留六行 overscan、稳定消息 ID 和末尾锚定。向上滚动暂停自动跟随输出。这只改变挂载的 DOM，持久化消息、分支和模型上下文保持完整。
+
 [`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) 将持久化的 `message.content` 视为源数据，而不是渲染后的 HTML。用户消息使用转义后的纯文本和 `white-space: pre-wrap` 显示，因此换行、缩进与 Markdown 标点保持字面含义，也不会生成 `<br>` 元素。助手消息使用 `react-markdown`，并组合以下插件：
 
 - `remark-gfm`：表格、任务列表、删除线和自动链接等 GitHub Flavored Markdown。

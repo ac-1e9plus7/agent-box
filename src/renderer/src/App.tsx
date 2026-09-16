@@ -17,7 +17,6 @@ import type {
   ProviderInput,
   Skill,
   SkillInput,
-  StreamEvent,
   ToolApprovalDecision,
 } from '../../shared/types'
 import { ChatContent } from './components/ChatContent'
@@ -34,7 +33,6 @@ import type { ChatMessage, Conversation, ModelConfig, ProviderConfig, SettingsSe
 import { getActiveMessageChain, getAncestorsForRegeneration } from '../../shared/conversation-tree'
 import { effectiveWebSearchMode, isWebSearchAvailable } from './web-search'
 import { projectContext } from './context-projection'
-import { runStreamWithReplay } from './stream-helper'
 import { DEFAULT_AGENT_TOOL_TURN_LIMIT, MAX_AGENT_SKILL_ACTIVATIONS } from '../../shared/agent-limits'
 import {
   DEFAULT_AGENT_CONTEXT_COMPACTION_ENABLED,
@@ -49,7 +47,7 @@ import {
 } from '../../shared/agent-token-optimization'
 import { DEFAULT_BROWSER_HOME_PAGE } from '../../shared/browser-settings'
 import { resolveNaturalAgentResumeMessageId } from './agent-continuation'
-import { cleanGeneratedTitle, cleanManualTitle, firstUserQuestion, TITLE_SYSTEM_PROMPT } from './title'
+import { useConversationTitles } from './hooks/useConversationTitles'
 import { languageFromSystemLocale, setLanguage } from '../../shared/i18n'
 import { t } from '../../shared/i18n'
 import { normalizeMessageContent } from '../../shared/message-content'
@@ -151,8 +149,6 @@ export default function App(): JSX.Element {
   const [browserStates, setBrowserStates] = useState<Record<string, BrowserState>>({})
 
   const toastTimerRef = useRef<number | undefined>(undefined)
-  const autoRenamingRef = useRef<Set<string>>(new Set())
-  const manualRenamedRef = useRef<Set<string>>(new Set())
 
   const activeModel = models.find((model) => model.id === activeModelId)
   const activeProvider = providers.find((provider) => provider.id === activeModel?.providerId)
@@ -386,97 +382,13 @@ export default function App(): JSX.Element {
     [],
   )
 
-  const maybeGenerateTitle = useCallback(
-    async (conversation: Conversation): Promise<void> => {
-      const modelId = settings.titleGenerationModelId || conversation.modelId
-      const model = models.find((item) => item.id === modelId)
-      if (!model) return
-      const rawQuestion = firstUserQuestion(conversation.messages)
-      if (!rawQuestion) return
-      const question = rawQuestion.length > 2000 ? rawQuestion.slice(0, 2000) + '\n...' : rawQuestion
-      // Guard against duplicate generation or overwriting manual renames.
-      if (autoRenamingRef.current.has(conversation.id) || manualRenamedRef.current.has(conversation.id)) return
-      autoRenamingRef.current.add(conversation.id)
-
-      let unsubscribe: (() => void) | undefined
-      let collected = ''
-      let settled = false
-      const finish = (): void => {
-        if (settled) return
-        settled = true
-        unsubscribe?.()
-      }
-
-      const processEvent = (event: StreamEvent): void => {
-        if (event.type === 'text-delta') {
-          collected += event.delta
-          return
-        }
-        if (event.type === 'done') {
-          finish()
-          const title = cleanGeneratedTitle(collected)
-          if (!title) return
-          const current = conversationsRef.current.find((item) => item.id === conversation.id)
-          // Only overwrite if the user has not manually renamed it in the meantime.
-          if (current && !manualRenamedRef.current.has(conversation.id)) {
-            const renamed = { ...current, title, updatedAt: new Date().toISOString() }
-            replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
-            void persistConversation(renamed)
-          }
-          return
-        }
-        if (event.type === 'error') {
-          finish()
-        }
-      }
-
-      try {
-        const result = await runStreamWithReplay<ChatRequest>(
-          (request) => window.agentbox.chat.stream(request),
-          (listener) => window.agentbox.chat.onEvent(listener),
-          {
-            conversationId: conversation.id,
-            modelId: model.id,
-            messages: [
-              {
-                id: 'title-system',
-                role: 'system',
-                content: TITLE_SYSTEM_PROMPT,
-                createdAt: new Date(0).toISOString(),
-              },
-              { id: 'title-user', role: 'user', content: question, createdAt: new Date(0).toISOString() },
-            ],
-            reasoningEnabled: false,
-            webSearchMode: 'off',
-            maxOutputTokens: 32,
-          },
-          processEvent,
-        )
-
-        unsubscribe = result.unsubscribe
-        // Safety net: give up after 20s regardless of stream state.
-        window.setTimeout(() => finish(), 20_000)
-      } catch {
-        finish()
-      }
-    },
-    [conversationsRef, models, persistConversation, replaceConversations, settings.titleGenerationModelId],
-  )
-
-  const renameConversation = useCallback(
-    (conversationId: string, rawTitle: string): void => {
-      const title = cleanManualTitle(rawTitle)
-      if (!title) return
-      const current = conversationsRef.current.find((item) => item.id === conversationId)
-      if (!current || current.title === title) return
-      // A manual rename marks the conversation so auto-generation won't override it.
-      manualRenamedRef.current.add(conversationId)
-      const renamed = { ...current, title, updatedAt: new Date().toISOString() }
-      replaceConversations((items) => items.map((item) => (item.id === renamed.id ? renamed : item)))
-      void persistConversation(renamed)
-    },
-    [conversationsRef, persistConversation, replaceConversations],
-  )
+  const { maybeGenerateTitle, renameConversation, forgetTitleGeneration, cancelAllTitles } = useConversationTitles({
+    conversationsRef,
+    models,
+    persistConversation,
+    replaceConversations,
+    titleModelId: settings.titleGenerationModelId,
+  })
 
   const {
     cancelAllStreams,
@@ -512,8 +424,7 @@ export default function App(): JSX.Element {
 
   const handleDeleteConversation = async (conversationId: string): Promise<void> => {
     await cancelConversationStream(conversationId)
-    autoRenamingRef.current.delete(conversationId)
-    manualRenamedRef.current.delete(conversationId)
+    forgetTitleGeneration(conversationId)
     try {
       await window.agentbox.conversations.remove(conversationId)
       const next = replaceConversations((current) =>
@@ -1362,6 +1273,7 @@ export default function App(): JSX.Element {
 
   const handleClearAllData = async (): Promise<void> => {
     await cancelAllStreams()
+    cancelAllTitles()
     await window.agentbox.data.clearConversations()
     clearConversationState()
     const fallbackModel = models.find((model) => model.id === settings.defaultModelId) ?? models[0]

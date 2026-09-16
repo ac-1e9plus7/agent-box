@@ -1,3 +1,9 @@
+import { GatewayError } from './gateway-error'
+import { executeReadOnlyAgentTool } from './read-only-agent-tools'
+import { monitorProviderBody, ProviderStreamBudget } from './provider-stream-budget'
+export { GatewayError } from './gateway-error'
+import { cloneJsonRecord } from './gateway-json'
+import { consumeStream, type AccumulatedToolCall, type StreamConsumptionResult } from './provider-stream'
 import { ProxyAgent } from 'undici'
 import { isAbsolute, normalize } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -16,7 +22,6 @@ import type {
   ToolApprovalDecision,
   ToolApprovalTimeoutMode,
   ToolCallExecution,
-  WebCitation,
 } from '../../shared/types'
 import { estimateTextTokens } from '../../shared/token-estimate'
 import { isValidProviderContinuation } from '../../shared/provider-context'
@@ -65,25 +70,16 @@ import { evaluateToolApproval, validateToolArguments } from '../mcp/tool-policy'
 import { AppRepository, type StoredProvider } from '../storage/app-repository'
 import { ContextWindowError, prepareMessagesForContext, resolveContextManagementMode } from './context-window'
 import { toRemoteModel } from './model-catalog'
-import {
-  parseAnthropicEvent,
-  parseChatCompletionEvent,
-  parseResponsesEvent,
-  type ProtocolErrorData,
-} from './protocol-adapters'
+
 import { buildRequestBody, RequestAdapterError } from './request-adapters'
 import { executeCode, type ExecutableLanguage } from './code-executor'
 import { executeTerminalCommand } from './terminal-shell'
 import { readWorkspaceFile, writeWorkspaceFile } from './workspace-files'
 import { buildSkillRetrievalQuery, retrieveExplicitlyMentionedSkills, retrieveRelevantSkills } from './skill-retriever'
 import { buildProviderHeaders, providerHasUsableAuthentication } from './provider-policy'
-import { parseSse } from './sse'
+
 import { runAgentRuntime } from './agent-runtime'
-import {
-  createCitationEmissionState,
-  takeChangedWebCitations,
-  type CitationEmissionState,
-} from '../storage/web-metadata-schema'
+import { createCitationEmissionState } from '../storage/web-metadata-schema'
 import { t } from '../../shared/i18n'
 import { BrowserToolExecutor } from '../browser/browser-tool-executor'
 import { agentCheckpointThreadId } from '../storage/checkpoint-identity'
@@ -94,11 +90,8 @@ import {
   appendUniqueTools,
   compactOlderAgentTurns,
   compactToolResultsForModel,
-  formatFullToolResult,
-  readTextChunk,
   rememberFullToolResult,
   restoreDynamicallyExposedTools,
-  searchAdditionalTools,
   seedFullToolResultStore,
   selectInitialDynamicTools,
   type FullToolResult,
@@ -119,19 +112,8 @@ const MAX_MODEL_RESPONSE_BYTES = 32 * 1024 * 1024
 const MAX_ERROR_RESPONSE_BYTES = 32 * 1024
 const LEGACY_MAX_STORED_TOOL_RESULT_CHARACTERS = 100_000
 const MAX_STORED_TOOL_RESULT_CHARACTERS = 600_000
-export class GatewayError extends Error {
-  constructor(
-    message: string,
-    readonly code?: string,
-    readonly status?: number,
-    readonly retryAfterSeconds?: number,
-  ) {
-    super(message)
-    this.name = 'GatewayError'
-  }
-}
-
 export class ChatGateway {
+  private readonly running = new Map<string, Promise<void>>()
   private readonly controllers = new Map<string, AbortController>()
   private readonly pendingToolApprovals = new Map<
     string,
@@ -187,12 +169,32 @@ export class ChatGateway {
   }
 
   async stream(requestId: string, request: ChatRequest, emit: StreamEmitter): Promise<void> {
+    if (this.running.has(requestId)) throw new Error('Duplicate request id')
+    const operation = this.streamRequest(requestId, request, emit)
+    this.running.set(requestId, operation)
+    try {
+      await operation
+    } finally {
+      this.running.delete(requestId)
+    }
+  }
+
+  async close(): Promise<void> {
+    this.cancelAll()
+    await Promise.allSettled([...this.running.values()])
+    await this.proxyAgent?.close().catch(() => undefined)
+    this.proxyAgent = undefined
+    this.proxyUrl = undefined
+  }
+
+  private async streamRequest(requestId: string, request: ChatRequest, emit: StreamEmitter): Promise<void> {
     if (this.controllers.has(requestId)) throw new Error('Duplicate request id')
     const controller = new AbortController()
     let requestSecret: string | undefined
     let activeCheckpoint: { saver: AgentBoxCheckpointSaver; threadId: string; hasTraceFallback: boolean } | undefined
     let browserLeaseActive = false
     const citationState = createCitationEmissionState()
+    const streamBudget = new ProviderStreamBudget()
     this.controllers.set(requestId, controller)
     emit({ type: 'start', requestId })
 
@@ -293,7 +295,7 @@ export class ChatGateway {
       let allMcpTools: McpToolDefinition[] = []
       let effectiveMcpTools: McpToolDefinition[] = []
       if (isAgentMode && this.mcpManager && settings.mcpEnabled !== false) {
-        allMcpTools = await this.mcpManager.listAllTools(request.mcpServerIds)
+        allMcpTools = await this.mcpManager.listAllTools(request.mcpServerIds, controller.signal)
         if (allMcpTools.length > 0) {
           effectiveMcpTools = retrieveRelevantTools(lastUserMessage, allMcpTools, {
             mode: settings.mcpToolRetrievalMode,
@@ -534,29 +536,7 @@ export class ChatGateway {
               throw new GatewayError(t('The provider did not return a response stream.'), 'empty_response')
             }
 
-            const wrappedBody = new ReadableStream<Uint8Array>({
-              async start(ctrl) {
-                const reader = response.body!.getReader()
-                try {
-                  while (true) {
-                    const { value, done } = await reader.read()
-                    resetStallTimer()
-                    if (done) {
-                      ctrl.close()
-                      break
-                    }
-                    ctrl.enqueue(value)
-                  }
-                } catch (e) {
-                  ctrl.error(e)
-                } finally {
-                  reader.releaseLock()
-                }
-              },
-              cancel(reason) {
-                response.body!.cancel(reason).catch(() => {})
-              },
-            })
+            const wrappedBody = monitorProviderBody(response.body, resetStallTimer, streamBudget)
 
             const streamResult = await consumeStream(
               format,
@@ -567,6 +547,7 @@ export class ChatGateway {
               turn,
               strategy === 'native-continuation',
               citationState,
+              streamBudget,
             )
             if (strategy === 'native-continuation' && !streamResult.responseId) {
               disabledProviderContextStrategies.add('native-continuation')
@@ -767,119 +748,27 @@ export class ChatGateway {
               continue
             }
 
-            if (isToolResultReader) {
-              const callId = typeof parsedArgs.call_id === 'string' ? parsedArgs.call_id : ''
-              const stored = fullToolResults.get(callId)
-              let result: string
-              let isError = false
-              if (!stored) {
-                result = t('No complete tool result is available for call ID {value0}.', {
-                  value0: callId || t('(empty)'),
-                })
-                isError = true
-              } else {
-                const requestedOffset = typeof parsedArgs.offset === 'number' ? parsedArgs.offset : 0
-                const requestedMax = typeof parsedArgs.max_characters === 'number' ? parsedArgs.max_characters : 8_000
-                const responseBudget = Math.max(256, toolResultMaxCharacters - 512)
-                const chunk = readTextChunk(
-                  formatFullToolResult(stored),
-                  requestedOffset,
-                  Math.min(requestedMax, responseBudget),
-                )
-                result = `${JSON.stringify({
-                  call_id: callId,
-                  offset: chunk.offset,
-                  next_offset: chunk.nextOffset,
-                  total_characters: chunk.totalCharacters,
-                  has_more: chunk.hasMore,
-                })}\n${chunk.text}`
-              }
-              recordLowRiskInternalResult(
-                rawCall,
-                toolDef,
-                parsedArgs,
-                result,
-                isError,
-                t('Read a previously completed local tool result without executing the tool again.'),
-              )
-              continue
-            }
-
-            if (isDynamicToolSearch) {
-              const query = typeof parsedArgs.query === 'string' ? parsedArgs.query : ''
-              const requestedLimit = typeof parsedArgs.max_tools === 'number' ? parsedArgs.max_tools : dynamicToolLimit
-              const loaded = searchAdditionalTools(
-                query,
-                authorizedAgentTools,
-                effectiveAgentTools,
-                Math.min(requestedLimit, dynamicToolLimit),
-              )
-              if (loaded.length > 0) {
-                effectiveAgentTools = appendUniqueTools(effectiveAgentTools, loaded)
+            const readOnlyResult = executeReadOnlyAgentTool(toolDef, parsedArgs, {
+              fullToolResults,
+              toolResultMaxCharacters,
+              toolResultCompactionEnabled,
+              activeSkills,
+              authorizedAgentTools,
+              effectiveAgentTools,
+              dynamicToolLimit,
+            })
+            if (readOnlyResult) {
+              if (readOnlyResult.loadedTools?.length) {
+                effectiveAgentTools = appendUniqueTools(effectiveAgentTools, readOnlyResult.loadedTools)
                 toolsChangedThisTurn = true
               }
-              const result =
-                loaded.length > 0
-                  ? t('The following authorized tools are now exposed for the next model turn:\n{value0}', {
-                      value0: loaded
-                        .map(
-                          (tool) =>
-                            `- ${tool.modelName || tool.name} (${tool.serverName}): ${tool.description || tool.name}`,
-                        )
-                        .join('\n'),
-                    })
-                  : t('No additional authorized tools matched this search.')
               recordLowRiskInternalResult(
                 rawCall,
                 toolDef,
                 parsedArgs,
-                result,
-                false,
-                t('Search the request-authorized local tool catalog without executing a matched tool.'),
-              )
-              continue
-            }
-
-            if (isSkillResourceReader) {
-              const skillId = typeof parsedArgs.skill_id === 'string' ? parsedArgs.skill_id : ''
-              const path = typeof parsedArgs.path === 'string' ? parsedArgs.path : ''
-              const skill = activeSkills.find((item) => item.id === skillId)
-              const resource = skill?.files.find(
-                (file) =>
-                  file.path === path &&
-                  file.path !== skill.entryFile &&
-                  (file.kind === 'markdown' || file.kind === 'python' || file.kind === 'shell'),
-              )
-              let result: string
-              let isError = false
-              if (!skill || !resource) {
-                result = t('The requested active Skill resource was not found or is not readable.')
-                isError = true
-              } else {
-                const requestedOffset = typeof parsedArgs.offset === 'number' ? parsedArgs.offset : 0
-                const requestedMax = typeof parsedArgs.max_characters === 'number' ? parsedArgs.max_characters : 8_000
-                const responseBudget = toolResultCompactionEnabled
-                  ? Math.max(256, toolResultMaxCharacters - 512)
-                  : 32_000
-                const chunk = readTextChunk(resource.content, requestedOffset, Math.min(requestedMax, responseBudget))
-                result = `${JSON.stringify({
-                  skill_id: skill.id,
-                  path: resource.path,
-                  kind: resource.kind,
-                  offset: chunk.offset,
-                  next_offset: chunk.nextOffset,
-                  total_characters: chunk.totalCharacters,
-                  has_more: chunk.hasMore,
-                  scripts_are_reference_only: resource.kind === 'python' || resource.kind === 'shell',
-                })}\n${chunk.text}`
-              }
-              recordLowRiskInternalResult(
-                rawCall,
-                toolDef,
-                parsedArgs,
-                result,
-                isError,
-                t('Read a local active Skill reference resource without executing scripts.'),
+                readOnlyResult.result,
+                readOnlyResult.isError,
+                readOnlyResult.approvalReason,
               )
               continue
             }
@@ -2323,13 +2212,6 @@ function sanitizeToolResultContent(value: unknown): McpToolResultContent[] | und
   })
 }
 
-function cloneJsonRecord(value: Record<string, unknown>, maxCharacters: number): Record<string, unknown> {
-  const serialized = JSON.stringify(value)
-  if (serialized.length > maxCharacters)
-    throw new GatewayError(t('Agent structured data exceeds limit.'), 'invalid_request')
-  return JSON.parse(serialized) as Record<string, unknown>
-}
-
 function endpointFor(baseUrl: string, format: ApiFormat | 'models'): string {
   const path =
     format === 'openai-chat-completions'
@@ -2340,233 +2222,6 @@ function endpointFor(baseUrl: string, format: ApiFormat | 'models'): string {
           ? 'messages'
           : 'models'
   return new URL(path, `${baseUrl.replace(/\/$/, '')}/`).toString()
-}
-
-interface AccumulatedToolCall {
-  index: number
-  id: string
-  name: string
-  argumentsText: string
-  started: boolean
-}
-
-interface StreamConsumptionResult {
-  completed: boolean
-  text: string
-  finishReason?: string
-  toolCalls: AccumulatedToolCall[]
-  anthropicThinkingBlocks: Array<{ blockIndex: number; thinking: string; signature?: string }>
-  responseOutputItems: Record<string, unknown>[]
-  responseId?: string
-}
-
-async function consumeStream(
-  format: ApiFormat,
-  stream: ReadableStream<Uint8Array>,
-  requestId: string,
-  emit: StreamEmitter,
-  effectiveMcpTools: McpToolDefinition[] = [],
-  turn = 1,
-  captureContinuation = false,
-  citationState = createCitationEmissionState(),
-): Promise<StreamConsumptionResult> {
-  let completed = false
-  let finishReason: string | undefined
-  let text = ''
-  const toolCallsMap = new Map<number | string, AccumulatedToolCall>()
-  const anthropicThinking = new Map<number, { blockIndex: number; thinking: string; signature: string }>()
-  const responseOutputItems: Record<string, unknown>[] = []
-  let responseId: string | undefined
-  let continuationEmitted = false
-
-  const emitContinuation = () => {
-    if (!responseId || continuationEmitted) return
-    continuationEmitted = true
-    emit({
-      type: 'provider-continuation',
-      requestId,
-      continuation: { format: 'openai-responses', responseId, turn },
-    })
-  }
-
-  const handleToolDelta = (delta: {
-    index?: number
-    id?: string
-    itemId?: string
-    name?: string
-    argumentsDelta?: string
-  }) => {
-    const key = delta.index ?? delta.itemId ?? delta.id ?? 0
-    let tc = toolCallsMap.get(key)
-    if (!tc) {
-      const id = delta.id || `call_${Date.now().toString(36)}_${toolCallsMap.size}`
-      const name = delta.name || ''
-      tc = {
-        index: typeof delta.index === 'number' ? delta.index : 0,
-        id,
-        name,
-        argumentsText: '',
-        started: false,
-      }
-      toolCallsMap.set(key, tc)
-    } else {
-      if (delta.id && tc.id.startsWith('call_')) tc.id = delta.id
-      if (delta.name && !tc.name) tc.name = delta.name
-    }
-
-    if (!tc.started && tc.name) {
-      tc.started = true
-      const toolDef = effectiveMcpTools.find((tool) => (tool.modelName || tool.name) === tc.name)
-      emit({
-        type: 'tool-call-start',
-        requestId,
-        callId: tc.id,
-        toolName: toolDef?.name || tc.name,
-        modelToolName: tc.name,
-        serverName: toolDef?.serverName,
-        turn,
-      })
-    }
-
-    if (delta.argumentsDelta) {
-      tc.argumentsText += delta.argumentsDelta
-      emit({
-        type: 'tool-call-args',
-        requestId,
-        callId: tc.id,
-        delta: delta.argumentsDelta,
-        turn,
-      })
-    }
-  }
-
-  for await (const message of parseSse(stream)) {
-    if (message.data === '[DONE]') {
-      if (format === 'openai-responses' && captureContinuation) emitContinuation()
-      if (!completed && toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
-      return {
-        completed: true,
-        text,
-        finishReason,
-        toolCalls: Array.from(toolCallsMap.values()),
-        anthropicThinkingBlocks: Array.from(anthropicThinking.values()),
-        responseOutputItems,
-        responseId,
-      }
-    }
-
-    let payload: unknown
-    try {
-      payload = JSON.parse(message.data)
-    } catch {
-      continue
-    }
-
-    if (format === 'openai-chat-completions') {
-      const parsed = parseChatCompletionEvent(payload)
-      if (parsed.error) throw toGatewayError(parsed.error)
-      if (parsed.text) {
-        text += parsed.text
-        emit({ type: 'text-delta', requestId, delta: parsed.text, turn })
-      }
-      if (parsed.reasoning) {
-        emit({ type: 'reasoning-delta', requestId, delta: parsed.reasoning, turn })
-      }
-      for (const delta of parsed.toolCallDeltas || []) handleToolDelta(delta)
-      emitNewCitations(parsed.citations, citationState, requestId, emit)
-      if (parsed.usage) emit({ type: 'usage', requestId, turn, usage: parsed.usage })
-      finishReason = parsed.finishReason ?? finishReason
-      continue
-    }
-
-    if (format === 'openai-responses') {
-      const parsed = parseResponsesEvent(payload, message.event)
-      if (parsed.error) throw toGatewayError(parsed.error)
-      if (captureContinuation) responseId = parsed.responseId ?? responseId
-      if (parsed.text) {
-        text += parsed.text
-        emit({ type: 'text-delta', requestId, delta: parsed.text, turn })
-      }
-      if (parsed.reasoning) {
-        emit({ type: 'reasoning-delta', requestId, delta: parsed.reasoning, turn })
-      }
-      for (const delta of parsed.toolCallDeltas || []) handleToolDelta(delta)
-      if (parsed.responseOutputItem) {
-        const item = cloneJsonRecord(parsed.responseOutputItem, 500_000)
-        responseOutputItems.push(item)
-        emit({ type: 'agent-provider-item', requestId, turn, format: 'openai-responses', item })
-      }
-      emitNewCitations(parsed.citations, citationState, requestId, emit)
-      if (parsed.usage) emit({ type: 'usage', requestId, turn, usage: parsed.usage })
-      if (parsed.completed) {
-        completed = true
-        finishReason = parsed.finishReason
-        emitContinuation()
-        if (toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
-      }
-      continue
-    }
-
-    const parsed = parseAnthropicEvent(payload, message.event)
-    if (parsed.error) throw toGatewayError(parsed.error)
-    if (parsed.text) {
-      text += parsed.text
-      emit({ type: 'text-delta', requestId, delta: parsed.text, turn })
-    }
-    if (parsed.anthropicThinkingDelta) {
-      const delta = parsed.anthropicThinkingDelta
-      const block = anthropicThinking.get(delta.index) || { blockIndex: delta.index, thinking: '', signature: '' }
-      block.thinking += delta.thinkingDelta || ''
-      block.signature += delta.signatureDelta || ''
-      anthropicThinking.set(delta.index, block)
-      emit({
-        type: 'reasoning-delta',
-        requestId,
-        delta: delta.thinkingDelta || '',
-        signatureDelta: delta.signatureDelta,
-        thinkingBlockIndex: delta.index,
-        turn,
-      })
-    } else if (parsed.reasoning) {
-      emit({ type: 'reasoning-delta', requestId, delta: parsed.reasoning, turn })
-    }
-    for (const delta of parsed.toolCallDeltas || []) handleToolDelta(delta)
-    emitNewCitations(parsed.citations, citationState, requestId, emit)
-    if (parsed.usage) emit({ type: 'usage', requestId, turn, usage: parsed.usage })
-    finishReason = parsed.finishReason ?? finishReason
-    if (parsed.completed) {
-      completed = true
-      if (toolCallsMap.size === 0) emit({ type: 'done', requestId, finishReason })
-    }
-  }
-  return {
-    completed,
-    text,
-    finishReason,
-    toolCalls: Array.from(toolCallsMap.values()),
-    anthropicThinkingBlocks: Array.from(anthropicThinking.values()),
-    responseOutputItems,
-    responseId,
-  }
-}
-
-function emitNewCitations(
-  citations: WebCitation[] | undefined,
-  state: CitationEmissionState,
-  requestId: string,
-  emit: StreamEmitter,
-): void {
-  for (const citation of takeChangedWebCitations(citations, state)) {
-    emit({
-      type: 'citation',
-      requestId,
-      citation,
-    })
-  }
-}
-
-function toGatewayError(error: ProtocolErrorData): GatewayError {
-  return new GatewayError(error.message, error.code, error.status)
 }
 
 async function httpError(response: Response): Promise<GatewayError> {

@@ -163,6 +163,8 @@ Under **Settings → General → Network proxy**, `off` connects directly. In `c
 
 ### Limits and timeouts
 
+Provider SSE consumption is isolated in `provider-stream.ts`. `ProviderStreamBudget` spans all model turns of one request: 64 MiB incoming bytes; 2,000,000 characters each for text, reasoning, and signatures; 2,000,000 aggregate tool-argument characters (200,000 per call); 256 tool calls; 128 provider items with 8,000,000 aggregate serialized characters; 128 Anthropic thinking blocks. Limits are checked before forwarding the violating delta and do not add load-time Vault quotas. The pull-based body wrapper honors downstream demand. Completion, cancellation, and parse errors cancel the same locked upstream reader; Responses/Anthropic terminal events do not wait for EOF. Shutdown cancels and drains Gateway requests before closing network dispatchers and encrypted storage.
+
 - An active response stream is aborted after 120 seconds without network data. Tool approval uses its own five-minute or indefinite wait and is not subject to this watchdog.
 - Built-in browser navigation uses one 3–30 second deadline (20 seconds by default) across proxy refresh, public-DNS validation, and `loadURL`. Stop and user-initiated close abort navigation immediately instead of waiting behind the session queue. Subresource host checks share in-flight DNS work and cancel after five seconds rather than leaving Chromium requests pending indefinitely.
 - Model discovery has a 30-second timeout and a 32 MiB response-body limit. At most 32 KiB of an error response is read.

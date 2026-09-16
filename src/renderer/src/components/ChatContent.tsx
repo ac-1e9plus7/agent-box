@@ -1,4 +1,5 @@
-import { Children, isValidElement, useEffect, useMemo, useRef, useState } from 'react'
+import { Children, isValidElement, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import type { JSX, ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import rehypeKatex from 'rehype-katex'
@@ -342,7 +343,7 @@ function textFromNode(node: ReactNode): string {
   return ''
 }
 
-function MarkdownMessageBody({ content }: { content: string }): JSX.Element {
+const MarkdownMessageBody = memo(function MarkdownMessageBody({ content }: { content: string }): JSX.Element {
   const processed = preprocessMarkdown(content)
   return (
     <div className="message-body">
@@ -381,7 +382,7 @@ function MarkdownMessageBody({ content }: { content: string }): JSX.Element {
       </ReactMarkdown>
     </div>
   )
-}
+})
 
 function PlainTextMessageBody({ content }: { content: string }): JSX.Element {
   return <div className="plain-text-message-body">{content}</div>
@@ -888,59 +889,107 @@ export function ChatContent({
   userNickname,
 }: ChatContentProps): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const followingOutput = useRef(true)
+  const previousFirstId = useRef<string | undefined>(undefined)
+  const virtualized = messages.length > 80
+  const virtualizer = useVirtualizer({
+    count: virtualized ? messages.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 240,
+    getItemKey: useCallback((index: number) => messages[index]!.id, [messages]),
+    overscan: 6,
+    paddingStart: 50,
+    paddingEnd: 38,
+    anchorTo: 'end',
+    followOnAppend: 'auto',
+    enabled: virtualized,
+    initialRect: { width: 800, height: 600 },
+  })
   const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null)
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({
-      behavior: messages.some((message) => message.status === 'streaming') ? 'auto' : 'smooth',
-    })
-  }, [messages])
+    const firstId = messages[0]?.id
+    if (previousFirstId.current !== firstId) followingOutput.current = true
+    previousFirstId.current = firstId
+    if (!followingOutput.current) return
+    if (virtualized) virtualizer.scrollToIndex(messages.length - 1, { align: 'end' })
+    else
+      endRef.current?.scrollIntoView({
+        behavior: messages.some((message) => message.status === 'streaming') ? 'auto' : 'smooth',
+      })
+  }, [messages, virtualized, virtualizer])
 
   if (messages.length === 0) {
     return <EmptyConversation suggestions={suggestions} onSuggestion={onSuggestion} />
   }
 
-  return (
-    <div className="chat-scroll-region">
-      <div className="chat-thread">
-        {messages.map((message) => {
-          if (message.role === 'assistant') {
-            const canRegenerate = !streaming && (message.status === 'complete' || message.status === 'error')
-            const canResumeAgent = !streaming && Boolean(message.interruption) && messages.at(-1)?.id === message.id
-            return (
-              <AssistantMessage
-                key={message.id}
-                message={message}
-                allMessages={allMessages}
-                model={models.find((model) => model.id === message.modelId)}
-                canRegenerate={canRegenerate}
-                canResumeAgent={canResumeAgent}
-                onDelete={onDeleteMessage}
-                onRegenerate={onRegenerate}
-                onResumeAgent={onResumeAgent}
-                onSwitchVersion={onSwitchVersion}
-                onResolveToolApproval={onResolveToolApproval}
-              />
-            )
-          }
+  const renderMessage = (message: ChatMessage) => {
+    if (message.role === 'assistant') {
+      const canRegenerate = !streaming && (message.status === 'complete' || message.status === 'error')
+      const canResumeAgent = !streaming && Boolean(message.interruption) && messages.at(-1)?.id === message.id
+      return (
+        <AssistantMessage
+          key={message.id}
+          message={message}
+          allMessages={allMessages}
+          model={models.find((model) => model.id === message.modelId)}
+          canRegenerate={canRegenerate}
+          canResumeAgent={canResumeAgent}
+          onDelete={onDeleteMessage}
+          onRegenerate={onRegenerate}
+          onResumeAgent={onResumeAgent}
+          onSwitchVersion={onSwitchVersion}
+          onResolveToolApproval={onResolveToolApproval}
+        />
+      )
+    }
 
-          return (
-            <UserMessage
-              key={message.id}
-              message={message}
-              allMessages={allMessages}
-              canEdit={!streaming}
-              userAvatar={userAvatar}
-              userNickname={userNickname}
-              onDelete={onDeleteMessage}
-              onEdit={onEditMessage}
-              onSwitchVersion={onSwitchVersion}
-              onPreviewImage={(url, name) => setPreviewImage({ url, name })}
-            />
-          )
-        })}
-        <div ref={endRef} />
-      </div>
+    return (
+      <UserMessage
+        key={message.id}
+        message={message}
+        allMessages={allMessages}
+        canEdit={!streaming}
+        userAvatar={userAvatar}
+        userNickname={userNickname}
+        onDelete={onDeleteMessage}
+        onEdit={onEditMessage}
+        onSwitchVersion={onSwitchVersion}
+        onPreviewImage={(url, name) => setPreviewImage({ url, name })}
+      />
+    )
+  }
+
+  return (
+    <div
+      className="chat-scroll-region"
+      ref={scrollRef}
+      onScroll={() => {
+        const element = scrollRef.current
+        if (element) followingOutput.current = element.scrollHeight - element.scrollTop - element.clientHeight < 120
+      }}
+    >
+      {virtualized ? (
+        <div className="chat-thread virtual-chat-thread" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((row) => (
+            <div
+              key={row.key}
+              data-index={row.index}
+              ref={virtualizer.measureElement}
+              className="virtual-chat-row"
+              style={{ transform: `translateY(${row.start}px)` }}
+            >
+              {renderMessage(messages[row.index]!)}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="chat-thread">
+          {messages.map(renderMessage)}
+          <div ref={endRef} />
+        </div>
+      )}
 
       {previewImage && (
         <div className="lightbox-overlay" onClick={() => setPreviewImage(null)}>

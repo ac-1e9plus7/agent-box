@@ -53,6 +53,10 @@ Completed or interrupted Assistant messages show aggregate total, input, output,
 
 ## Markdown, code, and math
 
+Chat streams subscribe before invocation and replay only events matching the returned request ID through `runStreamWithReplay`; a global `start` event never claims a waiting conversation. Cancellation while saving prevents launch; cancellation while IPC is pending cancels the eventual request ID. Terminal events flush deltas before persistence. Text/reasoning updates use 16 ms batches, merging adjacent text deltas; approvals and state transitions flush immediately. `useConversationTitles` owns title cancellation, manual-renaming guards, and the 20-second deadline, including responses arriving before the IPC promise resolves.
+
+Unchanged Markdown bodies are memoized. Above 80 messages, the active branch uses a measured-height TanStack virtual list with six overscan rows, stable message IDs, and end anchoring. Scrolling upward pauses automatic output following. This changes mounted DOM only, preserving persisted messages, branches, and model context.
+
 [`ChatContent.tsx`](../src/renderer/src/components/ChatContent.tsx) treats stored `message.content` as source data rather than rendered HTML. User messages are rendered as escaped plain text with `white-space: pre-wrap`, so line breaks, indentation, and Markdown punctuation stay literal without generating `<br>` elements. Assistant messages use `react-markdown` and the following plugins:
 
 - `remark-gfm` for GitHub Flavored Markdown tables, task lists, strikethrough, and autolinks;

@@ -40,6 +40,10 @@ export class McpClient {
   private client: Client | undefined
   private transport: Transport | undefined
   private connectionInfo: McpConnectionInfo | undefined
+  private connectionPromise: Promise<McpConnectionInfo> | undefined
+  private generation = 0
+  private readonly connections = new Set<() => Promise<void>>()
+  private readonly connectionControllers = new Set<AbortController>()
 
   constructor(
     readonly serverConfig: McpServerConfig,
@@ -57,66 +61,94 @@ export class McpClient {
 
   async connect(): Promise<McpConnectionInfo> {
     if (this.connectionInfo && this.client && this.transport) return this.connectionInfo
-
-    if (this.serverConfig.transport === 'stdio') {
-      return this.connectTransport(
-        new StdioClientTransport({
-          command: this.serverConfig.command || '',
-          args: this.serverConfig.args || [],
-          env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
-          stderr: 'pipe',
-          maxBufferSize: 10 * 1024 * 1024,
-        }),
-        'stdio',
-      )
-    }
-
-    const url = new URL(this.serverConfig.url || '')
-    const requestInit: RequestInit = { headers: { ...(this.serverConfig.headers || {}) } }
-    if (this.serverConfig.transport === 'sse') {
-      return this.connectTransport(
-        new SSEClientTransport(url, {
-          requestInit,
-          eventSourceInit: { fetch: this.fetchFn },
-          fetch: this.fetchFn,
-        }),
-        'sse',
-      )
-    }
-
+    if (this.connectionPromise) return this.connectionPromise
+    const pending = this.connectOnce(this.generation)
+    this.connectionPromise = pending
     try {
-      return await this.connectTransport(
-        new StreamableHTTPClientTransport(url, {
-          requestInit,
-          fetch: this.fetchFn,
-          reconnectionOptions: {
-            initialReconnectionDelay: 500,
-            maxReconnectionDelay: 10_000,
-            reconnectionDelayGrowFactor: 1.8,
-            maxRetries: 3,
-          },
-        }),
-        'streamable-http',
-      )
-    } catch (streamableError) {
-      await this.close().catch(() => undefined)
-      try {
+      return await pending
+    } finally {
+      if (this.connectionPromise === pending) this.connectionPromise = undefined
+    }
+  }
+
+  private async connectOnce(generation: number): Promise<McpConnectionInfo> {
+    const controller = new AbortController()
+    this.connectionControllers.add(controller)
+    const timer = setTimeout(() => controller.abort(new DOMException('Connection timed out', 'TimeoutError')), 30_000)
+    const fetchFn: McpFetch = (input, init) =>
+      this.fetchFn(input, {
+        ...init,
+        signal: init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal,
+      })
+    try {
+      if (this.serverConfig.transport === 'stdio') {
+        return await this.connectTransport(
+          new StdioClientTransport({
+            command: this.serverConfig.command || '',
+            args: this.serverConfig.args || [],
+            env: { ...getDefaultEnvironment(), ...(this.serverConfig.env || {}) },
+            stderr: 'pipe',
+            maxBufferSize: 10 * 1024 * 1024,
+          }),
+          'stdio',
+          generation,
+          controller.signal,
+        )
+      }
+
+      const url = new URL(this.serverConfig.url || '')
+      const requestInit: RequestInit = { headers: { ...(this.serverConfig.headers || {}) } }
+      if (this.serverConfig.transport === 'sse') {
         return await this.connectTransport(
           new SSEClientTransport(url, {
             requestInit,
-            eventSourceInit: { fetch: this.fetchFn },
-            fetch: this.fetchFn,
+            eventSourceInit: { fetch: fetchFn },
+            fetch: fetchFn,
           }),
           'sse',
+          generation,
+          controller.signal,
         )
-      } catch (sseError) {
-        throw new Error(
-          t('MCP remote connection failed (Streamable HTTP: {value0}; legacy HTTP+SSE: {value1})', {
-            value0: errorMessage(streamableError),
-            value1: errorMessage(sseError),
+      }
+
+      try {
+        return await this.connectTransport(
+          new StreamableHTTPClientTransport(url, {
+            requestInit,
+            fetch: fetchFn,
+            reconnectionOptions: {
+              initialReconnectionDelay: 500,
+              maxReconnectionDelay: 10_000,
+              reconnectionDelayGrowFactor: 1.8,
+              maxRetries: 3,
+            },
           }),
-          { cause: sseError },
+          'streamable-http',
+          generation,
+          controller.signal,
         )
+      } catch (streamableError) {
+        if (generation !== this.generation || controller.signal.aborted) throw safeMcpFailure(streamableError)
+        try {
+          return await this.connectTransport(
+            new SSEClientTransport(url, {
+              requestInit,
+              eventSourceInit: { fetch: fetchFn },
+              fetch: fetchFn,
+            }),
+            'sse',
+            generation,
+            controller.signal,
+          )
+        } catch (sseError) {
+          throw safeMcpFailure(sseError)
+        }
+      }
+    } finally {
+      clearTimeout(timer)
+      if (!this.isConnected || generation !== this.generation) {
+        controller.abort()
+        this.connectionControllers.delete(controller)
       }
     }
   }
@@ -124,13 +156,21 @@ export class McpClient {
   private async connectTransport(
     transport: Transport,
     transportKind: McpConnectionInfo['transport'],
+    generation: number,
+    signal: AbortSignal,
   ): Promise<McpConnectionInfo> {
     const client = new Client({ name: 'AgentBox', version: '1.0.0' }, { capabilities: {} })
-    client.onerror = (error) =>
-      console.warn(
-        `MCP client error (${this.serverConfig.name}):`,
-        this.serverConfig.dataPlat ? 'Data platform transport error' : error,
-      )
+    let closing: Promise<void> | undefined
+    const close = () =>
+      (closing ??= (async () => {
+        await client.close().catch(() => undefined)
+        await transport.close().catch(() => undefined)
+        this.connections.delete(close)
+      })())
+    this.connections.add(close)
+    // Consume stderr so verbose servers cannot deadlock on a full pipe. Never log it.
+    if (transport instanceof StdioClientTransport) transport.stderr?.on('data', () => undefined)
+    client.onerror = (error) => console.warn('MCP transport:', safeMcpError(error))
     client.onclose = () => {
       if (this.client === client) {
         this.client = undefined
@@ -140,7 +180,13 @@ export class McpClient {
     }
     client.setNotificationHandler(ToolListChangedNotificationSchema, () => this.onToolsChanged?.())
 
-    await client.connect(transport)
+    try {
+      await client.connect(transport, { timeout: 30_000, signal })
+      if (generation !== this.generation) throw new Error(t('The MCP client is not connected.'))
+    } catch (error) {
+      await close()
+      throw safeMcpFailure(error)
+    }
     const server = client.getServerVersion()
     const capabilities = client.getServerCapabilities() || {}
     this.client = client
@@ -157,14 +203,14 @@ export class McpClient {
     return this.connectionInfo
   }
 
-  async listTools(): Promise<McpToolDefinition[]> {
-    if (!this.client) await this.connect()
+  async listTools(signal?: AbortSignal): Promise<McpToolDefinition[]> {
+    await this.ensureConnected(signal)
     const client = this.requireClient()
     const collected: McpToolDefinition[] = []
     let cursor: string | undefined
 
     for (let page = 0; page < MAX_TOOL_LIST_PAGES; page += 1) {
-      const response = await client.listTools(cursor ? { cursor } : {}, { timeout: 30_000 })
+      const response = await client.listTools(cursor ? { cursor } : {}, { timeout: 30_000, signal })
       for (const raw of response.tools) {
         if (collected.length >= MAX_TOOLS_PER_SERVER) {
           throw new Error(t('MCP server {value0} returned too many tools.', { value0: this.serverConfig.name }))
@@ -197,7 +243,7 @@ export class McpClient {
     args: Record<string, unknown> = {},
     signal?: AbortSignal,
   ): Promise<McpToolExecutionResult> {
-    if (!this.client) await this.connect()
+    await this.ensureConnected(signal)
     try {
       const response = await this.requireClient().callTool({ name, arguments: args }, undefined, {
         timeout: 60_000,
@@ -206,7 +252,7 @@ export class McpClient {
       return normalizeToolResult(response)
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? error
-      return { result: `Tool execution error: ${errorMessage(error)}`, isError: true }
+      return { result: safeMcpError(error), isError: true }
     }
   }
 
@@ -221,13 +267,39 @@ export class McpClient {
   }
 
   async close(): Promise<void> {
-    const client = this.client
-    const transport = this.transport
+    this.generation += 1
+    for (const controller of this.connectionControllers) controller.abort()
+    this.connectionControllers.clear()
+    this.connectionPromise = undefined
     this.client = undefined
     this.transport = undefined
     this.connectionInfo = undefined
-    if (client) await client.close().catch(() => undefined)
-    else if (transport) await transport.close().catch(() => undefined)
+    await Promise.all([...this.connections].map((close) => close()))
+  }
+
+  private async ensureConnected(signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
+    if (this.client) return
+    if (!signal) {
+      await this.connect()
+      return
+    }
+    await new Promise<void>((resolve, reject) => {
+      const abort = () =>
+        reject(signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError'))
+      signal.addEventListener('abort', abort, { once: true })
+      void this.connect().then(
+        () => {
+          signal.removeEventListener('abort', abort)
+          resolve()
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', abort)
+          reject(error instanceof Error ? error : safeMcpFailure(error))
+        },
+      )
+    })
+    signal.throwIfAborted()
   }
 
   private requireClient(): Client {
@@ -398,8 +470,17 @@ function limitString(value: string | undefined, max: number): string | undefined
   return value.length > max ? value.slice(0, max) : value
 }
 
-function errorMessage(value: unknown): string {
-  return value instanceof Error ? value.message : String(value)
+export function safeMcpError(value: unknown): string {
+  // Only allow known diagnostic codes. Upstream text/cause may echo credentials.
+  const code = value instanceof Error && 'code' in value ? String(value.code) : ''
+  const allowed = ['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOENT', 'EACCES'].includes(code) ? code : undefined
+  const message = t('MCP request failed. Check the server configuration and connection.')
+  return allowed ? `${message} (${allowed})` : message
+}
+
+function safeMcpFailure(value: unknown): Error {
+  // Deliberately do not retain a raw cause that could expose authentication data.
+  return new Error(safeMcpError(value))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

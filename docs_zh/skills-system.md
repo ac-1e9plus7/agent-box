@@ -31,7 +31,7 @@ skill-package/
 - 归档解析还会在进入 Vault 校验前应用资源上限：ZIP 压缩输入最多 64 MiB，最多扫描 128 个中央目录条目，最多 51 个非目录文件（包含一个可选导入清单）和 50 个实际 Skill 资源，解压后总量最多 100 MiB，单个条目最多解码为 2 MiB UTF-8 数据和 500,000 字符。
 - 内置 Skill 不可删除，但可停用；“重置默认技能”会恢复内置内容并保留自定义 Skill。
 
-存储校验与迁移见 [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts)。
+存储校验和规范化见 [`vault-schema.ts`](../src/electron/storage/vault-schema.ts)，变更由 [`app-repository.ts`](../src/electron/storage/app-repository.ts) 负责。已验证的只读资源/目录工具位于 [`read-only-agent-tools.ts`](../src/electron/api/read-only-agent-tools.ts)，不具备文件系统或进程执行能力，只接收本次请求已授权的内存目录。
 
 ---
 

@@ -25,7 +25,7 @@ This documentation set describes AgentBox's current design, boundaries, and main
 1. **Process isolation:** Keep the renderer at `sandbox: true`, `contextIsolation: true`, and `nodeIntegration: false`. Secrets, network calls, encrypted persistence, and system-process operations belong only in the main process.
 2. **Separate product entities from protocols:** Providers, models, and API formats are distinct entities. The gateway normalizes all three upstream API families into shared request and event types.
 3. **Protect local data:** The Vault uses AES-256-GCM and wraps its data key with OS secure storage. Never fall back to plaintext when secure storage is unavailable.
-4. **Enforce workspace boundaries:** Agent file and execution tools operate only under a conversation's absolute working directory and reject symbolic-link escapes.
+4. **Enforce workspace file boundaries:** File tools stay within the conversation directory and reject symbolic-link escapes. The terminal uses that directory as its initial cwd only; approved commands are not contained by an OS sandbox.
 5. **Keep both languages synchronized:** The root READMEs, both documentation indexes, and all module documents have language counterparts. Product-copy changes also require synchronized resource bundles and localization tests.
 
 - [data-plat integration](data-plat-integration.md): governed authentication, exact execution confirmation, and data history.

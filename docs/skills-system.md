@@ -31,7 +31,7 @@ Stored text resources are classified as `markdown`, `python`, `shell`, or `other
 - Archive parsing adds its own earlier resource bounds: an input ZIP is at most 64 MiB compressed, scans at most 128 central-directory entries, contains at most 51 non-directory files including one optional import manifest and at most 50 actual Skill resources, expands to at most 100 MiB total, and gives each entry at most 2 MiB of decoded UTF-8 data and 500,000 characters. These bounds apply before a candidate reaches Vault validation.
 - Built-in Skills cannot be deleted but can be disabled. Resetting default Skills restores their bundled content while preserving custom Skills.
 
-Storage validation and migration are implemented in [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts).
+Storage validation and normalization are implemented in [`vault-schema.ts`](../src/electron/storage/vault-schema.ts), with mutations in [`app-repository.ts`](../src/electron/storage/app-repository.ts). Validated read-only resource/catalog tools are implemented in [`read-only-agent-tools.ts`](../src/electron/api/read-only-agent-tools.ts); they have no filesystem or process execution capability and receive only the request-authorized in-memory catalog.
 
 ---
 

@@ -1,5 +1,5 @@
 import { copyFileSync, existsSync, mkdirSync, renameSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 import { app, BrowserWindow, dialog, session, shell } from 'electron'
 import { ChatGateway } from './api/gateway'
 import { registerIpcHandlers } from './ipc/register-ipc'
@@ -17,6 +17,13 @@ let browserManager: BrowserManager | undefined
 let unregisterIpc: (() => void) | undefined
 let quitCleanupStarted = false
 let quitCleanupFinished = false
+
+// Automation uses a separate, explicit profile; all normal storage protections still apply.
+const smokeUserData = process.env.AGENTBOX_SMOKE_USER_DATA
+if (smokeUserData) {
+  if (!isAbsolute(smokeUserData)) throw new Error('The smoke-test profile must be an absolute path')
+  app.setPath('userData', smokeUserData)
+}
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -66,12 +73,12 @@ function isSafeExternalUrl(value: string): boolean {
   }
 }
 
-async function start(): Promise<void> {
+async function start(options?: { allowLegacyMigration?: boolean }): Promise<void> {
   configureSessionSecurity()
   const systemLanguage = languageFromSystemLocale(app.getLocale())
   setLanguage(systemLanguage)
   repository = new AppRepository(app.getPath('userData'), systemLanguage)
-  await repository.initialize()
+  await repository.initialize(options)
   setLanguage(repository.getSettings().language)
   mcpManager = new McpManager(repository)
   browserManager = new BrowserManager(repository)
@@ -175,7 +182,8 @@ async function handleStartupFailure(error: unknown): Promise<void> {
         const backupPath = join(currentPath, `vault.corrupted.${Date.now()}.bak`)
         renameSync(vaultPath, backupPath)
       }
-      await start()
+      repository?.destroy()
+      await start({ allowLegacyMigration: false })
       return
     } catch (resetError) {
       dialog.showErrorBox(
@@ -204,8 +212,8 @@ if (!hasSingleInstanceLock) {
   void app.whenReady().then(async () => {
     app.setAppUserModelId('com.agentbox.desktop')
     try {
-      migrateLegacyUserDataDirectory()
-      await start()
+      if (!smokeUserData) migrateLegacyUserDataDirectory()
+      await start({ allowLegacyMigration: !smokeUserData })
     } catch (error) {
       await handleStartupFailure(error)
     }
@@ -228,8 +236,12 @@ app.on('before-quit', (event) => {
   if (quitCleanupStarted) return
   quitCleanupStarted = true
   gateway?.cancelAll()
-  const browserCleanup = browserManager?.closeAll() ?? Promise.resolve()
-  void browserCleanup
+  const cleanup = async () => {
+    await gateway?.close()
+    await Promise.all([browserManager?.closeAll(), mcpManager?.closeAll()])
+    await repository?.close()
+  }
+  void cleanup()
     .catch(() => undefined)
     .finally(() => {
       unregisterIpc?.()

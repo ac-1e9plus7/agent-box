@@ -4,11 +4,11 @@
 
 > **私密、强大的多模型 AI 智能体桌面客户端**
 >
-> 基于 React 19、TypeScript 5.7 与 Electron 35 构建，原生适配 OpenAI Chat Completions API、OpenAI Responses API 与 Anthropic Messages API，并集成 Agent Skills 和 Model Context Protocol (MCP) 服务器。
+> 基于 React 19、TypeScript 5.7 与 Electron 44 构建，原生适配 OpenAI Chat Completions API、OpenAI Responses API 与 Anthropic Messages API，并集成 Agent Skills 和 Model Context Protocol (MCP) 服务器。
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
-[![Electron](https://img.shields.io/badge/Electron-35-47848F.svg)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-44-47848F.svg)](https://www.electronjs.org/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
 
 ## 核心特性
@@ -109,7 +109,7 @@ Electron Builder 在 Windows 上生成 NSIS 安装包和 portable 可执行文�
 1. **Renderer 无法读取已存储的 API 密钥。** Renderer 可提交用户新输入的密钥，但持久化密钥是只写的，只能获取 `hasApiKey` 或遮蔽字段；网络请求和认证保留在主进程。
 2. **不存在明文凭据降级。** 如果操作系统安全存储不可用，AgentBox 会拒绝加载或保存受保护的本地数据。
 3. **OpenRouter 路由默认优先隐私。** 新模型配置默认使用 `data_collection: "deny"` 和 `zdr: true`。
-4. **工作区操作受作用域限制。** 文件和终端工具相对于会话工作目录运行，拒绝路径穿越，并使用审批策略保护敏感操作。
+4. **工作区文件工具受作用域限制。** 文件工具拒绝路径穿越和符号链接逃逸。终端以会话工作目录启动，但不是操作系统沙箱；获批命令可以访问其他路径和网络。
 
 ## 开源许可证
 

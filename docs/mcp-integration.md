@@ -138,6 +138,10 @@ Each resident conversation browser uses one non-persistent Electron session shar
 
 ## UI and Diagnostics
 
+Concurrent consumers share one MCP connection promise. A 30-second initialization deadline covers transport startup and negotiation; failed attempts close before HTTP-to-SSE fallback. Closing a client aborts pending transports and invalidates late completions. Tool discovery/execution can stop waiting for a shared connection without cancelling other consumers. Stdio stderr is drained without logging. Transport failures use localized generic diagnostics plus allowlisted OS error codes; raw upstream messages and causes are not retained because they may echo credentials.
+
+Browser URL literals and DNS endpoints use the same IP classifier. IPv4-mapped IPv6 is canonicalized before applying IPv4 private-network rules, including hexadecimal and expanded representations. The loopback opt-in permits only loopback, not other private ranges.
+
 1. **Settings → MCP External Tools**: create, enable, disable, and test stdio, Streamable HTTP, or legacy HTTP+SSE configurations. A test reports the transport that actually connected, the negotiated protocol version, and the tool count.
 2. **Tool Explorer**: combines enabled MCP tools with AgentBox built-in tools, supports source filtering, and displays input schemas. Workspace file tools appear in the catalog but are mounted only in an Agent conversation that has a working directory.
 3. **Composer allowlist**: selects the MCP servers available to the current conversation.

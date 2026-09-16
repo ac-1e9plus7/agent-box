@@ -1315,6 +1315,19 @@ select:disabled {
   padding: 50px 0 38px;
 }
 
+.virtual-chat-thread {
+  position: relative;
+  padding: 0;
+}
+
+.virtual-chat-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding-bottom: 34px;
+}
+
 .message-row {
   display: flex;
   align-items: flex-start;

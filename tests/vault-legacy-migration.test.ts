@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -99,7 +99,7 @@ describe('Legacy Vault Smooth Migration (ChatBox Lite -> AgentBox)', () => {
     agentBoxRepo.destroy()
   })
 
-  it('migrates legacy data even if a fresh empty default vault was already created in AgentBox', async () => {
+  it('keeps an already migrated vault readable on subsequent launches', async () => {
     // 1. Setup legacy repository with configured model
     const legacyRepo = new AppRepository(legacyUserDir)
     await legacyRepo.initialize()
@@ -129,5 +129,68 @@ describe('Legacy Vault Smooth Migration (ChatBox Lite -> AgentBox)', () => {
     const models = agentBoxRepo.listModels()
     expect(models.some((m) => m.name === 'Legacy Claude Sonnet 4')).toBe(true)
     agentBoxRepo.destroy()
+  })
+
+  it.each(['settings', 'skills', 'mcp', 'cleared', 'default'] as const)(
+    'preserves a valid current %s vault over legacy data',
+    async (kind) => {
+      const current = new AppRepository(newAgentBoxUserDir)
+      await current.initialize()
+      if (kind === 'settings') await current.updateSettings({ userNickname: 'Current', theme: 'dark' })
+      if (kind === 'skills')
+        await current.upsertSkill({
+          name: 'Current skill',
+          description: 'Current',
+          systemPrompt: 'Current instructions',
+          enabled: true,
+        })
+      if (kind === 'mcp')
+        await current.upsertMcpServer({ name: 'Current MCP', transport: 'stdio', command: 'node', enabled: false })
+      if (kind === 'cleared') await current.clearConversations()
+      const expected = {
+        settings: current.getSettings(),
+        skills: current.listSkills().filter((skill) => !skill.isBuiltIn),
+        servers: current.listMcpServers(),
+      }
+      current.destroy()
+      const legacy = new AppRepository(legacyUserDir)
+      await legacy.initialize()
+      await legacy.updateSettings({ userNickname: 'Legacy' })
+      legacy.destroy()
+      const reopened = new AppRepository(newAgentBoxUserDir)
+      await reopened.initialize()
+      expect({
+        settings: reopened.getSettings(),
+        skills: reopened.listSkills().filter((skill) => !skill.isBuiltIn),
+        servers: reopened.listMcpServers(),
+      }).toEqual(expected)
+      reopened.destroy()
+    },
+  )
+
+  it('does not overwrite a corrupt current vault with an available legacy vault', async () => {
+    const current = new AppRepository(newAgentBoxUserDir)
+    await current.initialize()
+    current.destroy()
+    const path = join(newAgentBoxUserDir, 'vault', 'user-data.v1.enc')
+    writeFileSync(path, 'corrupt-fixture')
+    const legacy = new AppRepository(legacyUserDir)
+    await legacy.initialize()
+    legacy.destroy()
+    const reopened = new AppRepository(newAgentBoxUserDir)
+    await expect(reopened.initialize()).rejects.toThrow()
+    expect(readFileSync(path, 'utf8')).toBe('corrupt-fixture')
+    reopened.destroy()
+  })
+
+  it('supports explicit clean initialization without legacy import', async () => {
+    const legacy = new AppRepository(legacyUserDir)
+    await legacy.initialize()
+    await legacy.updateSettings({ userNickname: 'Legacy' })
+    legacy.destroy()
+    const current = new AppRepository(newAgentBoxUserDir)
+    await current.initialize({ allowLegacyMigration: false })
+    expect(current.getSettings().userNickname).toBe('')
+    current.destroy()
   })
 })

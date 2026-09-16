@@ -36,6 +36,49 @@ const validateState = (value: unknown): TestState => {
 }
 
 describe('EncryptedStore safety and encryption integrity', () => {
+  it('drains queued mutations before zeroing the key on close', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agentbox-close-test-'))
+    const store = new EncryptedStore(directory, defaultState, validateState)
+    try {
+      await store.initialize({ allowLegacyMigration: false })
+      const pending = store.mutate((draft) => {
+        draft.count = 42
+      })
+      await Promise.all([pending, store.close()])
+      await expect(
+        store.mutate((draft) => {
+          draft.count = 43
+        }),
+      ).rejects.toThrow()
+      expect(() => store.read()).toThrow()
+      const reopened = new EncryptedStore(directory, defaultState, validateState)
+      await reopened.initialize()
+      expect(reopened.read().count).toBe(42)
+      reopened.destroy()
+    } finally {
+      store.destroy()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('does not generate a replacement key when an existing Vault key is missing', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agentbox-missing-key-'))
+    const store = new EncryptedStore(directory, defaultState, validateState)
+    try {
+      await store.initialize({ allowLegacyMigration: false })
+      store.destroy()
+      const vaultPath = join(directory, 'vault', 'user-data.v1.enc')
+      const ciphertext = readFileSync(vaultPath)
+      const keyPath = join(directory, 'vault', 'master-key.bin')
+      rmSync(keyPath)
+      await expect(store.initialize()).rejects.toThrow()
+      expect(readFileSync(vaultPath)).toEqual(ciphertext)
+      expect(() => readFileSync(keyPath)).toThrow()
+    } finally {
+      store.destroy()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
   let tempDir: string
 
   beforeEach(() => {

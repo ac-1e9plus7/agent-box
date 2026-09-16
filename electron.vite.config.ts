@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
+import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
 
@@ -19,8 +19,8 @@ const developmentCspPlugin: Plugin = {
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['undici'] })],
     build: {
+      externalizeDeps: { exclude: ['undici'] },
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/electron/main.ts'),
@@ -36,8 +36,8 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
+      externalizeDeps: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/electron/preload.ts'),

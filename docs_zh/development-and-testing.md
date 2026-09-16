@@ -39,6 +39,12 @@ pnpm package
 
 ## Vitest 测试体系
 
+Vitest 4 与 `@vitest/coverage-v8` 提供测试和覆盖率运行器。`pnpm test:coverage` 执行完整测试并按提交的 `tests/coverage-baseline.json` 检查每个已测关键模块；`pnpm check` 使用此命令，并增加 `pnpm docs:check`。基线覆盖所列安全、存储、流式和状态机模块，不代表全应用覆盖率。补充测试后提高基线，不应通过降低基线掩盖回归。`pnpm benchmark` 将 1/10/50 MiB 合成 Vault 的读取和保存测量写入 `artifacts/quality-review/`，不使用用户数据，也不把耗时作为 CI 断言。
+
+`pnpm test:smoke` 通过 Playwright 启动打包的本机程序，用 `AGENTBOX_SMOKE_USER_DATA` 隔离配置目录并禁用旧目录导入，仍严格要求正常 safeStorage。`AGENTBOX_SMOKE_EXECUTABLE` 可覆盖程序路径。fixture 验证真实 preload/IPC、窗口与浏览器隔离、160 条消息虚拟化、多标签浏览、通过真实本地 provider 流调用快照/截图工具、加密 Cookie 恢复，以及清空历史后保留 provider。截图和结果写入 `artifacts/smoke/`，临时配置只包含合成数据。截图在浏览器面板可见时验收。Linux 需要真实 Secret Service 会话和显示环境，不使用明文存储降级。
+
+`pnpm audit:dependencies` 使用官方 npm registry，遇到 moderate 及以上公告会失败。兼容的传递依赖安全覆盖位于 `pnpm-workspace.yaml`，上层依赖携带修复版本后应审查并移除。Dependabot 每周提出依赖与 Actions 更新。Electron 虽列为开发依赖，仍属于交付运行时。
+
 [`vitest.config.ts`](../vitest.config.ts) 默认使用 Node 环境，同时匹配 `tests/**/*.test.ts` 与 `tests/**/*.test.tsx`。适合单测的 renderer 行为仍应尽量拆成纯函数。Renderer 集成测试通过文件级配置启用 jsdom，使用 Testing Library 渲染真实 React 组件；`app.integration` 和 `browser-panel.integration` 会安装类型化的进程内 `window.agentbox` preload bridge mock，`settings-dialog.integration` 和 `chat-content-usage` 则通过组件 props/callback 测试，不跨越该 bridge。它们不属于完整 Electron UI 自动化。由于这些测试会导入真实组件图，`tsconfig.node.json` 纳入完整 renderer 源码树；`.ts` 与 `.tsx` 测试都会参加 TypeScript 检查。
 
 | 范围                                         | 代表性测试                                                                                                                                                                                                                                                                                                                                                                             |
@@ -68,7 +74,7 @@ pnpm build
 
 ## GitHub Actions
 
-[质量检查工作流](../.github/workflows/quality.yml) 会在分支推送和 pull request 上运行 `pnpm check`。[发布工作流](../.github/workflows/release.yml) 在匹配 `v*.*.*` 的 tag 推送或手动 `workflow_dispatch` 时运行：
+[质量检查工作流](../.github/workflows/quality.yml) 在分支推送和 pull request 上，为 Windows、macOS 和 Ubuntu 22.04 执行 `pnpm check`、真实 Python 3.13 测试、本机打包及打包冒烟。Linux 额外审计依赖，并通过 Xvfb/DBus 和 gnome-keyring 运行冒烟；失败时也上传覆盖率和冒烟证据。配置这些任务不代表本地 Windows 执行已验证其他平台。[发布工作流](../.github/workflows/release.yml) 在匹配 `v*.*.*` 的 tag 推送或手动 `workflow_dispatch` 时运行：
 
 - Windows：x64 与 arm64；
 - macOS：runner 原生架构；
@@ -84,4 +90,4 @@ data-plat-* 测试覆盖 Schema 方言、加密配置、精确确认、执行恢
 
 ## 显式 Python 运行时验证
 
-将 `AGENTBOX_TEST_PYTHON` 设置为真实 Python 3 解释器路径，运行 `pnpm exec vitest run tests/python-runtime-live.test.ts`。验证结构化 `input_data` 计算、文件/模块访问拒绝及超时终止。未设置变量时跳过这三个可选真实运行用例；CI 可以指定其已安装 Python。Windows 运行器等待进程及标准流关闭后才删除临时目录，并对短暂文件锁做有界重试。
+将 `AGENTBOX_TEST_PYTHON` 设置为真实 Python 3 解释器路径，运行 `pnpm exec vitest run tests/python-runtime-live.test.ts`。验证结构化 `input_data` 计算、文件/模块访问拒绝及超时终止。未设置变量时跳过这三个可选真实运行用例；质量 CI 显式设置该路径。Windows 运行器等待进程及标准流关闭后才删除临时目录，并对短暂文件锁做有界重试。

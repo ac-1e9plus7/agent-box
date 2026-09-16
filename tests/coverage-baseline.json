@@ -1,0 +1,68 @@
+{
+  "src/electron/api/agent-runtime.ts": {
+    "lines": 94,
+    "branches": 83,
+    "functions": 100,
+    "statements": 93
+  },
+  "src/electron/api/provider-stream-budget.ts": {
+    "lines": 89,
+    "branches": 75,
+    "functions": 83,
+    "statements": 86
+  },
+  "src/electron/api/provider-stream.ts": {
+    "lines": 77,
+    "branches": 64,
+    "functions": 83,
+    "statements": 71
+  },
+  "src/electron/browser/browser-policy.ts": {
+    "lines": 84,
+    "branches": 85,
+    "functions": 91,
+    "statements": 85
+  },
+  "src/electron/mcp/mcp-client.ts": {
+    "lines": 76,
+    "branches": 58,
+    "functions": 82,
+    "statements": 73
+  },
+  "src/electron/mcp/tool-policy.ts": {
+    "lines": 100,
+    "branches": 86,
+    "functions": 100,
+    "statements": 91
+  },
+  "src/electron/storage/encrypted-store.ts": {
+    "lines": 95,
+    "branches": 85,
+    "functions": 95,
+    "statements": 92
+  },
+  "src/electron/storage/vault-schema.ts": {
+    "lines": 82,
+    "branches": 71,
+    "functions": 97,
+    "statements": 76
+  },
+  "src/renderer/src/stream-event-batcher.ts": {
+    "lines": 100,
+    "branches": 100,
+    "functions": 100,
+    "statements": 100
+  },
+  "src/renderer/src/hooks/useChatStream.ts": {
+    "lines": 92,
+    "branches": 72,
+    "functions": 88,
+    "statements": 87
+  },
+  "src/renderer/src/hooks/useConversationTitles.ts": {
+    "lines": 88,
+    "branches": 73,
+    "functions": 89,
+    "statements": 81
+  }
+}

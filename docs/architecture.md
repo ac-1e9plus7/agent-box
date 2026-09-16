@@ -2,7 +2,7 @@
 
 > 中文：[系统架构概览](../docs_zh/architecture.md)
 
-AgentBox is a local-first desktop agent and multi-model AI client. The current project is built with **React 19, TypeScript 5.7, Electron 35, Vite 5.4, and electron-vite 3**. See [`package.json`](../package.json) for the authoritative version ranges.
+AgentBox is a local-first desktop agent and multi-model AI client. The current project is built with **React 19, TypeScript 5.7, Electron 44, Vite 7, and electron-vite 5**. See [`package.json`](../package.json) for the authoritative version ranges.
 
 ---
 
@@ -147,5 +147,7 @@ Channel constants are centralized in [`src/shared/ipc.ts`](../src/shared/ipc.ts)
 - [`src/renderer/src/components/browser/BrowserPanel.tsx`](../src/renderer/src/components/browser/BrowserPanel.tsx): tab controls and typed native-view bounds reporting
 - [`src/electron/storage/agentbox-checkpoint-saver.ts`](../src/electron/storage/agentbox-checkpoint-saver.ts): encrypted `BaseCheckpointSaver` adapter and message snapshot/delta reconstruction
 - [`src/electron/storage/checkpoint-repository.ts`](../src/electron/storage/checkpoint-repository.ts): checkpoint quotas, manifests, lifecycle deletion, and recovery
-- [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts): Vault domain repository and schema validation
+- [`src/electron/storage/app-repository.ts`](../src/electron/storage/app-repository.ts): Vault domain mutations and selected-field reads; [`vault-schema.ts`](../src/electron/storage/vault-schema.ts) owns schema validation
+- [`provider-stream.ts`](../src/electron/api/provider-stream.ts) and [`provider-stream-budget.ts`](../src/electron/api/provider-stream-budget.ts): bounded provider consumption and upstream cancellation
+- [`useConversationTitles.ts`](../src/renderer/src/hooks/useConversationTitles.ts): title request lifecycle isolated from chat streams
 - [`src/electron/mcp/mcp-manager.ts`](../src/electron/mcp/mcp-manager.ts): MCP client lifecycle and proxy dispatch
